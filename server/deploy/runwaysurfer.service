@@ -1,0 +1,27 @@
+# Esempio di unit systemd per il proxy RunwaySurfer sul server aziendale.
+# Installazione:
+#   sudo cp runwaysurfer.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now runwaysurfer
+[Unit]
+Description=RunwaySurfer proxy backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/runwaysurfer/server
+# Build una tantum: npm install && npm run build
+ExecStart=/usr/bin/node dist/index.js
+Restart=on-failure
+RestartSec=3
+# Configurazione via file ambiente (contiene ANTHROPIC_API_KEY in prod).
+EnvironmentFile=/opt/runwaysurfer/server/.env
+# Hardening minimo
+User=runwaysurfer
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
