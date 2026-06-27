@@ -1,5 +1,7 @@
 # RunwaySurfer
 
+Vedi anche: [CODEMAP.md](CODEMAP.md) per una mappa operativa dei file e dei punti di modifica.
+
 Sidebar Extension for Runway KB (T1 & Relo Workflow Automation).
 
 AI sidebar che aiuta gli agenti di call center a navigare la Knowledge Base e a
