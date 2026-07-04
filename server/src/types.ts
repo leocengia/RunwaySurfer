@@ -12,6 +12,9 @@ export interface KbPage {
 export interface KbLink {
   url: string;
   text: string;
+  context?: string;
+  order?: number;
+  reason?: string;
 }
 
 export interface AskRequest {

@@ -17,6 +17,12 @@ export interface KbPage {
 export interface KbLink {
   url: string;
   text: string;
+  /** Nearby text/heading captured from the page, used only for relevance scoring. */
+  context?: string;
+  /** DOM order, used as a deterministic tie-breaker. */
+  order?: number;
+  /** Human-readable reason for why this link was selected. */
+  reason?: string;
 }
 
 /** Payload the sidebar/background sends to the backend `POST /ask`. */

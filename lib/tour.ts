@@ -12,7 +12,7 @@
 // tour resurrecting on an unrelated page days later, we stamp `startedAt` and
 // discard tours older than MAX_TOUR_AGE_MS on load.
 import { browser } from 'wxt/browser';
-import type { KbLink, KbPage } from './outcome';
+import type { AiPlan, KbLink, KbPage } from './outcome';
 import { extractCurrentPage, extractInternalLinks } from './extract';
 import { pickRelevantLinks } from './crawl';
 
@@ -43,7 +43,17 @@ export interface TourState {
   error?: string;
 }
 
+export interface TourResultState {
+  query: string;
+  outcome: string;
+  plan: AiPlan | null;
+  pages: KbPage[];
+  targetUrl: string;
+  startedAt: number;
+}
+
 const KEY = 'rs:tour';
+const RESULT_KEY = 'rs:tourResult';
 export const DEFAULT_DWELL_MS = 1500;
 /** A tour older than this is considered abandoned and discarded on load. */
 const MAX_TOUR_AGE_MS = 5 * 60_000;
@@ -69,7 +79,7 @@ export function startTour(query: string, dwellMs = DEFAULT_DWELL_MS): TourState 
     startUrl: location.href,
     targets,
     index: 0,
-    pages: [extractCurrentPage()],
+    pages: [extractCurrentPage(query)],
     dwellMs,
     startedAt: Date.now(),
   };
@@ -101,6 +111,37 @@ export async function saveTour(state: TourState): Promise<void> {
 export async function clearTour(): Promise<void> {
   try {
     await browser.storage.local.remove(KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function loadTourResult(): Promise<TourResultState | null> {
+  try {
+    const stored = await browser.storage.local.get(RESULT_KEY);
+    const result = stored[RESULT_KEY] as TourResultState | undefined;
+    if (!result || typeof result !== 'object') return null;
+    if (Date.now() - result.startedAt > MAX_TOUR_AGE_MS) {
+      await clearTourResult();
+      return null;
+    }
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveTourResult(state: TourResultState): Promise<void> {
+  try {
+    await browser.storage.local.set({ [RESULT_KEY]: state });
+  } catch {
+    /* best-effort */
+  }
+}
+
+export async function clearTourResult(): Promise<void> {
+  try {
+    await browser.storage.local.remove(RESULT_KEY);
   } catch {
     /* ignore */
   }

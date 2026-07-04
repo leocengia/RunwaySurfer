@@ -47,13 +47,13 @@ export function chooseModel(req: AskRequest): RoutingDecision {
   const chars = contextChars(req);
   const queryTokens = estimateTokens(req.query);
 
-  if (pages <= 1 && chars < 6_000 && queryTokens < 40) {
+  if (pages <= 1 && chars < 8_000 && queryTokens < 45) {
     return {
       spec: MODELS.haiku,
       reason: `task semplice (1 pagina, ~${Math.round(chars / 4)} token contesto) → modello economico/veloce`,
     };
   }
-  if (pages <= 2 && chars < 16_000) {
+  if (pages <= 4 && chars < 28_000) {
     return {
       spec: MODELS.sonnet,
       reason: `task medio (${pages} pagine, ~${Math.round(chars / 4)} token contesto) → modello bilanciato`,

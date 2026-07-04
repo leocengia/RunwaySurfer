@@ -3,11 +3,12 @@
 // build the same prompt, so the demo's "would-be request" is faithful.
 import type { KbPage, KbLink } from '../types.js';
 
-/** The network endpoint the backend contacts for a real call — shown to the CED. */
+/** The network endpoint the backend contacts for a real call, shown to the CED. */
 export const ANTHROPIC_EGRESS = 'api.anthropic.com:443';
 
 /** Conservative assumed output size for cost estimation. */
-export const ASSUMED_OUTPUT_TOKENS = 600;
+export const ASSUMED_OUTPUT_TOKENS = 500;
+const MAX_PROMPT_LINKS = 12;
 
 export interface GenerateInput {
   query: string;
@@ -31,7 +32,7 @@ export function buildSystemPrompt(): string {
   return [
     'Sei un assistente per agenti di call center. Rispondi in italiano.',
     'Usa ESCLUSIVAMENTE il contenuto della Knowledge Base fornito qui sotto.',
-    'Se l\'informazione non è presente, dillo esplicitamente e suggerisci quali link',
+    "Se l'informazione non e presente, dillo esplicitamente e suggerisci quali link",
     'collegati consultare. Non inventare procedure.',
     'Struttura SEMPRE la risposta in queste quattro sezioni markdown:',
     '## Procedura',
@@ -42,17 +43,14 @@ export function buildSystemPrompt(): string {
   ].join('\n');
 }
 
-/** User content: the query plus the KB pages and the nested-link map. */
+/** User content: the query plus the KB pages and a compact nested-link map. */
 export function buildUserContent(input: GenerateInput): string {
   const pages = input.pages
-    .map(
-      (p, i) =>
-        `### Pagina ${i + 1} [${p.origin}] — ${p.title}\nURL: ${p.url}\n${p.text}`,
-    )
+    .map((p, i) => `### Pagina ${i + 1} [${p.origin}] - ${p.title}\nURL: ${p.url}\n${p.text}`)
     .join('\n\n');
   const links = input.links
-    .slice(0, 30)
-    .map((l) => `- ${l.text} → ${l.url}`)
+    .slice(0, MAX_PROMPT_LINKS)
+    .map((l) => `- ${l.text} -> ${l.url}${l.reason ? ` (${l.reason})` : ''}`)
     .join('\n');
   return [
     `RICHIESTA AGENTE: ${input.query}`,

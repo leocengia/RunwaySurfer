@@ -26,7 +26,7 @@ export class AnthropicProvider implements AiProvider {
     // by SDK version. Adjust to the installed SDK when wiring up the real key.
     const params: Record<string, unknown> = {
       model: input.model,
-      max_tokens: 1024,
+      max_tokens: Math.min(900, Math.max(400, 320 + input.pages.length * 120)),
       system: [
         {
           type: 'text',
