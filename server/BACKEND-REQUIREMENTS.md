@@ -44,3 +44,52 @@ Un **proxy stateless** in Node.js che:
 - Reverse proxy/TLS aziendale standard da utilizzare.
 - Gestione segreti aziendale (vault) per `ANTHROPIC_API_KEY`.
 - Logging/retention dei log d'uso (costi/token per agente).
+
+## Persistenza dashboard / storico richieste
+
+La demo usa SQLite locale tramite `better-sqlite3`.
+
+File runtime:
+
+```text
+server/data/runwaysurfer.db
+```
+
+Contiene:
+
+- utenti e team;
+- storico richieste con query preview/hash;
+- modello, token stimati, costo stimato, durata, stato, errori;
+- link selezionati e fonti in JSON;
+- settings di concorrenza, budget e retention.
+
+Privacy:
+
+- non viene salvato il testo completo della Knowledge Base per default;
+- il DB contiene metadati operativi e va trattato come dato aziendale;
+- backup, retention e cancellazione devono seguire policy CED.
+
+Produzione multi-server:
+
+- SQLite e adatto al prototipo / singola istanza;
+- per piu istanze dietro load balancer usare Postgres per storico/settings;
+- Redis puo essere aggiunto per rate limit e concorrenza condivisa tra istanze.
+
+Retention default:
+
+```text
+REQUEST_RETENTION_DAYS=90
+```
+
+Endpoint amministrativi principali:
+
+```text
+GET /dashboard
+GET /users
+GET /teams
+GET /requests
+GET /analytics/summary
+GET /settings
+PATCH /settings
+POST /maintenance/prune
+```

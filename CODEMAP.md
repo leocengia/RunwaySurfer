@@ -327,3 +327,49 @@ Quando devi capire dove intervenire:
 - problema modello/costo -> `server/src/router.ts`;
 - problema deploy -> `server/Dockerfile` o `server/deploy/runwaysurfer.service`.
 
+## Aggiornamento Backend SQL / Dashboard
+
+### `server/src/db.ts`
+
+Layer SQLite basato su `better-sqlite3`.
+
+Gestisce:
+
+- creazione automatica di `server/data/runwaysurfer.db`;
+- schema `teams`, `users`, `requests`, `settings`;
+- risoluzione/creazione utenti da header SSO o agent id;
+- storico richieste con query preview/hash, token, costo, modello, durata, stato;
+- settings persistenti per limiti di concorrenza, budget, pagine/link e retention.
+
+Il DB non salva il testo completo della KB per default.
+
+### Endpoint backend aggiunti
+
+In `server/src/index.ts`:
+
+- `GET /dashboard`: dashboard HTML operativa.
+- `GET /dashboard-data`: stato complessivo JSON.
+- `GET /metrics`: contatori live in memoria.
+- `GET /extension-config`: policy/config letta dalla dashboard e futura estensione.
+- `GET /users`, `POST /users`, `PATCH /users/:id`: gestione utenti.
+- `GET /teams`, `POST /teams`: gestione team.
+- `GET /requests`, `GET /requests/:id`: storico richieste persistente.
+- `GET /analytics/summary`: riepilogo storico da SQLite.
+- `GET /settings`, `PATCH /settings`: policy persistenti.
+- `POST /maintenance/prune`: rimozione storico oltre retention.
+
+### Dashboard eseguibile
+
+La dashboard ora usa `fetch` lato browser per chiamare gli endpoint:
+
+- pulsanti health/metrics/config/requirements;
+- form per creare team e utenti;
+- form per modificare settings;
+- filtri per storico richieste;
+- form demo per inviare una richiesta `/ask`.
+
+### File runtime
+
+`server/data/` e ignorato da git. Per backup o retention salvare/cancellare
+`server/data/runwaysurfer.db` secondo policy aziendale.
+

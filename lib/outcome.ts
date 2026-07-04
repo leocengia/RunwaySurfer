@@ -23,6 +23,10 @@ export interface KbLink {
   order?: number;
   /** Human-readable reason for why this link was selected. */
   reason?: string;
+  /** Local relevance score used before any AI call. */
+  score?: number;
+  /** Query keywords that matched this link/context. */
+  matchedKeywords?: string[];
 }
 
 /** Payload the sidebar/background sends to the backend `POST /ask`. */

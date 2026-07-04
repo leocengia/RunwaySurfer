@@ -15,6 +15,8 @@ export interface KbLink {
   context?: string;
   order?: number;
   reason?: string;
+  score?: number;
+  matchedKeywords?: string[];
 }
 
 export interface AskRequest {

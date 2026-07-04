@@ -1,0 +1,386 @@
+import Database from 'better-sqlite3';
+import { createHash } from 'node:crypto';
+import { mkdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+export type UserRole = 'agent' | 'team_lead' | 'admin';
+export type UserStatus = 'pending' | 'active' | 'disabled';
+
+export interface UserRecord {
+  id: number;
+  external_id: string;
+  email: string | null;
+  name: string | null;
+  role: UserRole;
+  status: UserStatus;
+  team_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TeamRecord {
+  id: number;
+  name: string;
+  created_at: string;
+}
+
+export interface RequestHistoryRecord {
+  id: string;
+  created_at: string;
+  user_id: number | null;
+  agent_id: string;
+  team_id: number | null;
+  query_hash: string;
+  query_preview: string;
+  provider: string;
+  model: string;
+  pages_count: number;
+  links_count: number;
+  estimated_input_tokens: number;
+  estimated_output_tokens: number;
+  estimated_cost_usd: number;
+  duration_ms: number;
+  status: string;
+  error: string | null;
+  selected_links_json: string;
+  sources_json: string;
+}
+
+export interface RequestHistoryInput {
+  id: string;
+  userId: number | null;
+  agentId: string;
+  teamId: number | null;
+  query: string;
+  provider: string;
+  model: string;
+  pagesCount: number;
+  linksCount: number;
+  estimatedInputTokens: number;
+  estimatedOutputTokens: number;
+  estimatedCostUsd: number;
+  durationMs: number;
+  status: 'ok' | 'error' | 'rejected';
+  error?: string;
+  selectedLinks: unknown[];
+  sources: unknown[];
+}
+
+export interface SettingsRecord {
+  max_concurrent_requests: number;
+  max_concurrent_per_agent: number;
+  max_daily_estimated_cost_usd: number;
+  max_request_pages: number;
+  max_request_links: number;
+  max_page_text_chars: number;
+  retention_days: number;
+}
+
+const DEFAULT_SETTINGS: SettingsRecord = {
+  max_concurrent_requests: Number(process.env.MAX_CONCURRENT_REQUESTS ?? 30),
+  max_concurrent_per_agent: Number(process.env.MAX_CONCURRENT_PER_AGENT ?? 2),
+  max_daily_estimated_cost_usd: Number(process.env.MAX_DAILY_ESTIMATED_COST_USD ?? 50),
+  max_request_pages: Number(process.env.MAX_REQUEST_PAGES ?? 4),
+  max_request_links: Number(process.env.MAX_REQUEST_LINKS ?? 12),
+  max_page_text_chars: Number(process.env.MAX_PAGE_TEXT_CHARS ?? 6_000),
+  retention_days: Number(process.env.REQUEST_RETENTION_DAYS ?? 90),
+};
+
+const here = dirname(fileURLToPath(import.meta.url));
+const dbPath = process.env.RUNWAYSURFER_DB_PATH ?? join(here, '..', 'data', 'runwaysurfer.db');
+mkdirSync(dirname(dbPath), { recursive: true });
+
+export const db = new Database(dbPath);
+db.pragma('journal_mode = WAL');
+db.pragma('foreign_keys = ON');
+
+function now(): string {
+  return new Date().toISOString();
+}
+
+function hashQuery(query: string): string {
+  return createHash('sha256').update(query).digest('hex');
+}
+
+function queryPreview(query: string): string {
+  return query.replace(/\s+/g, ' ').trim().slice(0, 240);
+}
+
+function json(value: unknown): string {
+  return JSON.stringify(value ?? null);
+}
+
+export function initDb(): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS teams (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      external_id TEXT NOT NULL UNIQUE,
+      email TEXT,
+      name TEXT,
+      role TEXT NOT NULL DEFAULT 'agent',
+      status TEXT NOT NULL DEFAULT 'pending',
+      team_id INTEGER REFERENCES teams(id) ON DELETE SET NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS requests (
+      id TEXT PRIMARY KEY,
+      created_at TEXT NOT NULL,
+      user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      agent_id TEXT NOT NULL,
+      team_id INTEGER REFERENCES teams(id) ON DELETE SET NULL,
+      query_hash TEXT NOT NULL,
+      query_preview TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      model TEXT NOT NULL,
+      pages_count INTEGER NOT NULL,
+      links_count INTEGER NOT NULL,
+      estimated_input_tokens INTEGER NOT NULL,
+      estimated_output_tokens INTEGER NOT NULL,
+      estimated_cost_usd REAL NOT NULL,
+      duration_ms INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      error TEXT,
+      selected_links_json TEXT NOT NULL,
+      sources_json TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_requests_created_at ON requests(created_at);
+    CREATE INDEX IF NOT EXISTS idx_requests_agent ON requests(agent_id);
+    CREATE INDEX IF NOT EXISTS idx_requests_user ON requests(user_id);
+    CREATE INDEX IF NOT EXISTS idx_requests_team ON requests(team_id);
+    CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status);
+  `);
+
+  const insertSetting = db.prepare(`
+    INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+  `);
+  const ts = now();
+  for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
+    insertSetting.run(key, String(value), ts);
+  }
+}
+
+export function getSettings(): SettingsRecord {
+  const rows = db.prepare('SELECT key, value FROM settings').all() as Array<{ key: string; value: string }>;
+  const values: Record<string, number> = {};
+  for (const row of rows) values[row.key] = Number(row.value);
+  return {
+    max_concurrent_requests: values.max_concurrent_requests ?? DEFAULT_SETTINGS.max_concurrent_requests,
+    max_concurrent_per_agent: values.max_concurrent_per_agent ?? DEFAULT_SETTINGS.max_concurrent_per_agent,
+    max_daily_estimated_cost_usd:
+      values.max_daily_estimated_cost_usd ?? DEFAULT_SETTINGS.max_daily_estimated_cost_usd,
+    max_request_pages: values.max_request_pages ?? DEFAULT_SETTINGS.max_request_pages,
+    max_request_links: values.max_request_links ?? DEFAULT_SETTINGS.max_request_links,
+    max_page_text_chars: values.max_page_text_chars ?? DEFAULT_SETTINGS.max_page_text_chars,
+    retention_days: values.retention_days ?? DEFAULT_SETTINGS.retention_days,
+  };
+}
+
+export function updateSettings(patch: Partial<SettingsRecord>): SettingsRecord {
+  const allowed = new Set(Object.keys(DEFAULT_SETTINGS));
+  const stmt = db.prepare(`
+    INSERT INTO settings (key, value, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+  `);
+  const ts = now();
+  for (const [key, value] of Object.entries(patch)) {
+    if (!allowed.has(key) || typeof value !== 'number' || !Number.isFinite(value)) continue;
+    stmt.run(key, String(value), ts);
+  }
+  return getSettings();
+}
+
+export function resolveUser(identity: {
+  externalId: string;
+  email?: string | null;
+  name?: string | null;
+}): UserRecord {
+  const existing = db
+    .prepare('SELECT * FROM users WHERE external_id = ?')
+    .get(identity.externalId) as UserRecord | undefined;
+  if (existing) return existing;
+
+  const ts = now();
+  const info = db
+    .prepare(
+      `INSERT INTO users (external_id, email, name, role, status, team_id, created_at, updated_at)
+       VALUES (?, ?, ?, 'agent', 'pending', NULL, ?, ?)`,
+    )
+    .run(identity.externalId, identity.email ?? null, identity.name ?? null, ts, ts);
+  return db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid) as UserRecord;
+}
+
+export function listUsers(): UserRecord[] {
+  return db.prepare('SELECT * FROM users ORDER BY created_at DESC').all() as UserRecord[];
+}
+
+export function createUser(input: {
+  externalId: string;
+  email?: string | null;
+  name?: string | null;
+  role?: UserRole;
+  status?: UserStatus;
+  teamId?: number | null;
+}): UserRecord {
+  const ts = now();
+  const info = db
+    .prepare(
+      `INSERT INTO users (external_id, email, name, role, status, team_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      input.externalId,
+      input.email ?? null,
+      input.name ?? null,
+      input.role ?? 'agent',
+      input.status ?? 'active',
+      input.teamId ?? null,
+      ts,
+      ts,
+    );
+  return db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid) as UserRecord;
+}
+
+export function updateUser(id: number, patch: Partial<Pick<UserRecord, 'email' | 'name' | 'role' | 'status' | 'team_id'>>): UserRecord | null {
+  const current = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRecord | undefined;
+  if (!current) return null;
+  db.prepare(
+    `UPDATE users
+     SET email = ?, name = ?, role = ?, status = ?, team_id = ?, updated_at = ?
+     WHERE id = ?`,
+  ).run(
+    patch.email ?? current.email,
+    patch.name ?? current.name,
+    patch.role ?? current.role,
+    patch.status ?? current.status,
+    patch.team_id === undefined ? current.team_id : patch.team_id,
+    now(),
+    id,
+  );
+  return db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRecord;
+}
+
+export function listTeams(): TeamRecord[] {
+  return db.prepare('SELECT * FROM teams ORDER BY name').all() as TeamRecord[];
+}
+
+export function createTeam(name: string): TeamRecord {
+  const info = db
+    .prepare('INSERT INTO teams (name, created_at) VALUES (?, ?)')
+    .run(name.trim(), now());
+  return db.prepare('SELECT * FROM teams WHERE id = ?').get(info.lastInsertRowid) as TeamRecord;
+}
+
+export function insertRequestHistory(input: RequestHistoryInput): void {
+  db.prepare(
+    `INSERT INTO requests (
+      id, created_at, user_id, agent_id, team_id, query_hash, query_preview,
+      provider, model, pages_count, links_count, estimated_input_tokens,
+      estimated_output_tokens, estimated_cost_usd, duration_ms, status, error,
+      selected_links_json, sources_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    input.id,
+    now(),
+    input.userId,
+    input.agentId,
+    input.teamId,
+    hashQuery(input.query),
+    queryPreview(input.query),
+    input.provider,
+    input.model,
+    input.pagesCount,
+    input.linksCount,
+    input.estimatedInputTokens,
+    input.estimatedOutputTokens,
+    input.estimatedCostUsd,
+    input.durationMs,
+    input.status,
+    input.error ?? null,
+    json(input.selectedLinks),
+    json(input.sources),
+  );
+}
+
+export function listRequests(filters: {
+  agentId?: string;
+  status?: string;
+  model?: string;
+  teamId?: number;
+  limit?: number;
+}): RequestHistoryRecord[] {
+  const clauses: string[] = [];
+  const params: unknown[] = [];
+  if (filters.agentId) {
+    clauses.push('agent_id = ?');
+    params.push(filters.agentId);
+  }
+  if (filters.status) {
+    clauses.push('status = ?');
+    params.push(filters.status);
+  }
+  if (filters.model) {
+    clauses.push('model = ?');
+    params.push(filters.model);
+  }
+  if (typeof filters.teamId === 'number') {
+    clauses.push('team_id = ?');
+    params.push(filters.teamId);
+  }
+  const limit = Math.min(Math.max(filters.limit ?? 50, 1), 500);
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+  return db
+    .prepare(`SELECT * FROM requests ${where} ORDER BY created_at DESC LIMIT ?`)
+    .all(...params, limit) as RequestHistoryRecord[];
+}
+
+export function getRequest(id: string): RequestHistoryRecord | null {
+  return (db.prepare('SELECT * FROM requests WHERE id = ?').get(id) as RequestHistoryRecord | undefined) ?? null;
+}
+
+export function analyticsSummary() {
+  const totals = db.prepare(`
+    SELECT
+      COUNT(*) as requests,
+      COALESCE(SUM(CASE WHEN status = 'ok' THEN 1 ELSE 0 END), 0) as ok,
+      COALESCE(SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END), 0) as errors,
+      COALESCE(SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END), 0) as rejected,
+      COALESCE(SUM(estimated_input_tokens), 0) as inputTokens,
+      COALESCE(SUM(estimated_output_tokens), 0) as outputTokens,
+      COALESCE(SUM(estimated_cost_usd), 0) as estimatedCostUsd
+    FROM requests
+  `).get();
+  const byModel = db.prepare(`
+    SELECT model, COUNT(*) as requests, COALESCE(SUM(estimated_cost_usd), 0) as estimatedCostUsd
+    FROM requests GROUP BY model ORDER BY requests DESC
+  `).all();
+  const byAgent = db.prepare(`
+    SELECT agent_id as agentId, COUNT(*) as requests, COALESCE(SUM(estimated_cost_usd), 0) as estimatedCostUsd
+    FROM requests GROUP BY agent_id ORDER BY requests DESC LIMIT 20
+  `).all();
+  return { totals, byModel, byAgent };
+}
+
+export function pruneOldRequests(retentionDays = getSettings().retention_days): number {
+  const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+  const info = db.prepare('DELETE FROM requests WHERE created_at < ?').run(cutoff);
+  return info.changes;
+}
+
+initDb();
