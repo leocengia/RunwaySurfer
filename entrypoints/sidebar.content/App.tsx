@@ -23,15 +23,35 @@ import type { AiPlan, KbPage } from '../../lib/outcome';
 import {
   clearTour,
   clearTourResult,
+  DEFAULT_SCAN_MS,
   loadTour,
   loadTourResult,
+  markTourAborted,
   normalizeUrl,
   saveTour,
   saveTourResult,
   startTour,
   type TourState,
 } from '../../lib/tour';
-import { dwell, findLinkElement, scrollAndHighlight } from '../../lib/highlight';
+import { findLinkElement } from '../../lib/highlight';
+import {
+  bannerComplete,
+  cursorClick,
+  cursorGlideTo,
+  ensureFxStyles,
+  installFxSafetyNet,
+  mountBanner,
+  narrate,
+  narrationOpen,
+  runReadingScan,
+  setBannerProgress,
+  sleep,
+  smoothScrollTo,
+  spotlightOn,
+  teardownFx,
+  TOUR_ABORT_EVENT,
+  unmountBanner,
+} from '../../lib/fx';
 
 type Status = 'idle' | 'reading' | 'streaming' | 'done' | 'error';
 type Mode = 'single' | 'follow' | 'visual';
@@ -256,6 +276,10 @@ export default function App() {
   const abortRef = useRef<AbortController | null>(null);
   const tourAbortRef = useRef(false);
   const drivingRef = useRef(false);
+  // Live sidebar geometry for the tour banner (driveTour must not re-create
+  // on every resize, so it reads these refs instead of closing over state).
+  const openRef = useRef(open);
+  const sidebarWidthRef = useRef(sidebarWidth);
   const originalBodyStylesRef = useRef<{ marginRight: string; transition: string } | null>(null);
 
   // Validate the stored token at mount: decides login form vs main UI.
@@ -300,6 +324,11 @@ export default function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    openRef.current = open;
+    sidebarWidthRef.current = sidebarWidth;
+  }, [open, sidebarWidth]);
 
   useEffect(() => {
     if (!open) return;
@@ -350,6 +379,7 @@ export default function App() {
   const resetSession = useCallback(async () => {
     abortRef.current?.abort();
     tourAbortRef.current = true;
+    teardownFx();
     await clearTour();
     await clearTourResult();
     setQuery('');
@@ -420,6 +450,9 @@ export default function App() {
     async (initial: TourState) => {
       if (drivingRef.current) return;
       drivingRef.current = true;
+      ensureFxStyles();
+      installFxSafetyNet();
+      const rightOffset = () => (openRef.current ? sidebarWidthRef.current : 0);
       try {
         let t = initial;
         setTour(t);
@@ -432,7 +465,12 @@ export default function App() {
 
         // eslint-disable-next-line no-constant-condition
         while (true) {
-          if (tourAbortRef.current) return;
+          if (tourAbortRef.current) {
+            teardownFx();
+            return;
+          }
+          const total = t.targets.length;
+          const units = total + 1; // targets + final analysis
 
           switch (t.phase) {
             case 'returning': {
@@ -453,12 +491,38 @@ export default function App() {
                 await saveTour(t);
                 continue;
               }
+              const step = Math.min(t.index + 1, total);
+              mountBanner({ step, total, rightOffsetPx: rightOffset() });
+              setBannerProgress(t.index / units);
               const el = findLinkElement(target.url);
-              const cleanup = el ? scrollAndHighlight(el) : null;
+              const rect = el?.getBoundingClientRect();
+              if (!el || ((rect?.width ?? 0) === 0 && (rect?.height ?? 0) === 0)) {
+                // Link not on the page (or collapsed): no fx, keep today's
+                // semantics and navigate anyway.
+                void narrate(`Non trovo il link «${target.text}» in pagina, lo apro direttamente…`);
+                await saveTour({ ...t, phase: 'navigating' });
+                await sleep(700);
+                if (tourAbortRef.current) {
+                  teardownFx();
+                  return;
+                }
+                location.href = target.url;
+                return;
+              }
+              void narrate(narrationOpen(target, step, total));
+              const offSpotlight = spotlightOn(el);
+              // Cinematic approach: the page glides while the ghost cursor
+              // curves toward the link, landing just after the scroll settles.
+              await Promise.all([smoothScrollTo(el), cursorGlideTo(el)]);
               await saveTour({ ...t, phase: 'navigating' });
-              await dwell(t.dwellMs);
-              cleanup?.();
-              if (tourAbortRef.current) return;
+              await sleep(t.dwellMs);
+              if (tourAbortRef.current) {
+                offSpotlight();
+                teardownFx();
+                return;
+              }
+              await cursorClick();
+              offSpotlight();
               location.href = target.url;
               return;
             }
@@ -469,20 +533,46 @@ export default function App() {
                 await saveTour(t);
                 continue;
               }
+              const visited = t.targets[t.index];
+              mountBanner({ step: Math.min(t.index + 1, total), total, rightOffsetPx: rightOffset() });
+              setBannerProgress((t.index + 0.5) / units);
+              void narrate(`Sto leggendo «${document.title}»…`);
               const page: KbPage = { ...extractCurrentPage(t.query), origin: 'followed' };
               const pages = [...t.pages, page];
               t = { ...t, pages, index: t.index + 1, phase: 'returning' };
               setPagesUsed(pages);
+              // Persist BEFORE the scan so a reload mid-scan resumes correctly.
               await saveTour(t);
+              await runReadingScan({
+                keywords: visited?.matchedKeywords ?? [],
+                durationMs: t.scanMs ?? DEFAULT_SCAN_MS,
+              });
+              if (tourAbortRef.current) {
+                teardownFx();
+                return;
+              }
+              void narrate('Torno alla pagina di partenza…');
+              await sleep(350);
               location.href = t.startUrl;
               return;
             }
 
             case 'asking': {
               setTour(t);
+              mountBanner({ step: total, total, rightOffsetPx: rightOffset() });
+              setBannerProgress(total / units, true);
+              void narrate(
+                t.pages.length > 1
+                  ? `Analizzo le ${t.pages.length} pagine visitate e scrivo la risposta…`
+                  : 'Analizzo la pagina e scrivo la risposta…',
+              );
               const result = await runAsk(t.query, t.pages, t.targets);
               await clearTour();
               setTour(null);
+              bannerComplete('Fatto! Risposta pronta nella sidebar.');
+              await sleep(900);
+              unmountBanner();
+              teardownFx();
               const targetUrl = findTourTargetUrl(result.outcome, t.pages);
               if (targetUrl && normalizeUrl(targetUrl) !== normalizeUrl(location.href)) {
                 await saveTourResult({
@@ -499,6 +589,7 @@ export default function App() {
             }
 
             default:
+              teardownFx();
               return;
           }
         }
@@ -534,6 +625,9 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // Sweep any FX leftover from a previous content-script life (e.g. after
+      // an aborted tour) before deciding whether to resume.
+      teardownFx();
       const t = await loadTour();
       if (cancelled || !t) return;
       if (t.phase === 'idle' || t.phase === 'done' || t.phase === 'error') return;
@@ -552,6 +646,7 @@ export default function App() {
     if (!query.trim() || status === 'reading' || status === 'streaming') return;
 
     if (mode === 'visual') {
+      teardownFx();
       tourAbortRef.current = false;
       setStatus('reading');
       setOutcome('');
@@ -578,11 +673,22 @@ export default function App() {
   const stopTour = useCallback(async () => {
     tourAbortRef.current = true;
     abortRef.current?.abort();
+    teardownFx();
+    await markTourAborted();
     await clearTour();
     await clearTourResult();
     setTour(null);
     setStatus('idle');
   }, []);
+
+  // The banner's stop button lives in the host DOM (outside React): it fires
+  // this event for a live abort; the storage flag it also writes covers the
+  // click-during-navigation race (see markTourAborted).
+  useEffect(() => {
+    const onAbort = () => void stopTour();
+    window.addEventListener(TOUR_ABORT_EVENT, onAbort);
+    return () => window.removeEventListener(TOUR_ABORT_EVENT, onAbort);
+  }, [stopTour]);
 
   const startResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();

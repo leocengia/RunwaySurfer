@@ -36,8 +36,10 @@ export interface TourState {
   index: number;
   /** Accumulated pages: [startPage, ...visited targets]. */
   pages: KbPage[];
-  /** Pause (ms) so the scroll+highlight is visible before navigating. */
+  /** Hover pause (ms) on the pulsing link after the cursor lands, before the click. */
   dwellMs: number;
+  /** Duration (ms) of the reading-scan effect on each followed page. */
+  scanMs: number;
   /** Epoch ms when the tour started, for staleness detection. */
   startedAt: number;
   error?: string;
@@ -54,7 +56,11 @@ export interface TourResultState {
 
 const KEY = 'rs:tour';
 const RESULT_KEY = 'rs:tourResult';
-export const DEFAULT_DWELL_MS = 1500;
+const ABORT_KEY = 'rs:tourAbort';
+// Hover-only: the cinematic scroll (~950ms) and cursor glide (~1150ms) have
+// their own durations in lib/fx, so the dwell is just the pause on the link.
+export const DEFAULT_DWELL_MS = 900;
+export const DEFAULT_SCAN_MS = 1600;
 /** A tour older than this is considered abandoned and discarded on load. */
 const MAX_TOUR_AGE_MS = 5 * 60_000;
 
@@ -70,7 +76,7 @@ export function normalizeUrl(u: string): string {
 }
 
 /** Build the initial tour state on the current (start) page. */
-export function startTour(query: string, dwellMs = DEFAULT_DWELL_MS): TourState {
+export function startTour(query: string, dwellMs = DEFAULT_DWELL_MS, scanMs = DEFAULT_SCAN_MS): TourState {
   const targets = pickRelevantLinks(extractInternalLinks(), query);
   return {
     // No relevant links to visit → go straight to asking on the current page.
@@ -81,16 +87,36 @@ export function startTour(query: string, dwellMs = DEFAULT_DWELL_MS): TourState 
     index: 0,
     pages: [extractCurrentPage(query)],
     dwellMs,
+    scanMs,
     startedAt: Date.now(),
   };
 }
 
+/**
+ * Cross-navigation abort flag: the banner stop button may be clicked while a
+ * navigation is committing (its DOM event dies with the page), so it also
+ * stamps this key; loadTour() on the next page then discards the tour.
+ */
+export async function markTourAborted(): Promise<void> {
+  try {
+    await browser.storage.local.set({ [ABORT_KEY]: Date.now() });
+  } catch {
+    /* best-effort */
+  }
+}
+
 export async function loadTour(): Promise<TourState | null> {
   try {
-    const stored = await browser.storage.local.get(KEY);
+    const stored = await browser.storage.local.get([KEY, ABORT_KEY]);
     const tour = stored[KEY] as TourState | undefined;
     if (!tour || typeof tour !== 'object') return null;
     if (Date.now() - tour.startedAt > MAX_TOUR_AGE_MS) {
+      await clearTour();
+      return null;
+    }
+    // A new tour has startedAt > abortedAt, so the flag never needs clearing.
+    const abortedAt = stored[ABORT_KEY];
+    if (typeof abortedAt === 'number' && abortedAt >= tour.startedAt) {
       await clearTour();
       return null;
     }

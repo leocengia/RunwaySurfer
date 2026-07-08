@@ -154,6 +154,31 @@ DEFAULT_PROXY_URL = 'http://localhost:8787'
 
 In produzione dovrebbe puntare a un endpoint aziendale, oppure essere configurato via `chrome.storage.local.proxyUrl`.
 
+### `lib/fx/` — effetti del Tour visivo
+
+Effetti scenografici iniettati nella pagina host durante il tour (vanilla
+DOM+CSS, un solo `<style id="rs-fx-style">`, tutto con prefisso `rs-fx-`,
+`prefers-reduced-motion` rispettato ovunque):
+
+- `motion.ts`: easing, `sleep`, `smoothScrollTo` (scroll cinematico rAF ~950ms,
+  annullato da un gesto dell'utente);
+- `banner.ts`: banner di avanzamento fisso in alto (brand, "passo N/M",
+  narrazione typewriter `narrate()`, barra progresso, bottone Interrompi che
+  emette l'evento `rs-tour-abort` + scrive il flag storage `rs:tourAbort`);
+- `spotlight.ts`: overlay a riflettore (gradiente radiale con buco che segue
+  il link) + alone giallo pulsante su `.rs-tour-highlight`;
+- `cursor.ts`: cursore AI fantasma che plana sul link con curva di Bézier e
+  "clicca" con onda ripple prima della navigazione;
+- `scan.ts`: fascio di scansione che percorre la pagina seguita mentre le
+  keyword corrispondenti si illuminano (`mark.rs-scan-hit`, max 15, revert
+  completo);
+- `index.ts`: stili, `teardownFx()` idempotente (pulizia totale su stop/fine/
+  re-init) e safety net bfcache su `pageshow`.
+
+Orchestrazione: `driveTour()` in `App.tsx`. Timing in `lib/tour.ts`
+(`dwellMs` 900 = hover sul link, `scanMs` 1600 = durata scansione).
+`lib/highlight.ts` ora contiene solo `findLinkElement()`.
+
 ## Backend
 
 ### `server/src/index.ts`
