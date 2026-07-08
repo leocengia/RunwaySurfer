@@ -9,12 +9,16 @@ export async function streamAsk(
   request: AskRequest,
   onEvent: (event: AskEvent) => void,
   signal?: AbortSignal,
+  token?: string | null,
 ): Promise<void> {
   let res: Response;
   try {
     res = await fetch(`${proxyUrl.replace(/\/$/, '')}/ask`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify(request),
       signal,
     });
@@ -23,6 +27,11 @@ export async function streamAsk(
     return;
   }
 
+  if (res.status === 401) {
+    // Token missing/expired/revoked: the sidebar must show the login form.
+    onEvent({ type: 'auth-required' });
+    return;
+  }
   if (!res.ok || !res.body) {
     onEvent({ type: 'error', message: `Backend ha risposto ${res.status}` });
     return;

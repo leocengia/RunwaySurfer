@@ -38,6 +38,28 @@ Un **proxy stateless** in Node.js che:
 - Esecuzione come utente dedicato non privilegiato (vedi `deploy/runwaysurfer.service`).
 - TLS terminato dal reverse proxy; backend in rete interna.
 - Egress in allowlist verso il solo host Anthropic.
+- Con TLS attivo impostare `COOKIE_SECURE=1` (flag `Secure` sul cookie di sessione).
+
+## Autenticazione
+
+Tutti gli endpoint (tranne `/health` e `/auth/login`) richiedono autenticazione:
+
+- **Dashboard**: login con username + password individuali su `GET /login`;
+  sessione via cookie `HttpOnly` (durata 12 ore), logout dalla pagina.
+- **Estensione (agenti)**: login nella sidebar; il backend rilascia un token
+  Bearer (durata 30 giorni) usato su `POST /ask` e `GET /extension-config`.
+- **Password**: hash `scrypt` (crypto nativo Node, nessuna dipendenza extra),
+  mai salvate in chiaro. Minimo 8 caratteri. Cambio obbligatorio al primo login.
+- **Ruoli**: `admin` (tutto), `team_lead` (dashboard in sola lettura),
+  `agent` (solo `/ask` e config estensione).
+- **Sessioni**: token opachi salvati hashati (SHA-256) nella tabella `sessions`
+  di SQLite; revocabili per singolo utente (reset password, disattivazione).
+- **Rate limiting login**: max 5 tentativi falliti per IP+username / 15 minuti.
+- **Bootstrap primo admin**: al primo avvio impostare `ADMIN_BOOTSTRAP_PASSWORD`
+  (e opzionalmente `ADMIN_USERNAME`, default `admin`); l'account viene creato
+  con cambio password obbligatorio. Ignorata se un admin con password esiste già.
+- Gli utenti creati prima dell'introduzione del login non hanno password: vanno
+  abilitati dall'admin con `POST /users/:id/reset-password` (o dalla dashboard).
 
 ## Punti aperti da chiarire col CED
 - Posizionamento (DMZ / rete interna) e policy di egress verso Internet.
@@ -57,7 +79,8 @@ server/data/runwaysurfer.db
 
 Contiene:
 
-- utenti e team;
+- utenti e team (con hash password `scrypt` per il login);
+- sessioni attive (token hashati SHA-256);
 - storico richieste con query preview/hash;
 - modello, token stimati, costo stimato, durata, stato, errori;
 - link selezionati e fonti in JSON;
@@ -81,15 +104,18 @@ Retention default:
 REQUEST_RETENTION_DAYS=90
 ```
 
-Endpoint amministrativi principali:
+Endpoint amministrativi principali (richiedono sessione admin/team_lead):
 
 ```text
+GET /login                          (pagina di accesso, pubblica)
+POST /auth/login                    (pubblica, rate-limited)
+POST /auth/logout · GET /auth/me · POST /auth/change-password
 GET /dashboard
-GET /users
-GET /teams
+GET /users · POST /users · PATCH /users/:id
+POST /users/:id/reset-password      (solo admin)
+GET /teams · POST /teams
 GET /requests
 GET /analytics/summary
-GET /settings
-PATCH /settings
-POST /maintenance/prune
+GET /settings · PATCH /settings     (PATCH solo admin)
+POST /maintenance/prune             (solo admin)
 ```

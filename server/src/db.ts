@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 export type UserRole = 'agent' | 'team_lead' | 'admin';
 export type UserStatus = 'pending' | 'active' | 'disabled';
+export type SessionKind = 'cookie' | 'bearer';
 
 export interface UserRecord {
   id: number;
@@ -15,8 +16,23 @@ export interface UserRecord {
   role: UserRole;
   status: UserStatus;
   team_id: number | null;
+  // scrypt hash (see auth.ts); NULL = login disabled until an admin sets a password.
+  password_hash: string | null;
+  must_change_password: number;
   created_at: string;
   updated_at: string;
+}
+
+/** User shape safe to serialize in API responses (no password hash). */
+export type SafeUser = Omit<UserRecord, 'password_hash'>;
+
+export interface SessionRecord {
+  token_hash: string;
+  user_id: number;
+  kind: SessionKind;
+  created_at: string;
+  expires_at: string;
+  last_seen_at: string;
 }
 
 export interface TeamRecord {
@@ -127,8 +143,19 @@ export function initDb(): void {
       role TEXT NOT NULL DEFAULT 'agent',
       status TEXT NOT NULL DEFAULT 'pending',
       team_id INTEGER REFERENCES teams(id) ON DELETE SET NULL,
+      password_hash TEXT,
+      must_change_password INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      token_hash TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL CHECK (kind IN ('cookie', 'bearer')),
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS requests (
@@ -164,6 +191,8 @@ export function initDb(): void {
     CREATE INDEX IF NOT EXISTS idx_requests_user ON requests(user_id);
     CREATE INDEX IF NOT EXISTS idx_requests_team ON requests(team_id);
     CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status);
+    CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+    CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
   `);
 
   const insertSetting = db.prepare(`
@@ -173,6 +202,33 @@ export function initDb(): void {
   for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
     insertSetting.run(key, String(value), ts);
   }
+
+  migrate();
+}
+
+// Schema versioning via PRAGMA user_version. Version 1 adds the auth columns to
+// `users` for databases created before the login feature; the table_info guard
+// keeps the ALTERs idempotent (fresh DBs already have the columns).
+function migrate(): void {
+  const version = db.pragma('user_version', { simple: true }) as number;
+  if (version < 1) {
+    db.transaction(() => {
+      const columns = (db.pragma('table_info(users)') as Array<{ name: string }>).map((c) => c.name);
+      if (!columns.includes('password_hash')) {
+        db.exec('ALTER TABLE users ADD COLUMN password_hash TEXT');
+      }
+      if (!columns.includes('must_change_password')) {
+        db.exec('ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0');
+      }
+      db.pragma('user_version = 1');
+    })();
+  }
+}
+
+/** Strips credential material before a user row leaves the server. */
+export function sanitizeUser(user: UserRecord): SafeUser {
+  const { password_hash: _password_hash, ...safe } = user;
+  return safe;
 }
 
 export function getSettings(): SettingsRecord {
@@ -237,12 +293,14 @@ export function createUser(input: {
   role?: UserRole;
   status?: UserStatus;
   teamId?: number | null;
+  passwordHash?: string | null;
+  mustChangePassword?: boolean;
 }): UserRecord {
   const ts = now();
   const info = db
     .prepare(
-      `INSERT INTO users (external_id, email, name, role, status, team_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO users (external_id, email, name, role, status, team_id, password_hash, must_change_password, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       input.externalId,
@@ -251,10 +309,97 @@ export function createUser(input: {
       input.role ?? 'agent',
       input.status ?? 'active',
       input.teamId ?? null,
+      input.passwordHash ?? null,
+      input.mustChangePassword ? 1 : 0,
       ts,
       ts,
     );
   return db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid) as UserRecord;
+}
+
+export function getUserById(id: number): UserRecord | null {
+  return (db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRecord | undefined) ?? null;
+}
+
+export function getUserByExternalId(externalId: string): UserRecord | null {
+  return (
+    (db.prepare('SELECT * FROM users WHERE external_id = ?').get(externalId) as UserRecord | undefined) ?? null
+  );
+}
+
+export function setUserPassword(id: number, passwordHash: string, mustChange: boolean): UserRecord | null {
+  const info = db
+    .prepare('UPDATE users SET password_hash = ?, must_change_password = ?, updated_at = ? WHERE id = ?')
+    .run(passwordHash, mustChange ? 1 : 0, now(), id);
+  if (info.changes === 0) return null;
+  return getUserById(id);
+}
+
+export function insertSession(tokenHash: string, userId: number, kind: SessionKind, expiresAt: string): void {
+  const ts = now();
+  db.prepare(
+    `INSERT INTO sessions (token_hash, user_id, kind, created_at, expires_at, last_seen_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(tokenHash, userId, kind, ts, expiresAt, ts);
+}
+
+export function getSessionWithUser(tokenHash: string): { session: SessionRecord; user: UserRecord } | null {
+  const row = db
+    .prepare(
+      `SELECT s.token_hash, s.user_id, s.kind, s.created_at AS session_created_at,
+              s.expires_at, s.last_seen_at, u.*
+       FROM sessions s JOIN users u ON u.id = s.user_id
+       WHERE s.token_hash = ?`,
+    )
+    .get(tokenHash) as
+    | (UserRecord & {
+        token_hash: string;
+        user_id: number;
+        kind: SessionKind;
+        session_created_at: string;
+        expires_at: string;
+        last_seen_at: string;
+      })
+    | undefined;
+  if (!row) return null;
+  const { token_hash, user_id, kind, session_created_at, expires_at, last_seen_at, ...user } = row;
+  return {
+    session: {
+      token_hash,
+      user_id,
+      kind,
+      created_at: session_created_at,
+      expires_at,
+      last_seen_at,
+    },
+    user: user as UserRecord,
+  };
+}
+
+export function touchSession(tokenHash: string): void {
+  db.prepare('UPDATE sessions SET last_seen_at = ? WHERE token_hash = ?').run(now(), tokenHash);
+}
+
+export function deleteSession(tokenHash: string): void {
+  db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(tokenHash);
+}
+
+export function deleteUserSessions(userId: number, exceptTokenHash?: string): number {
+  const info = exceptTokenHash
+    ? db.prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?').run(userId, exceptTokenHash)
+    : db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
+  return info.changes;
+}
+
+export function deleteExpiredSessions(): number {
+  return db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(now()).changes;
+}
+
+export function countAdminsWithPassword(): number {
+  const row = db
+    .prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND password_hash IS NOT NULL")
+    .get() as { n: number };
+  return row.n;
 }
 
 export function updateUser(id: number, patch: Partial<Pick<UserRecord, 'email' | 'name' | 'role' | 'status' | 'team_id'>>): UserRecord | null {

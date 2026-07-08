@@ -336,37 +336,72 @@ Layer SQLite basato su `better-sqlite3`.
 Gestisce:
 
 - creazione automatica di `server/data/runwaysurfer.db`;
-- schema `teams`, `users`, `requests`, `settings`;
-- risoluzione/creazione utenti da header SSO o agent id;
+- schema `teams`, `users`, `requests`, `settings`, `sessions`;
+- migrazione dello schema via `PRAGMA user_version` (colonne `password_hash` e
+  `must_change_password` aggiunte ai DB creati prima del login);
+- helper per credenziali e sessioni (`setUserPassword`, `getSessionWithUser`,
+  `deleteUserSessions`, `sanitizeUser`, ...);
 - storico richieste con query preview/hash, token, costo, modello, durata, stato;
 - settings persistenti per limiti di concorrenza, budget, pagine/link e retention.
 
 Il DB non salva il testo completo della KB per default.
 
+### `server/src/auth.ts`
+
+Layer autenticazione (solo `node:crypto`, nessuna dipendenza nuova):
+
+- hash password `scrypt` (`hashPassword`/`verifyPassword`), formato
+  `scrypt$N=...$salt$hash`;
+- sessioni con token opachi (salvati SHA-256 in `sessions`): cookie `rs_session`
+  HttpOnly per la dashboard (12h), Bearer per l'estensione (30 giorni);
+- middleware `requireAuth(minRole)` per le API JSON e `requirePage(minRole)`
+  per le pagine HTML (redirect a `/login` / `/change-password`);
+- rate limiting in-memory sui login (5 tentativi / 15 min per IP+username);
+- `bootstrapAdmin()`: crea il primo admin da `ADMIN_BOOTSTRAP_PASSWORD` /
+  `ADMIN_USERNAME` al primo avvio.
+
 ### Endpoint backend aggiunti
 
-In `server/src/index.ts`:
+In `server/src/index.ts` (guardie: `admin` > `team_lead` > `agent`):
 
-- `GET /dashboard`: dashboard HTML operativa.
-- `GET /dashboard-data`: stato complessivo JSON.
-- `GET /metrics`: contatori live in memoria.
-- `GET /extension-config`: policy/config letta dalla dashboard e futura estensione.
-- `GET /users`, `POST /users`, `PATCH /users/:id`: gestione utenti.
-- `GET /teams`, `POST /teams`: gestione team.
-- `GET /requests`, `GET /requests/:id`: storico richieste persistente.
-- `GET /analytics/summary`: riepilogo storico da SQLite.
-- `GET /settings`, `PATCH /settings`: policy persistenti.
-- `POST /maintenance/prune`: rimozione storico oltre retention.
+- `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`,
+  `POST /auth/change-password`: ciclo di vita sessioni.
+- `GET /login`, `GET /change-password`: pagine HTML di accesso.
+- `GET /dashboard`: dashboard HTML operativa (login richiesto; team_lead in sola lettura).
+- `GET /dashboard-data`: stato complessivo JSON (team_lead+).
+- `GET /metrics`: contatori live in memoria (team_lead+).
+- `GET /extension-config`: policy/config per l'estensione (autenticato).
+- `GET /users` (team_lead+), `POST /users` (admin, richiede `tempPassword`),
+  `PATCH /users/:id` (admin, disattivazione revoca le sessioni),
+  `POST /users/:id/reset-password` (admin): gestione utenti.
+- `GET /teams` (team_lead+), `POST /teams` (admin): gestione team.
+- `GET /requests`, `GET /requests/:id`: storico richieste persistente (team_lead+).
+- `GET /analytics/summary`: riepilogo storico da SQLite (team_lead+).
+- `GET /settings` (team_lead+), `PATCH /settings` (admin): policy persistenti.
+- `POST /maintenance/prune` (admin): rimozione storico oltre retention.
+- `POST /ask`: ora richiede token Bearer; l'identità (`agent_id`) viene dalla
+  sessione, gli header `x-agent-id`/`x-user-email` non sono più accettati.
 
 ### Dashboard eseguibile
 
-La dashboard ora usa `fetch` lato browser per chiamare gli endpoint:
+La dashboard ora usa `fetch` lato browser per chiamare gli endpoint (il cookie
+di sessione viaggia automaticamente, essendo same-origin):
 
+- header con utente loggato e pulsante Logout;
 - pulsanti health/metrics/config/requirements;
-- form per creare team e utenti;
-- form per modificare settings;
+- form per creare team e utenti (con password temporanea) e reset password — solo admin;
+- form per modificare settings — solo admin;
 - filtri per storico richieste;
-- form demo per inviare una richiesta `/ask`.
+- form demo per inviare una richiesta `/ask` (attribuita all'utente loggato).
+
+### Login nell'estensione
+
+- `lib/auth.ts`: `login`/`logout`/`fetchMe`/`changePassword` + token in
+  `chrome.storage.local` (`rs:authToken`).
+- `lib/client.ts`: `streamAsk()` invia `Authorization: Bearer`; su 401 emette
+  l'evento `auth-required` (definito in `lib/outcome.ts`).
+- `entrypoints/sidebar.content/App.tsx`: stati `checking/loggedOut/mustChange/in`,
+  form di login e cambio password nella sidebar, pulsante Logout.
 
 ### File runtime
 

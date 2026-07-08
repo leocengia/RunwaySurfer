@@ -61,12 +61,15 @@ export interface AiPlan {
  *  - `delta` : an incremental chunk of the outcome text (markdown).
  *  - `done`  : stream finished.
  *  - `error` : something went wrong.
+ *  - `auth-required` : synthesized client-side on a 401 (never sent by the
+ *    server) — the stored token is invalid/expired and the agent must log in.
  */
 export type AskEvent =
   | { type: 'plan'; plan: AiPlan }
   | { type: 'delta'; text: string }
   | { type: 'done' }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  | { type: 'auth-required' };
 
 /**
  * The operational outcome is streamed as markdown with these four sections.

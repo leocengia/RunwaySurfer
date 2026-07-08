@@ -10,6 +10,15 @@ import { extractCurrentPage, extractInternalLinks } from '../../lib/extract';
 import { pickRelevantLinks, shallowFollow } from '../../lib/crawl';
 import { streamAsk } from '../../lib/client';
 import { getProxyUrl } from '../../lib/messaging';
+import {
+  changePassword,
+  clearToken,
+  fetchMe,
+  getToken,
+  login,
+  logout,
+  type AuthUser,
+} from '../../lib/auth';
 import type { AiPlan, KbPage } from '../../lib/outcome';
 import {
   clearTour,
@@ -27,6 +36,7 @@ import { dwell, findLinkElement, scrollAndHighlight } from '../../lib/highlight'
 type Status = 'idle' | 'reading' | 'streaming' | 'done' | 'error';
 type Mode = 'single' | 'follow' | 'visual';
 type AskResult = { outcome: string; plan: AiPlan | null };
+type AuthPhase = 'checking' | 'loggedOut' | 'mustChange' | 'in';
 
 const SIDEBAR_WIDTH_KEY = 'rs:sidebarWidth';
 const DEFAULT_SIDEBAR_WIDTH = 360;
@@ -89,8 +99,151 @@ function statusLabel(status: Status, mode: Mode): string {
   return 'In attesa';
 }
 
+function LoginForm({ onLoggedIn }: { onLoggedIn: (user: AuthUser) => void }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [authError, setAuthError] = useState('');
+
+  const submit = async () => {
+    if (!username.trim() || !password || busy) return;
+    setBusy(true);
+    setAuthError('');
+    try {
+      const user = await login(await getProxyUrl(), username.trim(), password);
+      onLoggedIn(user);
+    } catch (e) {
+      setAuthError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form
+      className="rs-auth"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
+    >
+      <div className="rs-auth-note">
+        Accedi con le credenziali fornite dal tuo amministratore per usare RunwaySurfer.
+      </div>
+      <label className="rs-label" htmlFor="rs-username">
+        Username
+      </label>
+      <input
+        id="rs-username"
+        className="rs-field"
+        autoComplete="username"
+        value={username}
+        onChange={(e) => setUsername(e.target.value)}
+      />
+      <label className="rs-label" htmlFor="rs-password">
+        Password
+      </label>
+      <input
+        id="rs-password"
+        className="rs-field"
+        type="password"
+        autoComplete="current-password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+      />
+      {authError && <div className="rs-error">{authError}</div>}
+      <button className="rs-submit" type="submit" disabled={busy || !username.trim() || !password}>
+        {busy ? 'Accesso...' : 'Accedi'}
+      </button>
+    </form>
+  );
+}
+
+function ChangePasswordForm({ onChanged }: { onChanged: (user: AuthUser) => void }) {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [authError, setAuthError] = useState('');
+
+  const submit = async () => {
+    if (busy) return;
+    if (next !== confirm) {
+      setAuthError('Le nuove password non coincidono.');
+      return;
+    }
+    setBusy(true);
+    setAuthError('');
+    try {
+      const user = await changePassword(await getProxyUrl(), current, next);
+      onChanged(user);
+    } catch (e) {
+      setAuthError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form
+      className="rs-auth"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
+    >
+      <div className="rs-auth-note">
+        Devi impostare una nuova password prima di continuare.
+      </div>
+      <label className="rs-label" htmlFor="rs-current-password">
+        Password attuale
+      </label>
+      <input
+        id="rs-current-password"
+        className="rs-field"
+        type="password"
+        autoComplete="current-password"
+        value={current}
+        onChange={(e) => setCurrent(e.target.value)}
+      />
+      <label className="rs-label" htmlFor="rs-new-password">
+        Nuova password (min 8 caratteri)
+      </label>
+      <input
+        id="rs-new-password"
+        className="rs-field"
+        type="password"
+        autoComplete="new-password"
+        value={next}
+        onChange={(e) => setNext(e.target.value)}
+      />
+      <label className="rs-label" htmlFor="rs-confirm-password">
+        Conferma nuova password
+      </label>
+      <input
+        id="rs-confirm-password"
+        className="rs-field"
+        type="password"
+        autoComplete="new-password"
+        value={confirm}
+        onChange={(e) => setConfirm(e.target.value)}
+      />
+      {authError && <div className="rs-error">{authError}</div>}
+      <button
+        className="rs-submit"
+        type="submit"
+        disabled={busy || !current || next.length < 8 || !confirm}
+      >
+        {busy ? 'Salvataggio...' : 'Cambia password'}
+      </button>
+    </form>
+  );
+}
+
 export default function App() {
   const [open, setOpen] = useState(true);
+  const [authPhase, setAuthPhase] = useState<AuthPhase>('checking');
+  const [me, setMe] = useState<AuthUser | null>(null);
   const [query, setQuery] = useState('');
   const [mode, setMode] = useState<Mode>('visual');
   const [status, setStatus] = useState<Status>('idle');
@@ -104,6 +257,31 @@ export default function App() {
   const tourAbortRef = useRef(false);
   const drivingRef = useRef(false);
   const originalBodyStylesRef = useRef<{ marginRight: string; transition: string } | null>(null);
+
+  // Validate the stored token at mount: decides login form vs main UI.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const user = await fetchMe(await getProxyUrl());
+      if (cancelled) return;
+      setMe(user);
+      setAuthPhase(user ? (user.mustChangePassword ? 'mustChange' : 'in') : 'loggedOut');
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const onLoggedIn = useCallback((user: AuthUser) => {
+    setMe(user);
+    setAuthPhase(user.mustChangePassword ? 'mustChange' : 'in');
+  }, []);
+
+  const doLogout = useCallback(async () => {
+    await logout(await getProxyUrl());
+    setMe(null);
+    setAuthPhase('loggedOut');
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -199,6 +377,7 @@ export default function App() {
       setPagesUsed(pages);
 
       const proxyUrl = await getProxyUrl();
+      const token = await getToken();
       await streamAsk(
         proxyUrl,
         { query: q.trim(), pages, links: linksOverride },
@@ -219,9 +398,17 @@ export default function App() {
               setError(event.message);
               setStatus('error');
               break;
+            case 'auth-required':
+              // Session expired or revoked: back to the login form.
+              void clearToken();
+              setMe(null);
+              setAuthPhase('loggedOut');
+              setStatus('idle');
+              break;
           }
         },
         controller.signal,
+        token,
       );
       setStatus((s) => (s === 'streaming' ? 'done' : s));
       return { outcome: accumulatedOutcome, plan: receivedPlan };
@@ -467,6 +654,24 @@ export default function App() {
       </header>
 
       <div className="rs-body">
+        {authPhase === 'checking' && <div className="rs-auth-note">Verifica sessione...</div>}
+        {authPhase === 'loggedOut' && <LoginForm onLoggedIn={onLoggedIn} />}
+        {authPhase === 'mustChange' && <ChangePasswordForm onChanged={onLoggedIn} />}
+        {authPhase === 'in' && (
+        <>
+        <div className="rs-whoami">
+          <span>{me?.name || me?.username}</span>
+          <button
+            className="rs-logout"
+            type="button"
+            onClick={() => {
+              void resetSession();
+              void doLogout();
+            }}
+          >
+            Logout
+          </button>
+        </div>
         <div className="rs-provider-note">
           <strong>Demo mock.</strong> I link sono scelti con scoring locale; il provider AI reale si
           collega lato backend senza esporre chiavi nell'estensione.
@@ -582,6 +787,8 @@ export default function App() {
               ))}
             </ul>
           </details>
+        )}
+        </>
         )}
       </div>
     </div>

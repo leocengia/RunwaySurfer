@@ -39,4 +39,6 @@ export type AskEvent =
   | { type: 'plan'; plan: AiPlan }
   | { type: 'delta'; text: string }
   | { type: 'done' }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  // Synthesized by the extension client on a 401; the server never emits it.
+  | { type: 'auth-required' };
