@@ -1,0 +1,8 @@
+node_modules/
+.wxt/
+.output/
+dist/
+server/dist/
+server/data/
+package-lock.json
+server/package-lock.json
