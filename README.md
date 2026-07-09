@@ -17,11 +17,15 @@ AI sidebar che aiuta gli agenti di call center a navigare la Knowledge Base e a 
 ## Struttura
 
 ```text
-entrypoints/         estensione browser
-lib/                 estrazione DOM, crawl same-origin, client SSE, contratti dati
-server/              proxy backend, dashboard, provider mock/anthropic
+entrypoints/         estensione browser (sidebar React, form auth, driver del tour)
+lib/                 estrazione DOM, crawl same-origin, client SSE, auth, tour
+shared/              contratti dati condivisi estensione/backend (solo tipi)
+server/src/          proxy backend: app Express, routes/, views/, provider mock/anthropic
+server/tests/        test backend (Vitest + supertest)
+tests/               test estensione (Vitest + happy-dom)
 server/data/         DB SQLite runtime, ignorato da git
 server/BACKEND-REQUIREMENTS.md   requisiti server/rete per il CED
+.github/workflows/   CI: typecheck, lint, format check, test e build
 ```
 
 ## Avvio della demo
@@ -113,7 +117,7 @@ resettare password, modificare settings e inviare una richiesta demo a `/ask`.
 Ruoli: `admin` ha pieno controllo, `team_lead` vede la dashboard in sola
 lettura, `agent` accede solo a `/ask` e `/extension-config` dall'estensione.
 
-`server/data/` e ignorata da git: fare backup o retention di `runwaysurfer.db` secondo policy aziendale. La retention default dello storico e 90 giorni.
+`server/data/` e ignorata da git: fare backup di `runwaysurfer.db` secondo policy aziendale. La retention dello storico (default 90 giorni, setting `retention_days`) viene applicata automaticamente da un job giornaliero all'avvio del backend; `POST /maintenance/prune` resta disponibile per una pulizia manuale immediata.
 
 ## Passare alle chiamate AI reali
 
@@ -122,9 +126,25 @@ Nel backend imposta:
 ```bash
 AI_PROVIDER=anthropic
 ANTHROPIC_API_KEY=sk-ant-...
+ALLOWED_ORIGIN=chrome-extension://<id-estensione>
 ```
 
 La API key vive solo nel backend. L'estensione continua a parlare con il proxy.
+Con il provider reale `ALLOWED_ORIGIN` e obbligatoria: il server rifiuta di
+avviarsi con CORS aperto (`*`).
+
+## Sviluppo
+
+In entrambi i package (radice = estensione, `server/` = backend):
+
+```bash
+npm run compile   # typecheck (tsc --noEmit)
+npm run lint      # ESLint
+npm test          # test Vitest
+```
+
+Alla radice sono disponibili anche `npm run format` / `format:check` (Prettier).
+La CI (`.github/workflows/ci.yml`) esegue tutti i controlli su push e pull request.
 
 ## Configurazione URL proxy
 
