@@ -117,7 +117,13 @@ function queryFocusedText(root: Element, query: string): string | null {
 
   const focused = normalizeText(selected.map((block) => block.text).join('\n'), FOCUSED_PAGE_CHARS);
   if (focused.length < MIN_QUERY_TEXT_CHARS) {
-    const intro = normalizeText(blocks.slice(0, 4).map((block) => block.text).join('\n'), 1_600);
+    const intro = normalizeText(
+      blocks
+        .slice(0, 4)
+        .map((block) => block.text)
+        .join('\n'),
+      1_600,
+    );
     return normalizeText([intro, focused].filter(Boolean).join('\n'), FOCUSED_PAGE_CHARS);
   }
   return focused;

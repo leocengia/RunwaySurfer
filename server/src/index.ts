@@ -245,7 +245,10 @@ function sanitizeRequest(body: Partial<AskRequest>, settings = runtimeSettings()
 function recordMetric(metric: RequestMetric): void {
   metrics.totalRequests += 1;
   metrics.activeRequests = Math.max(0, metrics.activeRequests - 1);
-  metrics.activeByAgent[metric.agentId] = Math.max(0, (metrics.activeByAgent[metric.agentId] ?? 0) - 1);
+  metrics.activeByAgent[metric.agentId] = Math.max(
+    0,
+    (metrics.activeByAgent[metric.agentId] ?? 0) - 1,
+  );
   if (metric.ok) metrics.successfulRequests += 1;
   else metrics.failedRequests += 1;
   metrics.totalEstimatedInputTokens += metric.inputTokens;
@@ -342,9 +345,8 @@ app.get('/requirements', requireAuth('team_lead'), (_req, res) => {
       cors: `Access-Control-Allow-Origin = ${ALLOWED_ORIGIN}`,
     },
     secrets: {
-      anthropic_api_key:
-        'ANTHROPIC_API_KEY via env/secret manager sul server; MAI nell\'estensione',
-      rotation: 'ruotabile senza redeploy dell\'estensione',
+      anthropic_api_key: "ANTHROPIC_API_KEY via env/secret manager sul server; MAI nell'estensione",
+      rotation: "ruotabile senza redeploy dell'estensione",
     },
     provider: getProvider().name,
     note: 'Con AI_PROVIDER=mock non esce traffico verso Internet: ideale per la demo.',
@@ -478,12 +480,16 @@ app.patch('/users/:id', requireAuth('admin'), (req, res) => {
   const user = updateUser(id, {
     email: typeof body.email === 'string' ? truncate(body.email, 240) : undefined,
     name: typeof body.name === 'string' ? truncate(body.name, 240) : undefined,
-    role: body.role === 'admin' || body.role === 'team_lead' || body.role === 'agent' ? body.role : undefined,
+    role:
+      body.role === 'admin' || body.role === 'team_lead' || body.role === 'agent'
+        ? body.role
+        : undefined,
     status:
       body.status === 'pending' || body.status === 'active' || body.status === 'disabled'
         ? body.status
         : undefined,
-    team_id: typeof body.teamId === 'number' ? body.teamId : body.teamId === null ? null : undefined,
+    team_id:
+      typeof body.teamId === 'number' ? body.teamId : body.teamId === null ? null : undefined,
   });
   if (!user) {
     res.status(404).json({ error: 'user not found' });
@@ -564,7 +570,9 @@ function modelBars(): string {
   const summary = analyticsSummary();
   const byModel = summary.byModel as Array<{ model: string; requests: number }>;
   const total = byModel.reduce((sum, row) => sum + row.requests, 0);
-  const rows = byModel.length ? byModel : Object.values(MODELS).map((model) => ({ model: model.id, requests: 0 }));
+  const rows = byModel.length
+    ? byModel
+    : Object.values(MODELS).map((model) => ({ model: model.id, requests: 0 }));
   return rows
     .map((row) => {
       const width = total ? Math.round((row.requests / total) * 100) : 0;
@@ -948,7 +956,9 @@ app.get('/dashboard', requirePage('team_lead'), (_req, res) => {
         <button data-get="/requests?limit=20">Requests</button>
       </div>
     </section>
-    ${isAdmin ? `<section class="split">
+    ${
+      isAdmin
+        ? `<section class="split">
       <div class="card">
         <div class="label">Create team</div>
         <form id="team-form" class="form-grid">
@@ -980,9 +990,13 @@ app.get('/dashboard', requirePage('team_lead'), (_req, res) => {
         <div class="form-row"><span>&nbsp;</span><button type="submit">Reset password</button></div>
       </form>
       <p style="font-size:12px;color:var(--muted);margin:10px 0 0">Revoca tutte le sessioni attive dell'utente e forza il cambio password al prossimo login.</p>
-    </section>` : ''}
+    </section>`
+        : ''
+    }
     <section class="split">
-      ${isAdmin ? `<div class="card">
+      ${
+        isAdmin
+          ? `<div class="card">
         <div class="label">Settings</div>
         <form id="settings-form" class="form-grid">
           <label class="form-row">Max concurrent<input name="max_concurrent_requests" type="number" value="${settings.max_concurrent_requests}" /></label>
@@ -994,7 +1008,9 @@ app.get('/dashboard', requirePage('team_lead'), (_req, res) => {
           <label class="form-row">Retention days<input name="retention_days" type="number" value="${settings.retention_days}" /></label>
           <div class="form-row"><span>&nbsp;</span><button type="submit">Save settings</button></div>
         </form>
-      </div>` : ''}
+      </div>`
+          : ''
+      }
       <div class="card">
         <div class="label">Request filters</div>
         <form id="request-filter-form" class="form-grid">

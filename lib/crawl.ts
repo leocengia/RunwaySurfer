@@ -162,7 +162,10 @@ function scoreLink(
   return { score, reason: reason || 'nessuna corrispondenza', matched };
 }
 
-function dynamicSelection(scored: Array<{ link: KbLink; score: number; order: number }>, max: number): KbLink[] {
+function dynamicSelection(
+  scored: Array<{ link: KbLink; score: number; order: number }>,
+  max: number,
+): KbLink[] {
   const ranked = scored
     .filter((x) => x.score >= MIN_SELECTED_SCORE)
     .sort((a, b) => b.score - a.score || a.order - b.order || a.link.url.localeCompare(b.link.url));

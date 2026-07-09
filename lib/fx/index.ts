@@ -251,7 +251,9 @@ export function teardownFx(): void {
     document.getElementById(id)?.remove();
   }
   document.querySelectorAll('.rs-fx-ripple').forEach((el) => el.remove());
-  document.querySelectorAll('.rs-tour-highlight').forEach((el) => el.classList.remove('rs-tour-highlight'));
+  document
+    .querySelectorAll('.rs-tour-highlight')
+    .forEach((el) => el.classList.remove('rs-tour-highlight'));
   document.querySelectorAll('.rs-scan-hit').forEach((mark) => {
     const parent = mark.parentNode;
     mark.replaceWith(...Array.from(mark.childNodes));

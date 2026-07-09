@@ -72,7 +72,6 @@ export function estimateCostUsd(
   outputTokens: number,
 ): number {
   return (
-    (inputTokens / 1_000_000) * spec.inputPerMTok +
-    (outputTokens / 1_000_000) * spec.outputPerMTok
+    (inputTokens / 1_000_000) * spec.inputPerMTok + (outputTokens / 1_000_000) * spec.outputPerMTok
   );
 }

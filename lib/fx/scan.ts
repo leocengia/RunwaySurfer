@@ -31,8 +31,10 @@ function markKeywords(keywords: string[], durationMs: number): HTMLElement[] {
       const parent = node.parentElement;
       if (!parent) return NodeFilter.FILTER_REJECT;
       const tag = parent.tagName;
-      if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT') return NodeFilter.FILTER_REJECT;
-      if (parent.closest('[id^="rs-"], [class*="rs-fx"], mark.' + HIT_CLASS)) return NodeFilter.FILTER_REJECT;
+      if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT')
+        return NodeFilter.FILTER_REJECT;
+      if (parent.closest('[id^="rs-"], [class*="rs-fx"], mark.' + HIT_CLASS))
+        return NodeFilter.FILTER_REJECT;
       if (!node.textContent || node.textContent.length < 3) return NodeFilter.FILTER_SKIP;
       return NodeFilter.FILTER_ACCEPT;
     },
@@ -90,7 +92,10 @@ function unmark(marks: HTMLElement[]): void {
  * Run the reading scan: beam sweep + keyword flashes, fully reverted before
  * returning. Under reduced motion it is just a short pause.
  */
-export async function runReadingScan(options: { keywords: string[]; durationMs: number }): Promise<void> {
+export async function runReadingScan(options: {
+  keywords: string[];
+  durationMs: number;
+}): Promise<void> {
   if (prefersReducedMotion()) {
     await sleep(500);
     return;

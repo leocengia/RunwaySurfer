@@ -24,24 +24,24 @@ Pagina web KB
 
 ## Se Vuoi Cambiare...
 
-| Obiettivo | File da aprire | Cosa modificare |
-| --- | --- | --- |
-| Siti/pagine dove compare l'estensione | `wxt.config.ts`, `entrypoints/sidebar.content/index.tsx` | `host_permissions` e `matches` |
-| Testi, layout logico, pulsanti, checkbox | `entrypoints/sidebar.content/App.tsx` | JSX, stati React, funzione `run()` |
-| Aspetto grafico della sidebar | `entrypoints/sidebar.content/style.css` | classi `.rs-*` |
-| Cosa viene letto dalla pagina corrente | `lib/extract.ts` | selettori, pulizia DOM, limite testo |
-| Quanti link collegati legge | `lib/crawl.ts` | `MAX_FOLLOW` |
-| Come sceglie i link rilevanti | `lib/crawl.ts` | `scoreLink()`, `keywordsOf()`, `pickRelevantLinks()` |
-| URL del backend usato dalla sidebar | `lib/messaging.ts` | `DEFAULT_PROXY_URL` oppure `chrome.storage.local.proxyUrl` |
-| Chiamata streaming al backend | `lib/client.ts` | `streamAsk()` |
-| Contratti dati extension/backend | `lib/outcome.ts`, `server/src/types.ts` | `AskRequest`, `AskEvent`, `AiPlan` |
-| Endpoint backend | `server/src/index.ts` | `/health`, `/requirements`, `/ask` |
-| Scelta modello e costi | `server/src/router.ts` | `MODELS`, `chooseModel()`, soglie token/pagine |
-| Prompt AI | `server/src/provider/shared.ts` | `buildSystemPrompt()`, `buildUserContent()` |
-| Risposta demo/mock | `server/src/provider/mock.ts` | `buildOutcome()` |
-| Provider AI reale | `server/src/provider/anthropic.ts` | `max_tokens`, parametri SDK, streaming |
-| Deploy container | `server/Dockerfile` | immagine, porta, env default |
-| Deploy Linux systemd | `server/deploy/runwaysurfer.service` | path, utente, env file |
+| Obiettivo                                | File da aprire                                           | Cosa modificare                                            |
+| ---------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------- |
+| Siti/pagine dove compare l'estensione    | `wxt.config.ts`, `entrypoints/sidebar.content/index.tsx` | `host_permissions` e `matches`                             |
+| Testi, layout logico, pulsanti, checkbox | `entrypoints/sidebar.content/App.tsx`                    | JSX, stati React, funzione `run()`                         |
+| Aspetto grafico della sidebar            | `entrypoints/sidebar.content/style.css`                  | classi `.rs-*`                                             |
+| Cosa viene letto dalla pagina corrente   | `lib/extract.ts`                                         | selettori, pulizia DOM, limite testo                       |
+| Quanti link collegati legge              | `lib/crawl.ts`                                           | `MAX_FOLLOW`                                               |
+| Come sceglie i link rilevanti            | `lib/crawl.ts`                                           | `scoreLink()`, `keywordsOf()`, `pickRelevantLinks()`       |
+| URL del backend usato dalla sidebar      | `lib/messaging.ts`                                       | `DEFAULT_PROXY_URL` oppure `chrome.storage.local.proxyUrl` |
+| Chiamata streaming al backend            | `lib/client.ts`                                          | `streamAsk()`                                              |
+| Contratti dati extension/backend         | `lib/outcome.ts`, `server/src/types.ts`                  | `AskRequest`, `AskEvent`, `AiPlan`                         |
+| Endpoint backend                         | `server/src/index.ts`                                    | `/health`, `/requirements`, `/ask`                         |
+| Scelta modello e costi                   | `server/src/router.ts`                                   | `MODELS`, `chooseModel()`, soglie token/pagine             |
+| Prompt AI                                | `server/src/provider/shared.ts`                          | `buildSystemPrompt()`, `buildUserContent()`                |
+| Risposta demo/mock                       | `server/src/provider/mock.ts`                            | `buildOutcome()`                                           |
+| Provider AI reale                        | `server/src/provider/anthropic.ts`                       | `max_tokens`, parametri SDK, streaming                     |
+| Deploy container                         | `server/Dockerfile`                                      | immagine, porta, env default                               |
+| Deploy Linux systemd                     | `server/deploy/runwaysurfer.service`                     | path, utente, env file                                     |
 
 ## File Chiave
 
@@ -149,7 +149,7 @@ Client HTTP streaming.
 Contiene il default backend:
 
 ```ts
-DEFAULT_PROXY_URL = 'http://localhost:8787'
+DEFAULT_PROXY_URL = 'http://localhost:8787';
 ```
 
 In produzione dovrebbe puntare a un endpoint aziendale, oppure essere configurato via `chrome.storage.local.proxyUrl`.
@@ -432,4 +432,3 @@ di sessione viaggia automaticamente, essendo same-origin):
 
 `server/data/` e ignorato da git. Per backup o retention salvare/cancellare
 `server/data/runwaysurfer.db` secondo policy aziendale.
-

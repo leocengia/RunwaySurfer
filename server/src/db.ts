@@ -213,7 +213,9 @@ function migrate(): void {
   const version = db.pragma('user_version', { simple: true }) as number;
   if (version < 1) {
     db.transaction(() => {
-      const columns = (db.pragma('table_info(users)') as Array<{ name: string }>).map((c) => c.name);
+      const columns = (db.pragma('table_info(users)') as Array<{ name: string }>).map(
+        (c) => c.name,
+      );
       if (!columns.includes('password_hash')) {
         db.exec('ALTER TABLE users ADD COLUMN password_hash TEXT');
       }
@@ -232,12 +234,17 @@ export function sanitizeUser(user: UserRecord): SafeUser {
 }
 
 export function getSettings(): SettingsRecord {
-  const rows = db.prepare('SELECT key, value FROM settings').all() as Array<{ key: string; value: string }>;
+  const rows = db.prepare('SELECT key, value FROM settings').all() as Array<{
+    key: string;
+    value: string;
+  }>;
   const values: Record<string, number> = {};
   for (const row of rows) values[row.key] = Number(row.value);
   return {
-    max_concurrent_requests: values.max_concurrent_requests ?? DEFAULT_SETTINGS.max_concurrent_requests,
-    max_concurrent_per_agent: values.max_concurrent_per_agent ?? DEFAULT_SETTINGS.max_concurrent_per_agent,
+    max_concurrent_requests:
+      values.max_concurrent_requests ?? DEFAULT_SETTINGS.max_concurrent_requests,
+    max_concurrent_per_agent:
+      values.max_concurrent_per_agent ?? DEFAULT_SETTINGS.max_concurrent_per_agent,
     max_daily_estimated_cost_usd:
       values.max_daily_estimated_cost_usd ?? DEFAULT_SETTINGS.max_daily_estimated_cost_usd,
     max_request_pages: values.max_request_pages ?? DEFAULT_SETTINGS.max_request_pages,
@@ -323,19 +330,31 @@ export function getUserById(id: number): UserRecord | null {
 
 export function getUserByExternalId(externalId: string): UserRecord | null {
   return (
-    (db.prepare('SELECT * FROM users WHERE external_id = ?').get(externalId) as UserRecord | undefined) ?? null
+    (db.prepare('SELECT * FROM users WHERE external_id = ?').get(externalId) as
+      UserRecord | undefined) ?? null
   );
 }
 
-export function setUserPassword(id: number, passwordHash: string, mustChange: boolean): UserRecord | null {
+export function setUserPassword(
+  id: number,
+  passwordHash: string,
+  mustChange: boolean,
+): UserRecord | null {
   const info = db
-    .prepare('UPDATE users SET password_hash = ?, must_change_password = ?, updated_at = ? WHERE id = ?')
+    .prepare(
+      'UPDATE users SET password_hash = ?, must_change_password = ?, updated_at = ? WHERE id = ?',
+    )
     .run(passwordHash, mustChange ? 1 : 0, now(), id);
   if (info.changes === 0) return null;
   return getUserById(id);
 }
 
-export function insertSession(tokenHash: string, userId: number, kind: SessionKind, expiresAt: string): void {
+export function insertSession(
+  tokenHash: string,
+  userId: number,
+  kind: SessionKind,
+  expiresAt: string,
+): void {
   const ts = now();
   db.prepare(
     `INSERT INTO sessions (token_hash, user_id, kind, created_at, expires_at, last_seen_at)
@@ -343,7 +362,9 @@ export function insertSession(tokenHash: string, userId: number, kind: SessionKi
   ).run(tokenHash, userId, kind, ts, expiresAt, ts);
 }
 
-export function getSessionWithUser(tokenHash: string): { session: SessionRecord; user: UserRecord } | null {
+export function getSessionWithUser(
+  tokenHash: string,
+): { session: SessionRecord; user: UserRecord } | null {
   const row = db
     .prepare(
       `SELECT s.token_hash, s.user_id, s.kind, s.created_at AS session_created_at,
@@ -386,7 +407,9 @@ export function deleteSession(tokenHash: string): void {
 
 export function deleteUserSessions(userId: number, exceptTokenHash?: string): number {
   const info = exceptTokenHash
-    ? db.prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?').run(userId, exceptTokenHash)
+    ? db
+        .prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash != ?')
+        .run(userId, exceptTokenHash)
     : db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
   return info.changes;
 }
@@ -402,7 +425,10 @@ export function countAdminsWithPassword(): number {
   return row.n;
 }
 
-export function updateUser(id: number, patch: Partial<Pick<UserRecord, 'email' | 'name' | 'role' | 'status' | 'team_id'>>): UserRecord | null {
+export function updateUser(
+  id: number,
+  patch: Partial<Pick<UserRecord, 'email' | 'name' | 'role' | 'status' | 'team_id'>>,
+): UserRecord | null {
   const current = db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRecord | undefined;
   if (!current) return null;
   db.prepare(
@@ -496,11 +522,16 @@ export function listRequests(filters: {
 }
 
 export function getRequest(id: string): RequestHistoryRecord | null {
-  return (db.prepare('SELECT * FROM requests WHERE id = ?').get(id) as RequestHistoryRecord | undefined) ?? null;
+  return (
+    (db.prepare('SELECT * FROM requests WHERE id = ?').get(id) as
+      RequestHistoryRecord | undefined) ?? null
+  );
 }
 
 export function analyticsSummary() {
-  const totals = db.prepare(`
+  const totals = db
+    .prepare(
+      `
     SELECT
       COUNT(*) as requests,
       COALESCE(SUM(CASE WHEN status = 'ok' THEN 1 ELSE 0 END), 0) as ok,
@@ -510,15 +541,25 @@ export function analyticsSummary() {
       COALESCE(SUM(estimated_output_tokens), 0) as outputTokens,
       COALESCE(SUM(estimated_cost_usd), 0) as estimatedCostUsd
     FROM requests
-  `).get();
-  const byModel = db.prepare(`
+  `,
+    )
+    .get();
+  const byModel = db
+    .prepare(
+      `
     SELECT model, COUNT(*) as requests, COALESCE(SUM(estimated_cost_usd), 0) as estimatedCostUsd
     FROM requests GROUP BY model ORDER BY requests DESC
-  `).all();
-  const byAgent = db.prepare(`
+  `,
+    )
+    .all();
+  const byAgent = db
+    .prepare(
+      `
     SELECT agent_id as agentId, COUNT(*) as requests, COALESCE(SUM(estimated_cost_usd), 0) as estimatedCostUsd
     FROM requests GROUP BY agent_id ORDER BY requests DESC LIMIT 20
-  `).all();
+  `,
+    )
+    .all();
   return { totals, byModel, byAgent };
 }
 

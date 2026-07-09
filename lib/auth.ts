@@ -54,7 +54,11 @@ async function readError(res: Response): Promise<string> {
 }
 
 /** Logs in and stores the bearer token. Throws with a user-facing message on failure. */
-export async function login(proxyUrl: string, username: string, password: string): Promise<AuthUser> {
+export async function login(
+  proxyUrl: string,
+  username: string,
+  password: string,
+): Promise<AuthUser> {
   const res = await fetch(`${base(proxyUrl)}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

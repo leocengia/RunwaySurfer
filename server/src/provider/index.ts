@@ -6,7 +6,12 @@ import { MockProvider } from './mock.js';
 import { AnthropicProvider } from './anthropic.js';
 
 export type { AiProvider, GenerateInput } from './shared.js';
-export { ANTHROPIC_EGRESS, ASSUMED_OUTPUT_TOKENS, buildSystemPrompt, buildUserContent } from './shared.js';
+export {
+  ANTHROPIC_EGRESS,
+  ASSUMED_OUTPUT_TOKENS,
+  buildSystemPrompt,
+  buildUserContent,
+} from './shared.js';
 
 let cached: AiProvider | null = null;
 

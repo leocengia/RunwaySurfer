@@ -212,9 +212,7 @@ function ChangePasswordForm({ onChanged }: { onChanged: (user: AuthUser) => void
         void submit();
       }}
     >
-      <div className="rs-auth-note">
-        Devi impostare una nuova password prima di continuare.
-      </div>
+      <div className="rs-auth-note">Devi impostare una nuova password prima di continuare.</div>
       <label className="rs-label" htmlFor="rs-current-password">
         Password attuale
       </label>
@@ -393,7 +391,11 @@ export default function App() {
 
   // Stream the outcome for a collected set of pages (shared by all modes).
   const runAsk = useCallback(
-    async (q: string, pages: KbPage[], linksOverride = extractInternalLinks()): Promise<AskResult> => {
+    async (
+      q: string,
+      pages: KbPage[],
+      linksOverride = extractInternalLinks(),
+    ): Promise<AskResult> => {
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -463,7 +465,6 @@ export default function App() {
         const here = normalizeUrl(location.href);
         const onStart = here === normalizeUrl(t.startUrl);
 
-        // eslint-disable-next-line no-constant-condition
         while (true) {
           if (tourAbortRef.current) {
             teardownFx();
@@ -534,7 +535,11 @@ export default function App() {
                 continue;
               }
               const visited = t.targets[t.index];
-              mountBanner({ step: Math.min(t.index + 1, total), total, rightOffsetPx: rightOffset() });
+              mountBanner({
+                step: Math.min(t.index + 1, total),
+                total,
+                rightOffsetPx: rightOffset(),
+              });
               setBannerProgress((t.index + 0.5) / units);
               void narrate(`Sto leggendo «${document.title}»…`);
               const page: KbPage = { ...extractCurrentPage(t.query), origin: 'followed' };
@@ -764,137 +769,141 @@ export default function App() {
         {authPhase === 'loggedOut' && <LoginForm onLoggedIn={onLoggedIn} />}
         {authPhase === 'mustChange' && <ChangePasswordForm onChanged={onLoggedIn} />}
         {authPhase === 'in' && (
-        <>
-        <div className="rs-whoami">
-          <span>{me?.name || me?.username}</span>
-          <button
-            className="rs-logout"
-            type="button"
-            onClick={() => {
-              void resetSession();
-              void doLogout();
-            }}
-          >
-            Logout
-          </button>
-        </div>
-        <div className="rs-provider-note">
-          <strong>Demo mock.</strong> I link sono scelti con scoring locale; il provider AI reale si
-          collega lato backend senza esporre chiavi nell'estensione.
-        </div>
-
-        <label className="rs-label" htmlFor="rs-query">
-          Cosa ti serve?
-        </label>
-        <textarea
-          id="rs-query"
-          className="rs-input"
-          rows={3}
-          placeholder="es. cliente vuole cambiare indirizzo ordine"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) run();
-          }}
-        />
-
-        <label className="rs-label" htmlFor="rs-mode">
-          Modalita lettura
-        </label>
-        <select
-          id="rs-mode"
-          className="rs-select"
-          value={mode}
-          disabled={busy}
-          onChange={(e) => setMode(e.target.value as Mode)}
-        >
-          <option value="visual">Tour visivo (automatico)</option>
-          <option value="follow">Pagine collegate in background</option>
-          <option value="single">Solo pagina corrente</option>
-        </select>
-
-        <div className="rs-actions">
-          <button className="rs-submit" onClick={run} disabled={busy || !query.trim()}>
-            {status === 'reading'
-              ? mode === 'visual'
-                ? 'Tour in corso...'
-                : 'Lettura pagina...'
-              : status === 'streaming'
-                ? 'Generazione...'
-                : 'Chiedi'}
-          </button>
-          <button className="rs-secondary" onClick={() => void resetSession()} disabled={busy || !hasSession}>
-            Nuova
-          </button>
-        </div>
-
-        {tourActive && (
-          <div className="rs-tour">
-            <span>
-              {tour.phase === 'asking'
-                ? 'Analisi delle pagine visitate...'
-                : `Tour visivo - passo ${Math.min(tour.index + 1, tour.targets.length)}/${
-                    tour.targets.length
-                  }: apro "${tour.targets[Math.min(tour.index, tour.targets.length - 1)]?.text}"`}
-            </span>
-            <button className="rs-abort" onClick={stopTour}>
-              Interrompi tour
-            </button>
-          </div>
-        )}
-
-        {plan && (
-          <div className="rs-plan" title="Richiesta che il backend invierebbe al modello AI">
-            <div className="rs-plan-row">
-              <span>Modello</span>
-              <strong>{plan.model}</strong>
+          <>
+            <div className="rs-whoami">
+              <span>{me?.name || me?.username}</span>
+              <button
+                className="rs-logout"
+                type="button"
+                onClick={() => {
+                  void resetSession();
+                  void doLogout();
+                }}
+              >
+                Logout
+              </button>
             </div>
-            <div className="rs-plan-row">
-              <span>Stima token</span>
-              <strong>
-                {plan.estimatedInputTokens} in / {plan.estimatedOutputTokens} out
-              </strong>
+            <div className="rs-provider-note">
+              <strong>Demo mock.</strong> I link sono scelti con scoring locale; il provider AI
+              reale si collega lato backend senza esporre chiavi nell'estensione.
             </div>
-            <div className="rs-plan-row">
-              <span>Stima costo</span>
-              <strong>${plan.estimatedCostUsd.toFixed(4)}</strong>
-            </div>
-            <div className="rs-plan-row">
-              <span>Egress</span>
-              <code>{plan.egress}</code>
-            </div>
-            <div className="rs-plan-reason">
-              {plan.provider === 'mock' ? 'Risposta MOCK - ' : 'Provider reale - '}
-              {plan.routingReason}
-            </div>
-          </div>
-        )}
 
-        {error && <div className="rs-error">{error}</div>}
+            <label className="rs-label" htmlFor="rs-query">
+              Cosa ti serve?
+            </label>
+            <textarea
+              id="rs-query"
+              className="rs-input"
+              rows={3}
+              placeholder="es. cliente vuole cambiare indirizzo ordine"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) run();
+              }}
+            />
 
-        {outcome && (
-          <article className="rs-outcome">
-            {outcome.split('\n').map((line, i) => (
-              <p key={i} className={line.startsWith('## ') ? 'rs-h' : ''}>
-                {line.replace(/^##\s*/, '')}
-              </p>
-            ))}
-          </article>
-        )}
+            <label className="rs-label" htmlFor="rs-mode">
+              Modalita lettura
+            </label>
+            <select
+              id="rs-mode"
+              className="rs-select"
+              value={mode}
+              disabled={busy}
+              onChange={(e) => setMode(e.target.value as Mode)}
+            >
+              <option value="visual">Tour visivo (automatico)</option>
+              <option value="follow">Pagine collegate in background</option>
+              <option value="single">Solo pagina corrente</option>
+            </select>
 
-        {pagesUsed.length > 0 && (
-          <details className="rs-pages">
-            <summary>{pagesUsed.length} pagina/e lette</summary>
-            <ul>
-              {pagesUsed.map((p) => (
-                <li key={p.url}>
-                  <span className={`rs-badge rs-${p.origin}`}>{p.origin}</span> {p.title}
-                </li>
-              ))}
-            </ul>
-          </details>
-        )}
-        </>
+            <div className="rs-actions">
+              <button className="rs-submit" onClick={run} disabled={busy || !query.trim()}>
+                {status === 'reading'
+                  ? mode === 'visual'
+                    ? 'Tour in corso...'
+                    : 'Lettura pagina...'
+                  : status === 'streaming'
+                    ? 'Generazione...'
+                    : 'Chiedi'}
+              </button>
+              <button
+                className="rs-secondary"
+                onClick={() => void resetSession()}
+                disabled={busy || !hasSession}
+              >
+                Nuova
+              </button>
+            </div>
+
+            {tourActive && (
+              <div className="rs-tour">
+                <span>
+                  {tour.phase === 'asking'
+                    ? 'Analisi delle pagine visitate...'
+                    : `Tour visivo - passo ${Math.min(tour.index + 1, tour.targets.length)}/${
+                        tour.targets.length
+                      }: apro "${tour.targets[Math.min(tour.index, tour.targets.length - 1)]?.text}"`}
+                </span>
+                <button className="rs-abort" onClick={stopTour}>
+                  Interrompi tour
+                </button>
+              </div>
+            )}
+
+            {plan && (
+              <div className="rs-plan" title="Richiesta che il backend invierebbe al modello AI">
+                <div className="rs-plan-row">
+                  <span>Modello</span>
+                  <strong>{plan.model}</strong>
+                </div>
+                <div className="rs-plan-row">
+                  <span>Stima token</span>
+                  <strong>
+                    {plan.estimatedInputTokens} in / {plan.estimatedOutputTokens} out
+                  </strong>
+                </div>
+                <div className="rs-plan-row">
+                  <span>Stima costo</span>
+                  <strong>${plan.estimatedCostUsd.toFixed(4)}</strong>
+                </div>
+                <div className="rs-plan-row">
+                  <span>Egress</span>
+                  <code>{plan.egress}</code>
+                </div>
+                <div className="rs-plan-reason">
+                  {plan.provider === 'mock' ? 'Risposta MOCK - ' : 'Provider reale - '}
+                  {plan.routingReason}
+                </div>
+              </div>
+            )}
+
+            {error && <div className="rs-error">{error}</div>}
+
+            {outcome && (
+              <article className="rs-outcome">
+                {outcome.split('\n').map((line, i) => (
+                  <p key={i} className={line.startsWith('## ') ? 'rs-h' : ''}>
+                    {line.replace(/^##\s*/, '')}
+                  </p>
+                ))}
+              </article>
+            )}
+
+            {pagesUsed.length > 0 && (
+              <details className="rs-pages">
+                <summary>{pagesUsed.length} pagina/e lette</summary>
+                <ul>
+                  {pagesUsed.map((p) => (
+                    <li key={p.url}>
+                      <span className={`rs-badge rs-${p.origin}`}>{p.origin}</span> {p.title}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </>
         )}
       </div>
     </div>
