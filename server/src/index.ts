@@ -16,6 +16,23 @@ import { getProvider } from './provider/index.js';
 import { createApp } from './app.js';
 import { startMaintenanceScheduler } from './maintenance.js';
 
+// Guardia di configurazione: col provider reale (chiamate a pagamento e dati
+// aziendali) il CORS aperto '*' non è accettabile — fail-fast all'avvio.
+const provider = (process.env.AI_PROVIDER ?? 'mock').toLowerCase();
+if (provider === 'anthropic' && ALLOWED_ORIGIN === '*') {
+  console.error(
+    '[config] ALLOWED_ORIGIN è obbligatoria quando AI_PROVIDER=anthropic: ' +
+      "imposta l'origin dell'estensione (es. chrome-extension://<id>) in .env e riavvia.",
+  );
+  process.exit(1);
+}
+if (ALLOWED_ORIGIN === '*') {
+  console.warn(
+    '[config] ATTENZIONE: CORS aperto (ALLOWED_ORIGIN=*) — accettabile solo per la demo mock. ' +
+      'In produzione restringere ad ALLOWED_ORIGIN specifica.',
+  );
+}
+
 initDb();
 await bootstrapAdmin();
 startMaintenanceScheduler();

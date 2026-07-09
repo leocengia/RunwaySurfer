@@ -19,6 +19,20 @@ export function createApp(): express.Express {
   app.use(cors({ origin: ALLOWED_ORIGIN, allowedHeaders: ['Content-Type', 'Authorization'] }));
   app.use(express.json({ limit: '4mb' }));
 
+  // Header di sicurezza per le pagine HTML servite (login/dashboard).
+  // CSP: solo risorse same-origin; inline script/style sono necessari perché
+  // le pagine sono renderizzate come template senza asset esterni.
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
+        "connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'",
+    );
+    next();
+  });
+
   /** Liveness probe. */
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok', provider: getProvider().name });

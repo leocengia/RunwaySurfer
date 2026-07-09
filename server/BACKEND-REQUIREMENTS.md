@@ -45,6 +45,13 @@ Un **proxy stateless** in Node.js che:
 - TLS terminato dal reverse proxy; backend in rete interna.
 - Egress in allowlist verso il solo host Anthropic.
 - Con TLS attivo impostare `COOKIE_SECURE=1` (flag `Secure` sul cookie di sessione).
+- `ALLOWED_ORIGIN` è **obbligatoria** con `AI_PROVIDER=anthropic` (il backend
+  rifiuta di avviarsi con CORS aperto e provider reale).
+- **Prompt injection**: il crawler invia al modello il testo di pagine KB
+  raggiunte via link same-origin. Il system prompt istruisce il modello a
+  trattare quel contenuto come dato e non come comando, ma sulla KB aziendale
+  reale va comunque valutato chi può modificare le pagine indicizzate: contenuto
+  KB scrivibile da terzi = potenziale canale di injection verso il modello.
 
 ## Autenticazione
 
