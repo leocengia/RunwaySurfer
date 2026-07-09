@@ -95,8 +95,9 @@ export async function fetchMe(proxyUrl: string): Promise<AuthUser | null> {
     res = await fetch(`${base(proxyUrl)}/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-  } catch {
+  } catch (e) {
     // backend unreachable: keep the token, report logged-out for now
+    console.warn('[rs] backend non raggiungibile durante la verifica della sessione:', e);
     return null;
   }
   if (res.status === 401) {

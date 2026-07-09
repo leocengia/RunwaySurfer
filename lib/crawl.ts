@@ -216,7 +216,10 @@ async function fetchPage(link: KbLink, query: string): Promise<KbPage | null> {
       text: extractPageText(doc, query),
       origin: 'followed',
     };
-  } catch {
+  } catch (e) {
+    // Rende distinguibile un guasto di rete/sessione da una pagina scartata
+    // perché non rilevante: prima questo errore era completamente muto.
+    console.warn(`[rs] fetch della pagina collegata fallita (${link.url}):`, e);
     return null;
   }
 }

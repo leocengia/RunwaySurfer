@@ -6,9 +6,11 @@ import type { KbPage, KbLink } from '../types.js';
 /** The network endpoint the backend contacts for a real call, shown to the CED. */
 export const ANTHROPIC_EGRESS = 'api.anthropic.com:443';
 
-/** Conservative assumed output size for cost estimation. */
+/**
+ * Conservative assumed output size for cost estimation. Il provider reale
+ * limita max_tokens a ~400-900 (vedi anthropic.ts): 500 è una stima centrale.
+ */
 export const ASSUMED_OUTPUT_TOKENS = 500;
-const MAX_PROMPT_LINKS = 12;
 
 export interface GenerateInput {
   query: string;
@@ -43,13 +45,16 @@ export function buildSystemPrompt(): string {
   ].join('\n');
 }
 
-/** User content: the query plus the KB pages and a compact nested-link map. */
+/**
+ * User content: the query plus the KB pages and a compact nested-link map.
+ * I link arrivano già limitati da sanitizeRequest (setting `max_request_links`,
+ * configurabile da dashboard): nessun cap hardcoded duplicato qui.
+ */
 export function buildUserContent(input: GenerateInput): string {
   const pages = input.pages
     .map((p, i) => `### Pagina ${i + 1} [${p.origin}] - ${p.title}\nURL: ${p.url}\n${p.text}`)
     .join('\n\n');
   const links = input.links
-    .slice(0, MAX_PROMPT_LINKS)
     .map((l) => `- ${l.text} -> ${l.url}${l.reason ? ` (${l.reason})` : ''}`)
     .join('\n');
   return [

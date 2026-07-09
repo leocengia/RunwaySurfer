@@ -14,9 +14,11 @@ import { initDb } from './db.js';
 import { bootstrapAdmin } from './auth.js';
 import { getProvider } from './provider/index.js';
 import { createApp } from './app.js';
+import { startMaintenanceScheduler } from './maintenance.js';
 
 initDb();
 await bootstrapAdmin();
+startMaintenanceScheduler();
 
 const app = createApp();
 
