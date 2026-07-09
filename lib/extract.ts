@@ -4,8 +4,9 @@
 import type { KbPage, KbLink } from './outcome';
 
 /** Rough token budget for a single page's text (~4 chars/token). */
-const MAX_PAGE_CHARS = 8_000;
-const MIN_QUERY_TEXT_CHARS = 1_200;
+const MAX_PAGE_CHARS = 6_000;
+const FOCUSED_PAGE_CHARS = 4_500;
+const MIN_QUERY_TEXT_CHARS = 900;
 
 /** Selectors that usually hold the meaningful content, best-effort. */
 const CONTENT_SELECTORS = [
@@ -109,15 +110,15 @@ function queryFocusedText(root: Element, query: string): string | null {
   const selected = blocks
     .filter((block) => block.score > 0)
     .sort((a, b) => b.score - a.score || a.order - b.order)
-    .slice(0, 18)
+    .slice(0, 10)
     .sort((a, b) => a.order - b.order);
 
   if (!selected.length) return null;
 
-  const focused = normalizeText(selected.map((block) => block.text).join('\n'), MAX_PAGE_CHARS);
+  const focused = normalizeText(selected.map((block) => block.text).join('\n'), FOCUSED_PAGE_CHARS);
   if (focused.length < MIN_QUERY_TEXT_CHARS) {
     const intro = normalizeText(blocks.slice(0, 4).map((block) => block.text).join('\n'), 1_600);
-    return normalizeText([intro, focused].filter(Boolean).join('\n'), MAX_PAGE_CHARS);
+    return normalizeText([intro, focused].filter(Boolean).join('\n'), FOCUSED_PAGE_CHARS);
   }
   return focused;
 }

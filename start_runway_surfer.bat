@@ -1,5 +1,7 @@
 @echo off
+rem Avvio portable: usa la cartella in cui si trova questo script,
+rem cosi' il progetto funziona da qualsiasi percorso (USB, altro PC, ecc.)
 
-start "RunwaySurfer Backend" cmd /k "cd /d C:\Users\cengi\Desktop\T1 Automation\RunwaySurfer\server && npm install && npm run dev"
+start "RunwaySurfer Backend" /d "%~dp0server" cmd /k "npm install && npm run dev"
 
-start "RunwaySurfer Extension" cmd /k "cd /d C:\Users\cengi\Desktop\T1 Automation\RunwaySurfer && npm install && npm run dev"
+start "RunwaySurfer Extension" /d "%~dp0." cmd /k "npm install && npm run dev"

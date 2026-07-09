@@ -154,6 +154,31 @@ DEFAULT_PROXY_URL = 'http://localhost:8787'
 
 In produzione dovrebbe puntare a un endpoint aziendale, oppure essere configurato via `chrome.storage.local.proxyUrl`.
 
+### `lib/fx/` — effetti del Tour visivo
+
+Effetti scenografici iniettati nella pagina host durante il tour (vanilla
+DOM+CSS, un solo `<style id="rs-fx-style">`, tutto con prefisso `rs-fx-`,
+`prefers-reduced-motion` rispettato ovunque):
+
+- `motion.ts`: easing, `sleep`, `smoothScrollTo` (scroll cinematico rAF ~950ms,
+  annullato da un gesto dell'utente);
+- `banner.ts`: banner di avanzamento fisso in alto (brand, "passo N/M",
+  narrazione typewriter `narrate()`, barra progresso, bottone Interrompi che
+  emette l'evento `rs-tour-abort` + scrive il flag storage `rs:tourAbort`);
+- `spotlight.ts`: overlay a riflettore (gradiente radiale con buco che segue
+  il link) + alone giallo pulsante su `.rs-tour-highlight`;
+- `cursor.ts`: cursore AI fantasma che plana sul link con curva di Bézier e
+  "clicca" con onda ripple prima della navigazione;
+- `scan.ts`: fascio di scansione che percorre la pagina seguita mentre le
+  keyword corrispondenti si illuminano (`mark.rs-scan-hit`, max 15, revert
+  completo);
+- `index.ts`: stili, `teardownFx()` idempotente (pulizia totale su stop/fine/
+  re-init) e safety net bfcache su `pageshow`.
+
+Orchestrazione: `driveTour()` in `App.tsx`. Timing in `lib/tour.ts`
+(`dwellMs` 900 = hover sul link, `scanMs` 1600 = durata scansione).
+`lib/highlight.ts` ora contiene solo `findLinkElement()`.
+
 ## Backend
 
 ### `server/src/index.ts`
@@ -326,4 +351,85 @@ Quando devi capire dove intervenire:
 - problema demo mock -> `server/src/provider/mock.ts`;
 - problema modello/costo -> `server/src/router.ts`;
 - problema deploy -> `server/Dockerfile` o `server/deploy/runwaysurfer.service`.
+
+## Aggiornamento Backend SQL / Dashboard
+
+### `server/src/db.ts`
+
+Layer SQLite basato su `better-sqlite3`.
+
+Gestisce:
+
+- creazione automatica di `server/data/runwaysurfer.db`;
+- schema `teams`, `users`, `requests`, `settings`, `sessions`;
+- migrazione dello schema via `PRAGMA user_version` (colonne `password_hash` e
+  `must_change_password` aggiunte ai DB creati prima del login);
+- helper per credenziali e sessioni (`setUserPassword`, `getSessionWithUser`,
+  `deleteUserSessions`, `sanitizeUser`, ...);
+- storico richieste con query preview/hash, token, costo, modello, durata, stato;
+- settings persistenti per limiti di concorrenza, budget, pagine/link e retention.
+
+Il DB non salva il testo completo della KB per default.
+
+### `server/src/auth.ts`
+
+Layer autenticazione (solo `node:crypto`, nessuna dipendenza nuova):
+
+- hash password `scrypt` (`hashPassword`/`verifyPassword`), formato
+  `scrypt$N=...$salt$hash`;
+- sessioni con token opachi (salvati SHA-256 in `sessions`): cookie `rs_session`
+  HttpOnly per la dashboard (12h), Bearer per l'estensione (30 giorni);
+- middleware `requireAuth(minRole)` per le API JSON e `requirePage(minRole)`
+  per le pagine HTML (redirect a `/login` / `/change-password`);
+- rate limiting in-memory sui login (5 tentativi / 15 min per IP+username);
+- `bootstrapAdmin()`: crea il primo admin da `ADMIN_BOOTSTRAP_PASSWORD` /
+  `ADMIN_USERNAME` al primo avvio.
+
+### Endpoint backend aggiunti
+
+In `server/src/index.ts` (guardie: `admin` > `team_lead` > `agent`):
+
+- `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`,
+  `POST /auth/change-password`: ciclo di vita sessioni.
+- `GET /login`, `GET /change-password`: pagine HTML di accesso.
+- `GET /dashboard`: dashboard HTML operativa (login richiesto; team_lead in sola lettura).
+- `GET /dashboard-data`: stato complessivo JSON (team_lead+).
+- `GET /metrics`: contatori live in memoria (team_lead+).
+- `GET /extension-config`: policy/config per l'estensione (autenticato).
+- `GET /users` (team_lead+), `POST /users` (admin, richiede `tempPassword`),
+  `PATCH /users/:id` (admin, disattivazione revoca le sessioni),
+  `POST /users/:id/reset-password` (admin): gestione utenti.
+- `GET /teams` (team_lead+), `POST /teams` (admin): gestione team.
+- `GET /requests`, `GET /requests/:id`: storico richieste persistente (team_lead+).
+- `GET /analytics/summary`: riepilogo storico da SQLite (team_lead+).
+- `GET /settings` (team_lead+), `PATCH /settings` (admin): policy persistenti.
+- `POST /maintenance/prune` (admin): rimozione storico oltre retention.
+- `POST /ask`: ora richiede token Bearer; l'identità (`agent_id`) viene dalla
+  sessione, gli header `x-agent-id`/`x-user-email` non sono più accettati.
+
+### Dashboard eseguibile
+
+La dashboard ora usa `fetch` lato browser per chiamare gli endpoint (il cookie
+di sessione viaggia automaticamente, essendo same-origin):
+
+- header con utente loggato e pulsante Logout;
+- pulsanti health/metrics/config/requirements;
+- form per creare team e utenti (con password temporanea) e reset password — solo admin;
+- form per modificare settings — solo admin;
+- filtri per storico richieste;
+- form demo per inviare una richiesta `/ask` (attribuita all'utente loggato).
+
+### Login nell'estensione
+
+- `lib/auth.ts`: `login`/`logout`/`fetchMe`/`changePassword` + token in
+  `chrome.storage.local` (`rs:authToken`).
+- `lib/client.ts`: `streamAsk()` invia `Authorization: Bearer`; su 401 emette
+  l'evento `auth-required` (definito in `lib/outcome.ts`).
+- `entrypoints/sidebar.content/App.tsx`: stati `checking/loggedOut/mustChange/in`,
+  form di login e cambio password nella sidebar, pulsante Logout.
+
+### File runtime
+
+`server/data/` e ignorato da git. Per backup o retention salvare/cancellare
+`server/data/runwaysurfer.db` secondo policy aziendale.
 

@@ -23,6 +23,10 @@ export interface KbLink {
   order?: number;
   /** Human-readable reason for why this link was selected. */
   reason?: string;
+  /** Local relevance score used before any AI call. */
+  score?: number;
+  /** Query keywords that matched this link/context. */
+  matchedKeywords?: string[];
 }
 
 /** Payload the sidebar/background sends to the backend `POST /ask`. */
@@ -57,12 +61,15 @@ export interface AiPlan {
  *  - `delta` : an incremental chunk of the outcome text (markdown).
  *  - `done`  : stream finished.
  *  - `error` : something went wrong.
+ *  - `auth-required` : synthesized client-side on a 401 (never sent by the
+ *    server) — the stored token is invalid/expired and the agent must log in.
  */
 export type AskEvent =
   | { type: 'plan'; plan: AiPlan }
   | { type: 'delta'; text: string }
   | { type: 'done' }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  | { type: 'auth-required' };
 
 /**
  * The operational outcome is streamed as markdown with these four sections.

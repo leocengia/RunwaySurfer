@@ -362,3 +362,53 @@
   background: #dff7eb;
   color: var(--rs-success);
 }
+
+/* --- Auth (login / cambio password) --- */
+
+.rs-field {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border: 1px solid var(--rs-line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--rs-ink);
+  font: inherit;
+}
+
+.rs-field:focus {
+  border-color: var(--rs-blue-2);
+  outline: 2px solid rgba(10, 90, 163, 0.18);
+}
+
+.rs-auth {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rs-auth-note {
+  font-size: 12px;
+  color: var(--rs-muted);
+}
+
+.rs-whoami {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--rs-muted);
+}
+
+.rs-logout {
+  border: 1px solid var(--rs-line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--rs-blue);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 8px;
+  cursor: pointer;
+}
