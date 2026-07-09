@@ -26,6 +26,9 @@ server/BACKEND-REQUIREMENTS.md   requisiti server/rete per il CED
 
 ## Avvio della demo
 
+Prerequisito: Node.js 20 o superiore (consigliata la LTS 22, vedi `.nvmrc`).
+Scaricabile da <https://nodejs.org> oppure via `nvm use`.
+
 ### 1. Backend
 
 ```bash

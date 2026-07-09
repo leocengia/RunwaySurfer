@@ -6,3 +6,5 @@ dist/
 .env
 stats.html
 server/data/
+*.msi
+dependences/

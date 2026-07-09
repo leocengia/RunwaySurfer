@@ -20,7 +20,7 @@ Un **proxy stateless** in Node.js che:
 | CPU  | 1 vCPU | I/O bound; scalare orizzontalmente se serve |
 | RAM  | 256–512 MB | processo singolo, stateless |
 | Disco| minimo | nessuna persistenza; solo log opzionali |
-| Runtime | Node.js 20+ | deploy via Docker o systemd |
+| Runtime | Node.js 20+ (consigliata LTS 22, vedi `.nvmrc`) | deploy via Docker o systemd |
 
 ## Rete
 | Direzione | Requisito |
