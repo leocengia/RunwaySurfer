@@ -10,52 +10,25 @@ import { extractCurrentPage, extractInternalLinks } from '../../lib/extract';
 import { pickRelevantLinks, shallowFollow } from '../../lib/crawl';
 import { streamAsk } from '../../lib/client';
 import { getProxyUrl } from '../../lib/messaging';
-import {
-  changePassword,
-  clearToken,
-  fetchMe,
-  getToken,
-  login,
-  logout,
-  type AuthUser,
-} from '../../lib/auth';
+import { clearToken, fetchMe, getToken, logout, type AuthUser } from '../../lib/auth';
 import type { AiPlan, KbPage } from '../../lib/outcome';
 import {
   clearTour,
   clearTourResult,
-  DEFAULT_SCAN_MS,
   loadTour,
   loadTourResult,
   markTourAborted,
   normalizeUrl,
   saveTour,
-  saveTourResult,
   startTour,
   type TourState,
 } from '../../lib/tour';
-import { findLinkElement } from '../../lib/highlight';
-import {
-  bannerComplete,
-  cursorClick,
-  cursorGlideTo,
-  ensureFxStyles,
-  installFxSafetyNet,
-  mountBanner,
-  narrate,
-  narrationOpen,
-  runReadingScan,
-  setBannerProgress,
-  sleep,
-  smoothScrollTo,
-  spotlightOn,
-  teardownFx,
-  TOUR_ABORT_EVENT,
-  unmountBanner,
-} from '../../lib/fx';
+import { teardownFx, TOUR_ABORT_EVENT } from '../../lib/fx';
+import { LoginForm, ChangePasswordForm } from './AuthForms';
+import { useTourDriver, type AskResult } from './useTourDriver';
 
 type Status = 'idle' | 'reading' | 'streaming' | 'done' | 'error';
 type Mode = 'single' | 'follow' | 'visual';
-type AskResult = { outcome: string; plan: AiPlan | null };
 type AuthPhase = 'checking' | 'loggedOut' | 'mustChange' | 'in';
 
 const SIDEBAR_WIDTH_KEY = 'rs:sidebarWidth';
@@ -71,191 +44,12 @@ function clampSidebarWidth(width: number): number {
   return Math.min(Math.max(width, MIN_SIDEBAR_WIDTH), maxSidebarWidth());
 }
 
-function trimUrl(raw: string): string {
-  return raw.replace(/[),.;\]]+$/g, '');
-}
-
-function urlsIn(text: string): string[] {
-  return Array.from(text.matchAll(/https?:\/\/[^\s<>)\]]+/g), (match) => trimUrl(match[0]));
-}
-
-function sourceSection(markdown: string): string {
-  const lines = markdown.split('\n');
-  const start = lines.findIndex((line) => /^##\s*fonti\b/i.test(line.trim()));
-  if (start === -1) return '';
-  const end = lines.findIndex((line, index) => index > start && /^##\s+/.test(line.trim()));
-  return lines.slice(start + 1, end === -1 ? undefined : end).join('\n');
-}
-
-function matchingReadPage(url: string, pages: KbPage[], preferFollowed: boolean): KbPage | null {
-  const want = normalizeUrl(url);
-  const candidates = preferFollowed ? pages.filter((p) => p.origin === 'followed') : pages;
-  return candidates.find((page) => normalizeUrl(page.url) === want) ?? null;
-}
-
-function findTourTargetUrl(markdown: string, pages: KbPage[]): string | null {
-  const fromSources = urlsIn(sourceSection(markdown));
-  const fromAll = urlsIn(markdown);
-  for (const url of fromSources) {
-    const page = matchingReadPage(url, pages, true);
-    if (page) return page.url;
-  }
-  for (const url of fromSources) {
-    const page = matchingReadPage(url, pages, false);
-    if (page) return page.url;
-  }
-  for (const url of fromAll) {
-    const page = matchingReadPage(url, pages, true) ?? matchingReadPage(url, pages, false);
-    if (page) return page.url;
-  }
-  return null;
-}
-
 function statusLabel(status: Status, mode: Mode): string {
   if (status === 'reading') return mode === 'visual' ? 'Tour visivo' : 'Lettura';
   if (status === 'streaming') return 'Generazione';
   if (status === 'done') return 'Pronto';
   if (status === 'error') return 'Errore';
   return 'In attesa';
-}
-
-function LoginForm({ onLoggedIn }: { onLoggedIn: (user: AuthUser) => void }) {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [authError, setAuthError] = useState('');
-
-  const submit = async () => {
-    if (!username.trim() || !password || busy) return;
-    setBusy(true);
-    setAuthError('');
-    try {
-      const user = await login(await getProxyUrl(), username.trim(), password);
-      onLoggedIn(user);
-    } catch (e) {
-      setAuthError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <form
-      className="rs-auth"
-      onSubmit={(e) => {
-        e.preventDefault();
-        void submit();
-      }}
-    >
-      <div className="rs-auth-note">
-        Accedi con le credenziali fornite dal tuo amministratore per usare RunwaySurfer.
-      </div>
-      <label className="rs-label" htmlFor="rs-username">
-        Username
-      </label>
-      <input
-        id="rs-username"
-        className="rs-field"
-        autoComplete="username"
-        value={username}
-        onChange={(e) => setUsername(e.target.value)}
-      />
-      <label className="rs-label" htmlFor="rs-password">
-        Password
-      </label>
-      <input
-        id="rs-password"
-        className="rs-field"
-        type="password"
-        autoComplete="current-password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-      />
-      {authError && <div className="rs-error">{authError}</div>}
-      <button className="rs-submit" type="submit" disabled={busy || !username.trim() || !password}>
-        {busy ? 'Accesso...' : 'Accedi'}
-      </button>
-    </form>
-  );
-}
-
-function ChangePasswordForm({ onChanged }: { onChanged: (user: AuthUser) => void }) {
-  const [current, setCurrent] = useState('');
-  const [next, setNext] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [authError, setAuthError] = useState('');
-
-  const submit = async () => {
-    if (busy) return;
-    if (next !== confirm) {
-      setAuthError('Le nuove password non coincidono.');
-      return;
-    }
-    setBusy(true);
-    setAuthError('');
-    try {
-      const user = await changePassword(await getProxyUrl(), current, next);
-      onChanged(user);
-    } catch (e) {
-      setAuthError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <form
-      className="rs-auth"
-      onSubmit={(e) => {
-        e.preventDefault();
-        void submit();
-      }}
-    >
-      <div className="rs-auth-note">Devi impostare una nuova password prima di continuare.</div>
-      <label className="rs-label" htmlFor="rs-current-password">
-        Password attuale
-      </label>
-      <input
-        id="rs-current-password"
-        className="rs-field"
-        type="password"
-        autoComplete="current-password"
-        value={current}
-        onChange={(e) => setCurrent(e.target.value)}
-      />
-      <label className="rs-label" htmlFor="rs-new-password">
-        Nuova password (min 8 caratteri)
-      </label>
-      <input
-        id="rs-new-password"
-        className="rs-field"
-        type="password"
-        autoComplete="new-password"
-        value={next}
-        onChange={(e) => setNext(e.target.value)}
-      />
-      <label className="rs-label" htmlFor="rs-confirm-password">
-        Conferma nuova password
-      </label>
-      <input
-        id="rs-confirm-password"
-        className="rs-field"
-        type="password"
-        autoComplete="new-password"
-        value={confirm}
-        onChange={(e) => setConfirm(e.target.value)}
-      />
-      {authError && <div className="rs-error">{authError}</div>}
-      <button
-        className="rs-submit"
-        type="submit"
-        disabled={busy || !current || next.length < 8 || !confirm}
-      >
-        {busy ? 'Salvataggio...' : 'Cambia password'}
-      </button>
-    </form>
-  );
 }
 
 export default function App() {
@@ -448,162 +242,18 @@ export default function App() {
     [],
   );
 
-  const driveTour = useCallback(
-    async (initial: TourState) => {
-      if (drivingRef.current) return;
-      drivingRef.current = true;
-      ensureFxStyles();
-      installFxSafetyNet();
-      const rightOffset = () => (openRef.current ? sidebarWidthRef.current : 0);
-      try {
-        let t = initial;
-        setTour(t);
-        setQuery(t.query);
-        setPagesUsed(t.pages);
-        setStatus(t.phase === 'asking' ? 'streaming' : 'reading');
-
-        const here = normalizeUrl(location.href);
-        const onStart = here === normalizeUrl(t.startUrl);
-
-        while (true) {
-          if (tourAbortRef.current) {
-            teardownFx();
-            return;
-          }
-          const total = t.targets.length;
-          const units = total + 1; // targets + final analysis
-
-          switch (t.phase) {
-            case 'returning': {
-              if (!onStart) {
-                location.href = t.startUrl;
-                return;
-              }
-              t = { ...t, phase: t.index < t.targets.length ? 'scrolling' : 'asking' };
-              await saveTour(t);
-              setTour(t);
-              continue;
-            }
-
-            case 'scrolling': {
-              const target = t.targets[t.index];
-              if (!target) {
-                t = { ...t, phase: 'asking' };
-                await saveTour(t);
-                continue;
-              }
-              const step = Math.min(t.index + 1, total);
-              mountBanner({ step, total, rightOffsetPx: rightOffset() });
-              setBannerProgress(t.index / units);
-              const el = findLinkElement(target.url);
-              const rect = el?.getBoundingClientRect();
-              if (!el || ((rect?.width ?? 0) === 0 && (rect?.height ?? 0) === 0)) {
-                // Link not on the page (or collapsed): no fx, keep today's
-                // semantics and navigate anyway.
-                void narrate(`Non trovo il link «${target.text}» in pagina, lo apro direttamente…`);
-                await saveTour({ ...t, phase: 'navigating' });
-                await sleep(700);
-                if (tourAbortRef.current) {
-                  teardownFx();
-                  return;
-                }
-                location.href = target.url;
-                return;
-              }
-              void narrate(narrationOpen(target, step, total));
-              const offSpotlight = spotlightOn(el);
-              // Cinematic approach: the page glides while the ghost cursor
-              // curves toward the link, landing just after the scroll settles.
-              await Promise.all([smoothScrollTo(el), cursorGlideTo(el)]);
-              await saveTour({ ...t, phase: 'navigating' });
-              await sleep(t.dwellMs);
-              if (tourAbortRef.current) {
-                offSpotlight();
-                teardownFx();
-                return;
-              }
-              await cursorClick();
-              offSpotlight();
-              location.href = target.url;
-              return;
-            }
-
-            case 'navigating': {
-              if (onStart) {
-                t = { ...t, index: t.index + 1, phase: 'returning' };
-                await saveTour(t);
-                continue;
-              }
-              const visited = t.targets[t.index];
-              mountBanner({
-                step: Math.min(t.index + 1, total),
-                total,
-                rightOffsetPx: rightOffset(),
-              });
-              setBannerProgress((t.index + 0.5) / units);
-              void narrate(`Sto leggendo «${document.title}»…`);
-              const page: KbPage = { ...extractCurrentPage(t.query), origin: 'followed' };
-              const pages = [...t.pages, page];
-              t = { ...t, pages, index: t.index + 1, phase: 'returning' };
-              setPagesUsed(pages);
-              // Persist BEFORE the scan so a reload mid-scan resumes correctly.
-              await saveTour(t);
-              await runReadingScan({
-                keywords: visited?.matchedKeywords ?? [],
-                durationMs: t.scanMs ?? DEFAULT_SCAN_MS,
-              });
-              if (tourAbortRef.current) {
-                teardownFx();
-                return;
-              }
-              void narrate('Torno alla pagina di partenza…');
-              await sleep(350);
-              location.href = t.startUrl;
-              return;
-            }
-
-            case 'asking': {
-              setTour(t);
-              mountBanner({ step: total, total, rightOffsetPx: rightOffset() });
-              setBannerProgress(total / units, true);
-              void narrate(
-                t.pages.length > 1
-                  ? `Analizzo le ${t.pages.length} pagine visitate e scrivo la risposta…`
-                  : 'Analizzo la pagina e scrivo la risposta…',
-              );
-              const result = await runAsk(t.query, t.pages, t.targets);
-              await clearTour();
-              setTour(null);
-              bannerComplete('Fatto! Risposta pronta nella sidebar.');
-              await sleep(900);
-              unmountBanner();
-              teardownFx();
-              const targetUrl = findTourTargetUrl(result.outcome, t.pages);
-              if (targetUrl && normalizeUrl(targetUrl) !== normalizeUrl(location.href)) {
-                await saveTourResult({
-                  query: t.query,
-                  outcome: result.outcome,
-                  plan: result.plan,
-                  pages: t.pages,
-                  targetUrl,
-                  startedAt: Date.now(),
-                });
-                location.href = targetUrl;
-              }
-              return;
-            }
-
-            default:
-              teardownFx();
-              return;
-          }
-        }
-      } finally {
-        drivingRef.current = false;
-      }
-    },
-    [runAsk],
-  );
+  // Tour visivo: la macchina a stati vive in useTourDriver.ts.
+  const driveTour = useTourDriver({
+    runAsk,
+    openRef,
+    sidebarWidthRef,
+    tourAbortRef,
+    drivingRef,
+    setTour,
+    setQuery,
+    setPagesUsed,
+    setStatus,
+  });
 
   useEffect(() => {
     let cancelled = false;

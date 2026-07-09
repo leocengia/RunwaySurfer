@@ -569,4 +569,6 @@ export function pruneOldRequests(retentionDays = getSettings().retention_days): 
   return info.changes;
 }
 
-initDb();
+// NOTA: initDb() NON viene più eseguita come side effect all'import; è il
+// punto d'ingresso (index.ts) o il setup dei test a chiamarla esplicitamente,
+// così l'ordine di inizializzazione è visibile e il modulo resta testabile.

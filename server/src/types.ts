@@ -1,44 +1,5 @@
-// Backend copy of the shared contracts (kept in sync with the extension's
-// lib/outcome.ts). A separate package, so the shapes are duplicated rather than
-// imported.
-
-export interface KbPage {
-  url: string;
-  title: string;
-  text: string;
-  origin: 'current' | 'followed';
-}
-
-export interface KbLink {
-  url: string;
-  text: string;
-  context?: string;
-  order?: number;
-  reason?: string;
-  score?: number;
-  matchedKeywords?: string[];
-}
-
-export interface AskRequest {
-  query: string;
-  pages: KbPage[];
-  links: KbLink[];
-}
-
-export interface AiPlan {
-  model: string;
-  routingReason: string;
-  estimatedInputTokens: number;
-  estimatedOutputTokens: number;
-  estimatedCostUsd: number;
-  egress: string;
-  provider: 'mock' | 'anthropic';
-}
-
-export type AskEvent =
-  | { type: 'plan'; plan: AiPlan }
-  | { type: 'delta'; text: string }
-  | { type: 'done' }
-  | { type: 'error'; message: string }
-  // Synthesized by the extension client on a 401; the server never emits it.
-  | { type: 'auth-required' };
+// Data contracts used by the backend. The canonical definitions live in
+// shared/contracts.d.ts at the repo root (single source of truth shared with
+// the extension); this module only re-exports them so existing imports keep
+// working. Type-only, so nothing is emitted at build time.
+export type { KbPage, KbLink, AskRequest, AiPlan, AskEvent } from '../../shared/contracts';
