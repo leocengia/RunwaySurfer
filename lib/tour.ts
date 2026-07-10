@@ -57,10 +57,10 @@ export interface TourResultState {
 const KEY = 'rs:tour';
 const RESULT_KEY = 'rs:tourResult';
 const ABORT_KEY = 'rs:tourAbort';
-// Hover-only: the cinematic scroll (~950ms) and cursor glide (~1150ms) have
+// Hover-only: the cinematic scroll (~550ms) and cursor glide (~650ms) have
 // their own durations in lib/fx, so the dwell is just the pause on the link.
-export const DEFAULT_DWELL_MS = 900;
-export const DEFAULT_SCAN_MS = 1600;
+export const DEFAULT_DWELL_MS = 400;
+export const DEFAULT_SCAN_MS = 900;
 /** A tour older than this is considered abandoned and discarded on load. */
 const MAX_TOUR_AGE_MS = 5 * 60_000;
 

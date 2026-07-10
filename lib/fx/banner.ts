@@ -35,7 +35,14 @@ export function mountBanner(options: BannerOptions): void {
       <button class="rs-fx-banner-stop" type="button">Interrompi</button>
       <div class="rs-fx-banner-bar"><div class="rs-fx-banner-fill"></div></div>
     `;
-    banner.querySelector('.rs-fx-banner-stop')?.addEventListener('click', () => {
+    banner.querySelector('.rs-fx-banner-stop')?.addEventListener('click', (event) => {
+      // Instant feedback: the actual teardown/navigation-stop happens via the
+      // event below, but disabling the button and narrating right away makes the
+      // click feel responsive even while an animation is still winding down.
+      const stopBtn = event.currentTarget as HTMLButtonElement;
+      stopBtn.disabled = true;
+      stopBtn.textContent = 'Interrompo…';
+      void narrate('Interrompo il tour…');
       // Live layer: wake the sidebar's stopTour. Cross-navigation layer: the
       // storage stamp survives even if this page dies mid-click.
       window.dispatchEvent(new CustomEvent(TOUR_ABORT_EVENT));
@@ -52,10 +59,27 @@ export function setBannerStep(step: number, total: number): void {
   if (el) el.textContent = total > 0 ? `passo ${step}/${total}` : 'analisi';
 }
 
-export function setBannerProgress(fraction: number, indeterminate = false): void {
+/**
+ * Set the progress fill. When `durationMs` is given the fill glides toward the
+ * target over that span (matching the phase's own duration), so the bar advances
+ * continuously instead of snapping in coarse steps. Otherwise it uses the CSS
+ * default transition.
+ */
+export function setBannerProgress(
+  fraction: number,
+  indeterminate = false,
+  durationMs?: number,
+): void {
   const fill = bannerEl()?.querySelector('.rs-fx-banner-fill') as HTMLElement | null;
   if (!fill) return;
   fill.classList.toggle('rs-fx-indeterminate', indeterminate && !prefersReducedMotion());
+  if (typeof durationMs === 'number' && !prefersReducedMotion()) {
+    fill.style.transitionDuration = `${durationMs}ms`;
+    fill.style.transitionTimingFunction = 'linear';
+  } else {
+    fill.style.transitionDuration = '';
+    fill.style.transitionTimingFunction = '';
+  }
   fill.style.width = `${Math.round(Math.min(1, Math.max(0, fraction)) * 100)}%`;
 }
 
@@ -95,7 +119,7 @@ export function narrate(text: string): Promise<void> {
     caret.className = 'rs-fx-caret';
     narr.appendChild(caret);
     const timer = setInterval(() => {
-      i = Math.min(text.length, i + 2);
+      i = Math.min(text.length, i + 3);
       narr.textContent = text.slice(0, i);
       if (i < text.length) {
         narr.appendChild(caret);
@@ -104,7 +128,7 @@ export function narrate(text: string): Promise<void> {
         cancelNarration = null;
         resolve();
       }
-    }, 24);
+    }, 12);
     cancelNarration = () => {
       clearInterval(timer);
       narr.textContent = text;

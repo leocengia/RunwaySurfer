@@ -1,7 +1,7 @@
 // Reading-scan effect on followed pages: a luminous beam sweeps down the
 // content while occurrences of the matched keywords light up in sync —
 // a visualization of the AI actually reading the page.
-import { prefersReducedMotion, sleep } from './motion';
+import { abortableSleep, prefersReducedMotion, sleep } from './motion';
 
 const BEAM_ID = 'rs-fx-beam';
 const HIT_CLASS = 'rs-scan-hit';
@@ -95,9 +95,10 @@ function unmark(marks: HTMLElement[]): void {
 export async function runReadingScan(options: {
   keywords: string[];
   durationMs: number;
+  shouldAbort?: () => boolean;
 }): Promise<void> {
   if (prefersReducedMotion()) {
-    await sleep(500);
+    await sleep(300);
     return;
   }
   const beam = document.createElement('div');
@@ -106,7 +107,9 @@ export async function runReadingScan(options: {
   document.documentElement.appendChild(beam);
   const marks = markKeywords(options.keywords, options.durationMs);
   try {
-    await sleep(options.durationMs + 300);
+    // Interruptible: a stop click ends the scan promptly instead of waiting out
+    // the full sweep. The short tail lets the last keyword flash settle.
+    await abortableSleep(options.durationMs + 150, () => options.shouldAbort?.() ?? false);
   } finally {
     unmark(marks);
     beam.remove();

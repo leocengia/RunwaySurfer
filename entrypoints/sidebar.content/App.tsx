@@ -288,9 +288,16 @@ export default function App() {
       if (t.phase === 'idle' || t.phase === 'done' || t.phase === 'error') return;
       setMode('visual');
       tourAbortRef.current = false;
+      // Rehydrate the visible tour state immediately: the content script remounts
+      // on every navigation, so without this the sidebar flashes empty fields
+      // (looking like an error) until driveTour kicks in.
+      setTour(t);
+      setQuery(t.query);
+      setPagesUsed(t.pages);
+      setStatus(t.phase === 'asking' ? 'streaming' : 'reading');
       setTimeout(() => {
         if (!cancelled) driveTour(t);
-      }, 300);
+      }, 100);
     })();
     return () => {
       cancelled = true;
