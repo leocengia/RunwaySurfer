@@ -2,7 +2,14 @@
 // arrivano da status.ts / db.ts, la logica delle route resta in routes/pages.ts.
 import { escapeHtml, percent } from './html.js';
 import { MODELS } from '../router.js';
-import { analyticsSummary, getSettings, listRequests } from '../db.js';
+import {
+  analyticsSummary,
+  getSettings,
+  listRequests,
+  listTeams,
+  listUsers,
+  sanitizeUser,
+} from '../db.js';
 import { metrics } from '../metrics.js';
 import { dashboardData } from '../status.js';
 import type { AuthContext } from '../auth.js';
@@ -32,6 +39,48 @@ function activeAgentsRows(): string {
       const stats = metrics.byAgent[agentId];
       return `<tr><td>${escapeHtml(agentId)}</td><td>${active}</td><td>$${(stats?.estimatedCostUsd ?? 0).toFixed(4)}</td></tr>`;
     })
+    .join('');
+}
+
+function statusPill(status: string): string {
+  const cls = status === 'active' ? 'ok-bg' : status === 'disabled' ? 'warn-bg' : 'muted-bg';
+  return `<span class="pill ${cls}">${escapeHtml(status)}</span>`;
+}
+
+function rolePill(role: string): string {
+  return `<span class="pill role-bg">${escapeHtml(role)}</span>`;
+}
+
+function usersRows(): string {
+  const teams = new Map(listTeams().map((t) => [t.id, t.name]));
+  const users = listUsers().map(sanitizeUser);
+  if (!users.length) return '<tr><td colspan="8">Nessun utente creato</td></tr>';
+  return users
+    .map((u) => {
+      const team = u.team_id != null ? escapeHtml(teams.get(u.team_id) ?? `#${u.team_id}`) : '—';
+      return `<tr><td>${u.id}</td><td>${escapeHtml(u.external_id)}</td><td>${escapeHtml(
+        u.name ?? '',
+      )}</td><td>${escapeHtml(u.email ?? '')}</td><td>${rolePill(u.role)}</td><td>${statusPill(
+        u.status,
+      )}</td><td>${team}</td><td>${escapeHtml(u.created_at.slice(0, 10))}</td></tr>`;
+    })
+    .join('');
+}
+
+function teamsRows(): string {
+  const counts = new Map<number, number>();
+  for (const u of listUsers()) {
+    if (u.team_id != null) counts.set(u.team_id, (counts.get(u.team_id) ?? 0) + 1);
+  }
+  const teams = listTeams();
+  if (!teams.length) return '<tr><td colspan="4">Nessun team creato</td></tr>';
+  return teams
+    .map(
+      (t) =>
+        `<tr><td>${t.id}</td><td>${escapeHtml(t.name)}</td><td>${counts.get(t.id) ?? 0}</td><td>${escapeHtml(
+          t.created_at.slice(0, 10),
+        )}</td></tr>`,
+    )
     .join('');
 }
 
@@ -169,6 +218,29 @@ export function renderDashboard(auth: AuthContext): string {
     }
     .ok-bg { background: #dff7eb; color: var(--ok); }
     .warn-bg { background: #fff3cf; color: var(--warn); }
+    .muted-bg { background: #eef2f7; color: var(--muted); }
+    .role-bg { background: #e6effa; color: var(--blue); }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .view-toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+    .view-toggle button {
+      border: 0;
+      border-radius: 0;
+      background: #fff;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      padding: 6px 12px;
+    }
+    .view-toggle button.active { background: var(--yellow); color: var(--ink); }
+    .api-graphic { margin-top: 12px; }
+    .api-graphic .empty { color: var(--muted); font-size: 13px; }
+    .kv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+    .kv { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; background: var(--soft); }
+    .kv .k { color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; }
+    .kv .v { margin-top: 3px; font-size: 15px; font-weight: 700; word-break: break-word; }
+    .stat-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+    .table-wrap { overflow-x: auto; }
+    .status-line { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
     @media (max-width: 760px) { .split { grid-template-columns: 1fr; } }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     button {
@@ -265,6 +337,18 @@ export function renderDashboard(auth: AuthContext): string {
       <table><thead><tr><th>Time</th><th>Agent</th><th>Model</th><th>Pages</th><th>Input tok</th><th>Cost</th><th>Status</th></tr></thead><tbody>${recentRows()}</tbody></table>
     </section>
     <section class="card" style="margin-top:12px">
+      <div class="label">Utenti (${listUsers().length})</div>
+      <div class="table-wrap">
+        <table><thead><tr><th>ID</th><th>Username</th><th>Nome</th><th>Email</th><th>Ruolo</th><th>Stato</th><th>Team</th><th>Creato</th></tr></thead><tbody>${usersRows()}</tbody></table>
+      </div>
+    </section>
+    <section class="card" style="margin-top:12px">
+      <div class="label">Team (${listTeams().length})</div>
+      <div class="table-wrap">
+        <table><thead><tr><th>ID</th><th>Nome</th><th>Membri</th><th>Creato</th></tr></thead><tbody>${teamsRows()}</tbody></table>
+      </div>
+    </section>
+    <section class="card" style="margin-top:12px">
       <div class="label">Executable API actions</div>
       <div class="actions">
         <button data-get="/health">Health</button>
@@ -353,14 +437,145 @@ export function renderDashboard(auth: AuthContext): string {
       <p style="font-size:12px;color:var(--muted);margin:10px 0 0">La richiesta viene attribuita all'utente loggato (${escapeHtml(auth.user.external_id)}).</p>
     </section>
     <section class="card" style="margin-top:12px">
-      <div class="label">Response panel</div>
-      <pre id="api-response" class="response-panel">Seleziona un'azione dalla dashboard.</pre>
+      <div class="panel-head">
+        <div class="label">Response panel</div>
+        <div class="view-toggle">
+          <button id="view-graphic" type="button" class="active">Vista grafica</button>
+          <button id="view-json" type="button">JSON grezzo</button>
+        </div>
+      </div>
+      <div id="api-graphic" class="api-graphic"><span class="empty">Seleziona un'azione dalla dashboard.</span></div>
+      <pre id="api-response" class="response-panel" hidden>Seleziona un'azione dalla dashboard.</pre>
     </section>
     <pre>${JSON.stringify(data, null, 2)}</pre>
   </main>
   <script>
     const out = document.getElementById('api-response');
-    function show(value) { out.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2); }
+    const graphic = document.getElementById('api-graphic');
+    const btnGraphic = document.getElementById('view-graphic');
+    const btnJson = document.getElementById('view-json');
+    let currentView = 'graphic';
+
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    }
+    function pill(text, cls) { return '<span class="pill ' + cls + '">' + esc(text) + '</span>'; }
+    function statusPill(s) {
+      const cls = s === 'active' ? 'ok-bg' : s === 'disabled' ? 'warn-bg' : 'muted-bg';
+      return pill(s, cls);
+    }
+    function fmtVal(v) {
+      if (v === true) return pill('true', 'ok-bg');
+      if (v === false) return pill('false', 'warn-bg');
+      if (v === 'ok' || v === 'ready' || v === 'Ready') return pill(v, 'ok-bg');
+      if (v == null || v === '') return '—';
+      return esc(v);
+    }
+    function table(headers, rows) {
+      return '<div class="table-wrap"><table><thead><tr>' + headers.map((h) => '<th>' + esc(h) + '</th>').join('') +
+        '</tr></thead><tbody>' + (rows.length ? rows.join('') : '<tr><td colspan="' + headers.length + '">Nessun dato</td></tr>') +
+        '</tbody></table></div>';
+    }
+    function kvCards(obj) {
+      return '<div class="kv-grid">' + Object.entries(obj).map(([k, v]) => {
+        const inner = v && typeof v === 'object' ? renderAny(v) : fmtVal(v);
+        return '<div class="kv"><div class="k">' + esc(k) + '</div><div class="v">' + inner + '</div></div>';
+      }).join('') + '</div>';
+    }
+    function statTiles(pairs) {
+      return '<div class="stat-tiles">' + pairs.map(([k, v]) =>
+        '<div class="card"><div class="label">' + esc(k) + '</div><div class="value">' + fmtVal(v) + '</div></div>').join('') + '</div>';
+    }
+    function usersTable(users) {
+      return table(['ID', 'Username', 'Nome', 'Email', 'Ruolo', 'Stato', 'Team', 'Creato'], users.map((u) =>
+        '<tr><td>' + esc(u.id) + '</td><td>' + esc(u.external_id) + '</td><td>' + esc(u.name || '') + '</td><td>' +
+        esc(u.email || '') + '</td><td>' + pill(u.role, 'role-bg') + '</td><td>' + statusPill(u.status) + '</td><td>' +
+        (u.team_id == null ? '—' : esc(u.team_id)) + '</td><td>' + esc(String(u.created_at).slice(0, 10)) + '</td></tr>'));
+    }
+    function teamsTable(teams) {
+      return table(['ID', 'Nome', 'Creato'], teams.map((t) =>
+        '<tr><td>' + esc(t.id) + '</td><td>' + esc(t.name) + '</td><td>' + esc(String(t.created_at).slice(0, 10)) + '</td></tr>'));
+    }
+    function requestsTable(reqs) {
+      return table(['Time', 'Agent', 'Model', 'Pages', 'Input tok', 'Cost', 'Status'], reqs.map((m) =>
+        '<tr><td>' + esc(String(m.created_at).slice(11, 19)) + '</td><td>' + esc(m.agent_id) + '</td><td>' + esc(m.model) +
+        '</td><td>' + esc(m.pages_count) + '</td><td>' + esc(m.estimated_input_tokens) + '</td><td>$' +
+        Number(m.estimated_cost_usd || 0).toFixed(4) + '</td><td>' +
+        (m.status === 'ok' ? pill('ok', 'ok-bg') : pill(m.status, 'warn-bg')) + '</td></tr>'));
+    }
+    function modelBars(rows) {
+      const total = rows.reduce((s, r) => s + (r.requests || 0), 0);
+      return rows.map((r) => {
+        const w = total ? Math.round((r.requests / total) * 100) : 0;
+        return '<div class="bar-row"><span>' + esc(r.model) + '</span><div class="bar"><i style="width:' + w +
+          '%"></i></div><strong>' + esc(r.requests) + '</strong></div>';
+      }).join('');
+    }
+    function analyticsView(body) {
+      const t = body.totals || {};
+      const tiles = statTiles([['Requests', t.requests], ['OK', t.ok], ['Errors', t.errors], ['Rejected', t.rejected],
+        ['Input tokens', t.inputTokens], ['Output tokens', t.outputTokens], ['Est. cost', '$' + Number(t.estimatedCostUsd || 0).toFixed(4)]]);
+      const model = Array.isArray(body.byModel) ? body.byModel : [];
+      return tiles + (model.length ? '<div class="label" style="margin-top:14px">Distribuzione modelli</div>' + modelBars(model) : '');
+    }
+    function metricsView(body) {
+      const scalars = Object.entries(body).filter(([, v]) => !v || typeof v !== 'object');
+      const nested = Object.entries(body).filter(([, v]) => v && typeof v === 'object');
+      let html = scalars.length ? statTiles(scalars) : '';
+      for (const [k, v] of nested) html += '<div class="label" style="margin-top:14px">' + esc(k) + '</div>' + renderAny(v);
+      return html || '<span class="empty">Nessun dato</span>';
+    }
+    function renderAny(v) {
+      if (Array.isArray(v)) {
+        if (!v.length) return '<span class="empty">Vuoto</span>';
+        if (v[0] && typeof v[0] === 'object') {
+          const cols = Object.keys(v[0]);
+          return table(cols, v.map((row) => '<tr>' + cols.map((c) => '<td>' + fmtVal(row[c]) + '</td>').join('') + '</tr>'));
+        }
+        return esc(v.join(', '));
+      }
+      if (v && typeof v === 'object') return kvCards(v);
+      return fmtVal(v);
+    }
+    // Pick the graphical renderer from the response shape, so both GET list
+    // endpoints and POST single-item results get a tailored view.
+    function renderBody(body) {
+      if (body == null) return '<span class="empty">Nessun contenuto</span>';
+      if (typeof body === 'string') return '<pre class="response-panel">' + esc(body) + '</pre>';
+      if (Array.isArray(body.users)) return usersTable(body.users);
+      if (Array.isArray(body.teams)) return teamsTable(body.teams);
+      if (Array.isArray(body.requests)) return requestsTable(body.requests);
+      if (body.totals && body.byModel) return analyticsView(body);
+      if (body.user) return kvCards(body.user);
+      if (body.team) return kvCards(body.team);
+      if (body.settings) return kvCards(body.settings);
+      if (body.error) return '<div class="kv" style="border-color:#f2c8c2;background:#fdeeec"><div class="k">Errore</div><div class="v">' + esc(body.error) + '</div></div>';
+      if (typeof body.activeRequests === 'number') return metricsView(body);
+      return kvCards(body);
+    }
+    function renderGraphic(value) {
+      if (value && typeof value === 'object' && 'status' in value && 'body' in value) {
+        const cls = value.status < 300 ? 'ok-bg' : 'warn-bg';
+        return '<p class="status-line">HTTP ' + pill(value.status, cls) + '</p>' + renderBody(value.body);
+      }
+      return renderBody(value);
+    }
+    function applyView() {
+      const g = currentView === 'graphic';
+      graphic.hidden = !g;
+      out.hidden = g;
+      btnGraphic.classList.toggle('active', g);
+      btnJson.classList.toggle('active', !g);
+    }
+    function show(value) {
+      out.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+      try { graphic.innerHTML = renderGraphic(value); }
+      catch (e) { graphic.innerHTML = '<span class="empty">Impossibile rendere graficamente questa risposta.</span>'; }
+    }
+    btnGraphic.addEventListener('click', () => { currentView = 'graphic'; applyView(); });
+    btnJson.addEventListener('click', () => { currentView = 'json'; applyView(); });
+    applyView();
+
     async function api(path, options = {}) {
       const res = await fetch(path, options);
       const type = res.headers.get('content-type') || '';
