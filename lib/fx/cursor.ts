@@ -40,7 +40,7 @@ function targetPoint(el: HTMLElement): { x: number; y: number } {
  */
 export function cursorGlideTo(el: HTMLElement, durationMs = 1150): Promise<void> {
   if (prefersReducedMotion()) return Promise.resolve();
-  const cursor = ensureCursor();
+  ensureCursor();
   const p0 = lastPos ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 };
   const startedAt = performance.now();
 
@@ -58,7 +58,10 @@ export function cursorGlideTo(el: HTMLElement, durationMs = 1150): Promise<void>
       const dx = p2.x - p0.x;
       const dy = p2.y - p0.y;
       const len = Math.hypot(dx, dy) || 1;
-      const p1 = { x: (p0.x + p2.x) / 2 - (dy / len) * 120, y: (p0.y + p2.y) / 2 + (dx / len) * 120 };
+      const p1 = {
+        x: (p0.x + p2.x) / 2 - (dy / len) * 120,
+        y: (p0.y + p2.y) / 2 + (dx / len) * 120,
+      };
       const inv = 1 - e;
       const x = inv * inv * p0.x + 2 * inv * e * p1.x + e * e * p2.x;
       const y = inv * inv * p0.y + 2 * inv * e * p1.y + e * e * p2.y;

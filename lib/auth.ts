@@ -54,7 +54,11 @@ async function readError(res: Response): Promise<string> {
 }
 
 /** Logs in and stores the bearer token. Throws with a user-facing message on failure. */
-export async function login(proxyUrl: string, username: string, password: string): Promise<AuthUser> {
+export async function login(
+  proxyUrl: string,
+  username: string,
+  password: string,
+): Promise<AuthUser> {
   const res = await fetch(`${base(proxyUrl)}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -91,8 +95,9 @@ export async function fetchMe(proxyUrl: string): Promise<AuthUser | null> {
     res = await fetch(`${base(proxyUrl)}/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-  } catch {
+  } catch (e) {
     // backend unreachable: keep the token, report logged-out for now
+    console.warn('[rs] backend non raggiungibile durante la verifica della sessione:', e);
     return null;
   }
   if (res.status === 401) {

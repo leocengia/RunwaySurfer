@@ -5,7 +5,9 @@ on-premise**. Sintetizza ciò che la demo rende anche interrogabile a runtime vi
 `GET /requirements`.
 
 ## Cos'è il backend
+
 Un **proxy stateless** in Node.js che:
+
 1. riceve dalla sidebar `{query, pages, links}`;
 2. sceglie il modello AI in base alla difficoltà (routing → contenimento costi);
 3. costruisce il prompt e (in produzione) chiama l'API Anthropic in streaming;
@@ -15,30 +17,41 @@ Un **proxy stateless** in Node.js che:
 > utile per validare architettura e requisiti senza licenze/token.
 
 ## Risorse di calcolo
-| Voce | Prototipo/demo | Note produzione (30 agenti) |
-|------|----------------|------------------------------|
-| CPU  | 1 vCPU | I/O bound; scalare orizzontalmente se serve |
-| RAM  | 256–512 MB | processo singolo, stateless |
-| Disco| minimo | nessuna persistenza; solo log opzionali |
-| Runtime | Node.js 20+ | deploy via Docker o systemd |
+
+| Voce    | Prototipo/demo                                  | Note produzione (30 agenti)                 |
+| ------- | ----------------------------------------------- | ------------------------------------------- |
+| CPU     | 1 vCPU                                          | I/O bound; scalare orizzontalmente se serve |
+| RAM     | 256–512 MB                                      | processo singolo, stateless                 |
+| Disco   | minimo                                          | nessuna persistenza; solo log opzionali     |
+| Runtime | Node.js 20+ (consigliata LTS 22, vedi `.nvmrc`) | deploy via Docker o systemd                 |
 
 ## Rete
-| Direzione | Requisito |
-|-----------|-----------|
-| **Inbound** | porta HTTP (default `8787`) raggiungibile dai browser degli agenti; **esporre via reverse proxy con TLS** (es. Nginx/Traefik) |
-| **Outbound (egress)** | **HTTPS verso `api.anthropic.com:443`** — necessario SOLO con provider reale; in demo nessun egress |
-| CORS | `Access-Control-Allow-Origin` = origin dell'estensione (in demo `*`) |
+
+| Direzione             | Requisito                                                                                                                     |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **Inbound**           | porta HTTP (default `8787`) raggiungibile dai browser degli agenti; **esporre via reverse proxy con TLS** (es. Nginx/Traefik) |
+| **Outbound (egress)** | **HTTPS verso `api.anthropic.com:443`** — necessario SOLO con provider reale; in demo nessun egress                           |
+| CORS                  | `Access-Control-Allow-Origin` = origin dell'estensione (in demo `*`)                                                          |
 
 ## Segreti
+
 - `ANTHROPIC_API_KEY` fornita via variabile d'ambiente / secret manager **sul
   server**; **mai** inclusa nel bundle dell'estensione.
 - Ruotabile senza redeploy dell'estensione (la chiave vive solo nel backend).
 
 ## Sicurezza / hardening (consigliato)
+
 - Esecuzione come utente dedicato non privilegiato (vedi `deploy/runwaysurfer.service`).
 - TLS terminato dal reverse proxy; backend in rete interna.
 - Egress in allowlist verso il solo host Anthropic.
 - Con TLS attivo impostare `COOKIE_SECURE=1` (flag `Secure` sul cookie di sessione).
+- `ALLOWED_ORIGIN` è **obbligatoria** con `AI_PROVIDER=anthropic` (il backend
+  rifiuta di avviarsi con CORS aperto e provider reale).
+- **Prompt injection**: il crawler invia al modello il testo di pagine KB
+  raggiunte via link same-origin. Il system prompt istruisce il modello a
+  trattare quel contenuto come dato e non come comando, ma sulla KB aziendale
+  reale va comunque valutato chi può modificare le pagine indicizzate: contenuto
+  KB scrivibile da terzi = potenziale canale di injection verso il modello.
 
 ## Autenticazione
 
@@ -62,6 +75,7 @@ Tutti gli endpoint (tranne `/health` e `/auth/login`) richiedono autenticazione:
   abilitati dall'admin con `POST /users/:id/reset-password` (o dalla dashboard).
 
 ## Punti aperti da chiarire col CED
+
 - Posizionamento (DMZ / rete interna) e policy di egress verso Internet.
 - Reverse proxy/TLS aziendale standard da utilizzare.
 - Gestione segreti aziendale (vault) per `ANTHROPIC_API_KEY`.

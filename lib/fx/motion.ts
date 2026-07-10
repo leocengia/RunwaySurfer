@@ -38,7 +38,10 @@ export function smoothScrollTo(el: HTMLElement, options: SmoothScrollOptions = {
     const startY = window.scrollY;
     const rect = el.getBoundingClientRect();
     const maxY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-    const targetY = Math.min(Math.max(0, rect.top + startY - window.innerHeight * viewportAnchor), maxY);
+    const targetY = Math.min(
+      Math.max(0, rect.top + startY - window.innerHeight * viewportAnchor),
+      maxY,
+    );
     const startedAt = performance.now();
     let cancelled = false;
 
@@ -46,7 +49,8 @@ export function smoothScrollTo(el: HTMLElement, options: SmoothScrollOptions = {
       cancelled = true;
     };
     const gestures: Array<keyof WindowEventMap> = ['wheel', 'touchstart', 'keydown'];
-    for (const type of gestures) window.addEventListener(type, cancel, { passive: true, once: true });
+    for (const type of gestures)
+      window.addEventListener(type, cancel, { passive: true, once: true });
 
     const cleanup = () => {
       for (const type of gestures) window.removeEventListener(type, cancel);

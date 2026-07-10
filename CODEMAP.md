@@ -24,24 +24,31 @@ Pagina web KB
 
 ## Se Vuoi Cambiare...
 
-| Obiettivo | File da aprire | Cosa modificare |
-| --- | --- | --- |
-| Siti/pagine dove compare l'estensione | `wxt.config.ts`, `entrypoints/sidebar.content/index.tsx` | `host_permissions` e `matches` |
-| Testi, layout logico, pulsanti, checkbox | `entrypoints/sidebar.content/App.tsx` | JSX, stati React, funzione `run()` |
-| Aspetto grafico della sidebar | `entrypoints/sidebar.content/style.css` | classi `.rs-*` |
-| Cosa viene letto dalla pagina corrente | `lib/extract.ts` | selettori, pulizia DOM, limite testo |
-| Quanti link collegati legge | `lib/crawl.ts` | `MAX_FOLLOW` |
-| Come sceglie i link rilevanti | `lib/crawl.ts` | `scoreLink()`, `keywordsOf()`, `pickRelevantLinks()` |
-| URL del backend usato dalla sidebar | `lib/messaging.ts` | `DEFAULT_PROXY_URL` oppure `chrome.storage.local.proxyUrl` |
-| Chiamata streaming al backend | `lib/client.ts` | `streamAsk()` |
-| Contratti dati extension/backend | `lib/outcome.ts`, `server/src/types.ts` | `AskRequest`, `AskEvent`, `AiPlan` |
-| Endpoint backend | `server/src/index.ts` | `/health`, `/requirements`, `/ask` |
-| Scelta modello e costi | `server/src/router.ts` | `MODELS`, `chooseModel()`, soglie token/pagine |
-| Prompt AI | `server/src/provider/shared.ts` | `buildSystemPrompt()`, `buildUserContent()` |
-| Risposta demo/mock | `server/src/provider/mock.ts` | `buildOutcome()` |
-| Provider AI reale | `server/src/provider/anthropic.ts` | `max_tokens`, parametri SDK, streaming |
-| Deploy container | `server/Dockerfile` | immagine, porta, env default |
-| Deploy Linux systemd | `server/deploy/runwaysurfer.service` | path, utente, env file |
+| Obiettivo                                | File da aprire                                           | Cosa modificare                                            |
+| ---------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------- |
+| Siti/pagine dove compare l'estensione    | `wxt.config.ts`, `entrypoints/sidebar.content/index.tsx` | `host_permissions` e `matches`                             |
+| Testi, layout logico, pulsanti, checkbox | `entrypoints/sidebar.content/App.tsx`                    | JSX, stati React, funzione `run()`                         |
+| Form di login / cambio password sidebar  | `entrypoints/sidebar.content/AuthForms.tsx`              | `LoginForm`, `ChangePasswordForm`                          |
+| Macchina a stati del tour visivo         | `entrypoints/sidebar.content/useTourDriver.ts`           | fasi `returning/scrolling/navigating/asking`               |
+| Aspetto grafico della sidebar            | `entrypoints/sidebar.content/style.css`                  | classi `.rs-*`                                             |
+| Cosa viene letto dalla pagina corrente   | `lib/extract.ts`                                         | selettori, pulizia DOM, limite testo                       |
+| Quanti link collegati legge              | `lib/crawl.ts`                                           | `MAX_FOLLOW`                                               |
+| Come sceglie i link rilevanti            | `lib/crawl.ts`                                           | `scoreLink()`, `keywordsOf()`, `pickRelevantLinks()`       |
+| URL del backend usato dalla sidebar      | `lib/messaging.ts`                                       | `DEFAULT_PROXY_URL` oppure `chrome.storage.local.proxyUrl` |
+| Chiamata streaming al backend            | `lib/client.ts`                                          | `streamAsk()`                                              |
+| Contratti dati extension/backend         | `shared/contracts.d.ts`                                  | `AskRequest`, `AskEvent`, `AiPlan` (unica fonte di verità) |
+| Endpoint /ask                            | `server/src/routes/ask.ts`                               | validazione, guardrail, streaming SSE                      |
+| Endpoint auth                            | `server/src/routes/auth-routes.ts`                       | login/logout/me/change-password                            |
+| Endpoint admin (utenti/team/settings)    | `server/src/routes/admin.ts`                             | guardie `requireAuth(ruolo)`                               |
+| Pagine HTML (login/dashboard)            | `server/src/routes/pages.ts`, `server/src/views/`        | template dashboard e pagine auth                           |
+| Composizione app Express                 | `server/src/app.ts`                                      | middleware CORS/sicurezza, montaggio route                 |
+| Retention automatica dello storico       | `server/src/maintenance.ts`                              | job giornaliero `startMaintenanceScheduler()`              |
+| Scelta modello e costi                   | `server/src/router.ts`                                   | `MODELS`, `chooseModel()`, soglie token/pagine             |
+| Prompt AI                                | `server/src/provider/shared.ts`                          | `buildSystemPrompt()`, `buildUserContent()`                |
+| Risposta demo/mock                       | `server/src/provider/mock.ts`                            | `buildOutcome()`                                           |
+| Provider AI reale                        | `server/src/provider/anthropic.ts`                       | `max_tokens`, parametri SDK, streaming                     |
+| Deploy container                         | `server/Dockerfile`                                      | immagine, porta, env default                               |
+| Deploy Linux systemd                     | `server/deploy/runwaysurfer.service`                     | path, utente, env file                                     |
 
 ## File Chiave
 
@@ -149,7 +156,7 @@ Client HTTP streaming.
 Contiene il default backend:
 
 ```ts
-DEFAULT_PROXY_URL = 'http://localhost:8787'
+DEFAULT_PROXY_URL = 'http://localhost:8787';
 ```
 
 In produzione dovrebbe puntare a un endpoint aziendale, oppure essere configurato via `chrome.storage.local.proxyUrl`.
@@ -175,37 +182,45 @@ DOM+CSS, un solo `<style id="rs-fx-style">`, tutto con prefisso `rs-fx-`,
 - `index.ts`: stili, `teardownFx()` idempotente (pulizia totale su stop/fine/
   re-init) e safety net bfcache su `pageshow`.
 
-Orchestrazione: `driveTour()` in `App.tsx`. Timing in `lib/tour.ts`
-(`dwellMs` 900 = hover sul link, `scanMs` 1600 = durata scansione).
-`lib/highlight.ts` ora contiene solo `findLinkElement()`.
+Orchestrazione: `useTourDriver()` in `entrypoints/sidebar.content/useTourDriver.ts`
+(estratto da `App.tsx`); la scelta dell'URL finale del tour è la logica pura di
+`lib/tour-target.ts`. Timing in `lib/tour.ts` (`dwellMs` 900 = hover sul link,
+`scanMs` 1600 = durata scansione). `lib/highlight.ts` contiene solo
+`findLinkElement()`.
 
 ## Backend
 
-### `server/src/index.ts`
+### Struttura `server/src/`
 
-Server Express.
+Il vecchio `index.ts` monolitico è stato spezzato:
 
-Endpoint:
+- `index.ts`: entry point — guardie di configurazione, `initDb()`,
+  `bootstrapAdmin()`, scheduler di retention, `listen`.
+- `app.ts`: factory `createApp()` — CORS, header di sicurezza, montaggio route.
+  Esportata senza `listen`, così i test la usano con supertest.
+- `config.ts`: variabili d'ambiente e costanti globali.
+- `metrics.ts`: metriche live in memoria + guardrail concorrenza/costo.
+- `status.ts`: `extensionConfig()` e `dashboardData()`.
+- `maintenance.ts`: job giornaliero di retention (storico + sessioni scadute).
+- `routes/`: `ask.ts`, `auth-routes.ts`, `admin.ts`, `pages.ts`.
+- `views/`: HTML di login/cambio password (`auth-pages.ts`) e dashboard
+  (`dashboard.ts`), separati dalla logica delle route.
 
-- `GET /health`: controllo vita.
-- `GET /requirements`: requisiti server/rete per CED.
-- `POST /ask`: endpoint principale.
-
-Dentro `/ask` succede:
+Dentro `POST /ask` (`routes/ask.ts`) succede:
 
 ```text
-1. valida body
-2. sceglie provider mock/anthropic
-3. sceglie modello
-4. stima token e costo
-5. manda evento plan
-6. streamma risposta
+1. valida e sanifica il body (sanitizeRequest, esportata per i test)
+2. applica i guardrail (concorrenza, budget)
+3. sceglie modello e stima token/costo
+4. manda evento plan
+5. streamma risposta (provider mock o anthropic)
+6. registra metrica live + storico SQLite
 ```
 
 Variabili ambiente:
 
 - `PORT`: porta backend, default `8787`.
-- `ALLOWED_ORIGIN`: CORS, default `*`.
+- `ALLOWED_ORIGIN`: CORS, default `*` (solo demo; obbligatoria con provider reale).
 - `AI_PROVIDER`: `mock` o `anthropic`.
 - `ANTHROPIC_API_KEY`: chiave provider reale, solo lato server.
 
@@ -338,6 +353,18 @@ cd server
 npm run compile
 ```
 
+## Test e Qualità
+
+- `tests/` (radice): test dell'estensione con Vitest + happy-dom — scoring link
+  (`crawl`), estrazione DOM (`extract`), parser SSE (`client`), scelta URL del
+  tour (`tour-target`).
+- `server/tests/`: test backend con Vitest — unit (router, auth, db su SQLite
+  temporaneo) e integrazione dell'app Express con supertest (`api.test.ts`).
+- Lint: ESLint flat config (`eslint.config.js` in radice e in `server/`).
+- Formattazione: Prettier (`.prettierrc.json`), controllata in CI.
+- CI: `.github/workflows/ci.yml` — compile, lint, format check, test e build
+  per entrambi i package.
+
 ## Regola Mentale
 
 Quando devi capire dove intervenire:
@@ -387,7 +414,7 @@ Layer autenticazione (solo `node:crypto`, nessuna dipendenza nuova):
 
 ### Endpoint backend aggiunti
 
-In `server/src/index.ts` (guardie: `admin` > `team_lead` > `agent`):
+In `server/src/routes/` (guardie: `admin` > `team_lead` > `agent`):
 
 - `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`,
   `POST /auth/change-password`: ciclo di vita sessioni.
@@ -432,4 +459,3 @@ di sessione viaggia automaticamente, essendo same-origin):
 
 `server/data/` e ignorato da git. Per backup o retention salvare/cancellare
 `server/data/runwaysurfer.db` secondo policy aziendale.
-

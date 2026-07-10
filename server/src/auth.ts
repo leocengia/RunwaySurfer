@@ -157,7 +157,9 @@ export function clearSessionCookie(): string {
 }
 
 /** Extracts the presented token: Authorization bearer first, session cookie as fallback. */
-export function extractToken(req: express.Request): { token: string; via: 'cookie' | 'bearer' } | null {
+export function extractToken(
+  req: express.Request,
+): { token: string; via: 'cookie' | 'bearer' } | null {
   const authHeader = req.get('authorization');
   if (authHeader?.toLowerCase().startsWith('bearer ')) {
     const token = authHeader.slice(7).trim();
@@ -216,7 +218,10 @@ export function requirePage(minRole: UserRole = 'team_lead') {
       return;
     }
     if (ROLE_RANK[auth.user.role] < ROLE_RANK[minRole]) {
-      res.status(403).type('html').send('<h1>403</h1><p>Accesso riservato.</p><a href="/login">Login</a>');
+      res
+        .status(403)
+        .type('html')
+        .send('<h1>403</h1><p>Accesso riservato.</p><a href="/login">Login</a>');
       return;
     }
     res.locals.auth = auth;
@@ -283,7 +288,9 @@ export async function bootstrapAdmin(): Promise<void> {
     if (existing.role !== 'admin' || existing.status !== 'active') {
       updateUser(existing.id, { role: 'admin', status: 'active' });
     }
-    console.log(`[auth] bootstrap: password impostata per l'utente esistente "${username}" (cambio obbligatorio al primo login)`);
+    console.log(
+      `[auth] bootstrap: password impostata per l'utente esistente "${username}" (cambio obbligatorio al primo login)`,
+    );
   } else {
     const user = createUser({
       externalId: username,
@@ -293,7 +300,9 @@ export async function bootstrapAdmin(): Promise<void> {
       passwordHash: hash,
       mustChangePassword: true,
     });
-    console.log(`[auth] bootstrap: creato admin "${user.external_id}" (cambio password obbligatorio al primo login)`);
+    console.log(
+      `[auth] bootstrap: creato admin "${user.external_id}" (cambio password obbligatorio al primo login)`,
+    );
   }
 }
 
