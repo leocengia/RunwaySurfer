@@ -5,7 +5,7 @@
 // Latency techniques applied here:
 //  - streaming (low time-to-first-token);
 //  - prompt caching on the stable system prefix (cheap, fast follow-ups);
-//  - thinking disabled + low effort where the model supports it.
+//  - thinking omitted (= disattivato sui modelli usati) + effort low dove supportato.
 import Anthropic from '@anthropic-ai/sdk';
 import type { AiProvider, GenerateInput } from './shared.js';
 import { buildSystemPrompt, buildUserContent } from './shared.js';
@@ -22,9 +22,9 @@ export class AnthropicProvider implements AiProvider {
     onDelta: (text: string) => void,
     signal?: AbortSignal,
   ): Promise<void> {
-    // Built version-tolerantly and cast: latency params (thinking/effort) vary
-    // by SDK version. Adjust to the installed SDK when wiring up the real key.
-    const params: Record<string, unknown> = {
+    // Parametri tipizzati contro l'SDK: se una futura major cambia la forma
+    // della richiesta, `npm run compile` fallisce invece di rompersi a runtime.
+    const params: Anthropic.MessageStreamParams = {
       model: input.model,
       max_tokens: Math.min(900, Math.max(400, 320 + input.pages.length * 120)),
       system: [
@@ -35,13 +35,14 @@ export class AnthropicProvider implements AiProvider {
         },
       ],
       messages: [{ role: 'user', content: buildUserContent(input) }],
-      thinking: { type: 'disabled' },
+      // `thinking` omesso di proposito: sui modelli usati dal router il default
+      // è "nessun thinking", che è ciò che vogliamo per la latenza.
     };
     if (EFFORT_MODELS.has(input.model)) {
       params.output_config = { effort: 'low' };
     }
 
-    const stream = this.client.messages.stream(params as never);
+    const stream = this.client.messages.stream(params);
     stream.on('text', (delta: string) => onDelta(delta));
     signal?.addEventListener('abort', () => stream.abort());
     await stream.finalMessage();

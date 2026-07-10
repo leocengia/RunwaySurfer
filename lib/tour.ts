@@ -76,7 +76,11 @@ export function normalizeUrl(u: string): string {
 }
 
 /** Build the initial tour state on the current (start) page. */
-export function startTour(query: string, dwellMs = DEFAULT_DWELL_MS, scanMs = DEFAULT_SCAN_MS): TourState {
+export function startTour(
+  query: string,
+  dwellMs = DEFAULT_DWELL_MS,
+  scanMs = DEFAULT_SCAN_MS,
+): TourState {
   const targets = pickRelevantLinks(extractInternalLinks(), query);
   return {
     // No relevant links to visit → go straight to asking on the current page.

@@ -58,7 +58,8 @@ export async function streamAsk(
       try {
         onEvent(JSON.parse(payload) as AskEvent);
       } catch {
-        // ignore malformed frame
+        // Frame malformato: lo stream continua, ma lascia traccia in console.
+        console.warn('[rs] frame SSE malformato ignorato:', payload.slice(0, 120));
       }
     }
   }

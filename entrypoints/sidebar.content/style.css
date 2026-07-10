@@ -21,7 +21,12 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    sans-serif;
   font-size: 13px;
   font-weight: 700;
   padding: 9px 12px;
@@ -59,7 +64,12 @@
   flex-direction: column;
   background: var(--rs-surface);
   color: var(--rs-ink);
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    sans-serif;
   font-size: 13px;
   line-height: 1.45;
   box-shadow: -10px 0 28px rgba(11, 31, 58, 0.18);
@@ -76,7 +86,7 @@
 }
 
 .rs-resize::after {
-  content: "";
+  content: '';
   position: absolute;
   top: 0;
   left: 4px;

@@ -162,7 +162,10 @@ function scoreLink(
   return { score, reason: reason || 'nessuna corrispondenza', matched };
 }
 
-function dynamicSelection(scored: Array<{ link: KbLink; score: number; order: number }>, max: number): KbLink[] {
+function dynamicSelection(
+  scored: Array<{ link: KbLink; score: number; order: number }>,
+  max: number,
+): KbLink[] {
   const ranked = scored
     .filter((x) => x.score >= MIN_SELECTED_SCORE)
     .sort((a, b) => b.score - a.score || a.order - b.order || a.link.url.localeCompare(b.link.url));
@@ -213,7 +216,10 @@ async function fetchPage(link: KbLink, query: string): Promise<KbPage | null> {
       text: extractPageText(doc, query),
       origin: 'followed',
     };
-  } catch {
+  } catch (e) {
+    // Rende distinguibile un guasto di rete/sessione da una pagina scartata
+    // perché non rilevante: prima questo errore era completamente muto.
+    console.warn(`[rs] fetch della pagina collegata fallita (${link.url}):`, e);
     return null;
   }
 }

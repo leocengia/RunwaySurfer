@@ -14,7 +14,9 @@ export interface ModelSpec {
   outputPerMTok: number;
 }
 
-// Pricing per the current Claude catalog.
+// Prezzi USD per milione di token dal listino Claude
+// (https://platform.claude.com/docs/en/pricing) — verificati il 2026-07-09.
+// Vanno ricontrollati quando Anthropic pubblica nuovi modelli o tariffe.
 export const MODELS = {
   haiku: { id: 'claude-haiku-4-5', inputPerMTok: 1, outputPerMTok: 5 },
   sonnet: { id: 'claude-sonnet-4-6', inputPerMTok: 3, outputPerMTok: 15 },
@@ -25,6 +27,15 @@ export interface RoutingDecision {
   spec: ModelSpec;
   reason: string;
 }
+
+// Soglie euristiche del router. Tarate sulla demo (pagine Wikipedia da
+// ~2-6k caratteri): un task è "semplice" se sta in una pagina corta con una
+// query breve, "medio" fino a due pagine di contesto contenuto, altrimenti
+// richiede sintesi multi-pagina.
+const SIMPLE_MAX_CONTEXT_CHARS = 6_000;
+const SIMPLE_MAX_QUERY_TOKENS = 40;
+const MODERATE_MAX_PAGES = 2;
+const MODERATE_MAX_CONTEXT_CHARS = 16_000;
 
 /** ~4 characters per token, good enough for routing and cost estimates. */
 export function estimateTokens(text: string): number {
@@ -47,13 +58,13 @@ export function chooseModel(req: AskRequest): RoutingDecision {
   const chars = contextChars(req);
   const queryTokens = estimateTokens(req.query);
 
-  if (pages <= 1 && chars < 6_000 && queryTokens < 40) {
+  if (pages <= 1 && chars < SIMPLE_MAX_CONTEXT_CHARS && queryTokens < SIMPLE_MAX_QUERY_TOKENS) {
     return {
       spec: MODELS.haiku,
       reason: `task semplice (1 pagina, ~${Math.round(chars / 4)} token contesto) → modello economico/veloce`,
     };
   }
-  if (pages <= 2 && chars < 16_000) {
+  if (pages <= MODERATE_MAX_PAGES && chars < MODERATE_MAX_CONTEXT_CHARS) {
     return {
       spec: MODELS.sonnet,
       reason: `task medio (${pages} pagine, ~${Math.round(chars / 4)} token contesto) → modello bilanciato`,
@@ -72,7 +83,6 @@ export function estimateCostUsd(
   outputTokens: number,
 ): number {
   return (
-    (inputTokens / 1_000_000) * spec.inputPerMTok +
-    (outputTokens / 1_000_000) * spec.outputPerMTok
+    (inputTokens / 1_000_000) * spec.inputPerMTok + (outputTokens / 1_000_000) * spec.outputPerMTok
   );
 }
