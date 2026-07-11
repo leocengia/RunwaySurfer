@@ -11,6 +11,16 @@
   --rs-muted: #5f6f82;
   --rs-success: #127c56;
   --rs-danger: #b42318;
+  /* Liquid-glass tokens (palette invariata: cambia solo la stratificazione). */
+  --rs-glass: rgba(255, 255, 255, 0.72);
+  --rs-glass-strong: rgba(255, 255, 255, 0.86);
+  --rs-glass-yellow: rgba(255, 246, 204, 0.66);
+  --rs-glass-navy: rgba(11, 31, 58, 0.82);
+  --rs-glass-border: rgba(255, 255, 255, 0.55);
+  --rs-glass-hairline: rgba(11, 31, 58, 0.08);
+  --rs-glass-blur: blur(16px) saturate(160%);
+  --rs-glass-shadow: 0 8px 30px rgba(11, 31, 58, 0.14);
+  --rs-glass-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
 .rs-launcher {
@@ -32,10 +42,12 @@
   padding: 9px 12px;
   border: 1px solid rgba(11, 31, 58, 0.2);
   border-radius: 999px;
-  background: var(--rs-yellow);
+  background: linear-gradient(180deg, #ffd84d, var(--rs-yellow));
   color: var(--rs-ink);
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(11, 31, 58, 0.22);
+  box-shadow:
+    0 10px 26px rgba(11, 31, 58, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
 .rs-launcher-mark {
@@ -62,7 +74,10 @@
   z-index: 2147483647;
   display: flex;
   flex-direction: column;
-  background: var(--rs-surface);
+  background: rgba(255, 255, 255, 0.9);
+  -webkit-backdrop-filter: var(--rs-glass-blur);
+  backdrop-filter: var(--rs-glass-blur);
+  border-left: 1px solid var(--rs-glass-border);
   color: var(--rs-ink);
   font-family:
     system-ui,
@@ -106,9 +121,12 @@
   justify-content: space-between;
   gap: 12px;
   padding: 12px 14px;
-  background: var(--rs-ink);
+  background: var(--rs-glass-navy);
+  -webkit-backdrop-filter: var(--rs-glass-blur);
+  backdrop-filter: var(--rs-glass-blur);
   color: #fff;
   border-bottom: 3px solid var(--rs-yellow);
+  box-shadow: var(--rs-glass-sheen);
 }
 
 .rs-brand {
@@ -140,7 +158,9 @@
   white-space: nowrap;
   padding: 3px 7px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.14);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
   color: #fff;
   font-size: 11px;
   font-weight: 700;
@@ -164,8 +184,8 @@
   width: 28px;
   height: 28px;
   border: 1px solid rgba(255, 255, 255, 0.24);
-  border-radius: 6px;
-  background: transparent;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
   color: #fff;
   font: inherit;
   font-weight: 800;
@@ -181,14 +201,19 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: var(--rs-soft);
+  background: rgba(245, 247, 250, 0.55);
+  -webkit-backdrop-filter: var(--rs-glass-blur);
+  backdrop-filter: var(--rs-glass-blur);
 }
 
 .rs-provider-note {
   padding: 9px 10px;
-  border: 1px solid #f0d25d;
-  border-radius: 6px;
-  background: var(--rs-yellow-soft);
+  border: 1px solid rgba(240, 210, 93, 0.6);
+  border-radius: 12px;
+  background: var(--rs-glass-yellow);
+  -webkit-backdrop-filter: var(--rs-glass-blur);
+  backdrop-filter: var(--rs-glass-blur);
+  box-shadow: var(--rs-glass-sheen);
   color: #513f00;
   font-size: 12px;
 }
@@ -208,8 +233,10 @@
   overflow: auto;
   padding: 9px 10px;
   border: 1px solid var(--rs-line);
-  border-radius: 6px;
-  background: #fff;
+  border-radius: 10px;
+  background: var(--rs-glass-strong);
+  -webkit-backdrop-filter: var(--rs-glass-blur);
+  backdrop-filter: var(--rs-glass-blur);
   color: var(--rs-ink);
   font: inherit;
 }
@@ -225,9 +252,11 @@
   box-sizing: border-box;
   padding: 8px 9px;
   border: 1px solid var(--rs-line);
-  border-radius: 6px;
+  border-radius: 10px;
   font: inherit;
-  background: #fff;
+  background: var(--rs-glass-strong);
+  -webkit-backdrop-filter: var(--rs-glass-blur);
+  backdrop-filter: var(--rs-glass-blur);
   color: var(--rs-ink);
 }
 
@@ -241,25 +270,31 @@
 .rs-secondary,
 .rs-abort {
   min-height: 36px;
-  border-radius: 6px;
+  border-radius: 10px;
   font: inherit;
   font-weight: 800;
 }
 
 .rs-submit {
   border: 1px solid #d8ad00;
-  background: var(--rs-yellow);
+  background: linear-gradient(180deg, #ffd84d, var(--rs-yellow));
   color: var(--rs-ink);
+  box-shadow:
+    var(--rs-glass-sheen),
+    0 4px 14px rgba(216, 173, 0, 0.28);
 }
 
 .rs-submit:hover:not(:disabled) {
-  background: #ffd633;
+  background: linear-gradient(180deg, #ffe066, #ffd633);
 }
 
 .rs-secondary {
-  border: 1px solid var(--rs-line);
-  background: #fff;
+  border: 1px solid var(--rs-glass-border);
+  background: var(--rs-glass);
+  -webkit-backdrop-filter: var(--rs-glass-blur);
+  backdrop-filter: var(--rs-glass-blur);
   color: var(--rs-blue);
+  box-shadow: var(--rs-glass-sheen);
 }
 
 .rs-submit:disabled,
@@ -274,9 +309,12 @@
   justify-content: space-between;
   gap: 8px;
   padding: 9px 10px;
-  border: 1px solid #f0d25d;
-  border-radius: 6px;
-  background: var(--rs-yellow-soft);
+  border: 1px solid rgba(240, 210, 93, 0.6);
+  border-radius: 12px;
+  background: var(--rs-glass-yellow);
+  -webkit-backdrop-filter: var(--rs-glass-blur);
+  backdrop-filter: var(--rs-glass-blur);
+  box-shadow: var(--rs-glass-sheen);
   color: #513f00;
   font-size: 12px;
 }
@@ -286,17 +324,23 @@
   cursor: pointer;
   min-height: 28px;
   padding: 4px 8px;
-  border: 1px solid #d8ad00;
-  background: #fff;
+  border: 1px solid var(--rs-glass-border);
+  border-radius: 999px;
+  background: var(--rs-glass-strong);
+  -webkit-backdrop-filter: var(--rs-glass-blur);
+  backdrop-filter: var(--rs-glass-blur);
   color: var(--rs-ink);
   font-size: 11px;
 }
 
 .rs-plan {
-  border: 1px solid var(--rs-line);
-  border-radius: 6px;
+  border: 1px solid var(--rs-glass-border);
+  border-radius: 12px;
   padding: 9px 10px;
-  background: #fff;
+  background: var(--rs-glass);
+  -webkit-backdrop-filter: var(--rs-glass-blur);
+  backdrop-filter: var(--rs-glass-blur);
+  box-shadow: var(--rs-glass-sheen), var(--rs-glass-shadow);
   font-size: 12px;
 }
 
@@ -322,16 +366,22 @@
 
 .rs-error {
   color: var(--rs-danger);
-  background: #fde8e4;
+  background: rgba(253, 232, 228, 0.8);
+  -webkit-backdrop-filter: var(--rs-glass-blur);
+  backdrop-filter: var(--rs-glass-blur);
   padding: 8px 10px;
-  border-radius: 6px;
+  border-radius: 12px;
+  box-shadow: var(--rs-glass-sheen);
 }
 
 .rs-outcome {
-  border: 1px solid var(--rs-line);
-  border-radius: 6px;
+  border: 1px solid var(--rs-glass-border);
+  border-radius: 12px;
   padding: 10px;
-  background: #fff;
+  background: var(--rs-glass);
+  -webkit-backdrop-filter: var(--rs-glass-blur);
+  backdrop-filter: var(--rs-glass-blur);
+  box-shadow: var(--rs-glass-sheen), var(--rs-glass-shadow);
 }
 
 .rs-outcome p {
@@ -380,8 +430,10 @@
   box-sizing: border-box;
   padding: 9px 10px;
   border: 1px solid var(--rs-line);
-  border-radius: 6px;
-  background: #fff;
+  border-radius: 10px;
+  background: var(--rs-glass-strong);
+  -webkit-backdrop-filter: var(--rs-glass-blur);
+  backdrop-filter: var(--rs-glass-blur);
   color: var(--rs-ink);
   font: inherit;
 }
@@ -412,13 +464,81 @@
 }
 
 .rs-logout {
-  border: 1px solid var(--rs-line);
-  border-radius: 6px;
-  background: #fff;
+  border: 1px solid var(--rs-glass-border);
+  border-radius: 10px;
+  background: var(--rs-glass);
+  -webkit-backdrop-filter: var(--rs-glass-blur);
+  backdrop-filter: var(--rs-glass-blur);
   color: var(--rs-blue);
   font: inherit;
   font-size: 12px;
   font-weight: 700;
   padding: 4px 8px;
   cursor: pointer;
+}
+
+/* Fallback: senza backdrop-filter, o se l'utente riduce la trasparenza, le
+   superfici tornano (quasi) opache per non perdere leggibilità. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .rs-panel {
+    background: var(--rs-surface);
+  }
+  .rs-body {
+    background: var(--rs-soft);
+  }
+  .rs-plan,
+  .rs-outcome,
+  .rs-secondary,
+  .rs-abort,
+  .rs-logout {
+    background: #fff;
+  }
+  .rs-input,
+  .rs-select,
+  .rs-field {
+    background: #fff;
+  }
+  .rs-provider-note,
+  .rs-tour {
+    background: var(--rs-yellow-soft);
+  }
+  .rs-header {
+    background: var(--rs-ink);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .rs-panel {
+    background: var(--rs-surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .rs-body {
+    background: var(--rs-soft);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .rs-header {
+    background: var(--rs-ink);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .rs-plan,
+  .rs-outcome,
+  .rs-secondary,
+  .rs-abort,
+  .rs-logout,
+  .rs-input,
+  .rs-select,
+  .rs-field {
+    background: #fff;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .rs-provider-note,
+  .rs-tour {
+    background: var(--rs-yellow-soft);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }

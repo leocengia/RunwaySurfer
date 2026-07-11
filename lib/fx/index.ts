@@ -91,7 +91,10 @@ const FX_CSS = `
     gap: 12px;
     padding: 0 16px;
     box-sizing: border-box;
-    background: linear-gradient(90deg, #0b1f3a, #00355f);
+    background: linear-gradient(90deg, rgba(11, 31, 58, 0.72), rgba(0, 53, 95, 0.72));
+    -webkit-backdrop-filter: blur(12px) saturate(160%);
+    backdrop-filter: blur(12px) saturate(160%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
     color: #fff;
     font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
     font-size: 13px;
@@ -149,8 +152,10 @@ const FX_CSS = `
     flex-shrink: 0;
     pointer-events: auto;
     border: 1px solid rgba(255, 255, 255, 0.35);
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
     color: #fff;
     font: inherit;
     font-size: 11px;

@@ -131,19 +131,38 @@ export function renderDashboard(auth: AuthContext): string {
       --muted: #5f6f82;
       --ok: #127c56;
       --warn: #9f6b00;
+      /* Liquid-glass tokens (palette invariata). */
+      --glass: rgba(255, 255, 255, 0.68);
+      --glass-strong: rgba(255, 255, 255, 0.86);
+      --glass-navy: rgba(11, 31, 58, 0.82);
+      --glass-border: rgba(255, 255, 255, 0.55);
+      --glass-blur: blur(16px) saturate(160%);
+      --glass-shadow: 0 8px 30px rgba(11, 31, 58, 0.14);
+      --glass-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.6);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
       color: var(--ink);
-      background: var(--soft);
+      background:
+        radial-gradient(1200px 600px at 12% -10%, rgba(10, 90, 163, 0.16), transparent 60%),
+        radial-gradient(900px 520px at 100% 0%, rgba(255, 204, 0, 0.12), transparent 55%),
+        linear-gradient(180deg, #eef2f7, var(--soft));
+      background-attachment: fixed;
+      min-height: 100vh;
     }
     header {
       padding: 22px 28px;
       color: #fff;
-      background: var(--ink);
+      background: var(--glass-navy);
+      -webkit-backdrop-filter: var(--glass-blur);
+      backdrop-filter: var(--glass-blur);
       border-bottom: 4px solid var(--yellow);
+      box-shadow: var(--glass-sheen);
+      position: sticky;
+      top: 0;
+      z-index: 5;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -157,10 +176,13 @@ export function renderDashboard(auth: AuthContext): string {
     main { max-width: 1100px; margin: 0 auto; padding: 22px; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
     .card {
-      border: 1px solid var(--line);
-      border-radius: 6px;
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
       padding: 14px;
-      background: #fff;
+      background: var(--glass);
+      -webkit-backdrop-filter: var(--glass-blur);
+      backdrop-filter: var(--glass-blur);
+      box-shadow: var(--glass-sheen), var(--glass-shadow);
     }
     .label { color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; }
     .value { margin-top: 4px; font-size: 20px; font-weight: 800; }
@@ -221,11 +243,11 @@ export function renderDashboard(auth: AuthContext): string {
     .muted-bg { background: #eef2f7; color: var(--muted); }
     .role-bg { background: #e6effa; color: var(--blue); }
     .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-    .view-toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+    .view-toggle { display: inline-flex; border: 1px solid var(--glass-border); border-radius: 10px; overflow: hidden; -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
     .view-toggle button {
       border: 0;
       border-radius: 0;
-      background: #fff;
+      background: var(--glass-strong);
       color: var(--muted);
       font-size: 12px;
       font-weight: 800;
@@ -235,7 +257,7 @@ export function renderDashboard(auth: AuthContext): string {
     .api-graphic { margin-top: 12px; }
     .api-graphic .empty { color: var(--muted); font-size: 13px; }
     .kv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
-    .kv { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; background: var(--soft); }
+    .kv { border: 1px solid var(--glass-border); border-radius: 10px; padding: 10px 12px; background: var(--glass-strong); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--glass-sheen); }
     .kv .k { color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; }
     .kv .v { margin-top: 3px; font-size: 15px; font-weight: 700; word-break: break-word; }
     .stat-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
@@ -245,19 +267,29 @@ export function renderDashboard(auth: AuthContext): string {
     .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     button {
       border: 1px solid #d8ad00;
-      border-radius: 6px;
+      border-radius: 10px;
       padding: 8px 10px;
-      background: var(--yellow);
+      background: linear-gradient(180deg, #ffd84d, var(--yellow));
       color: var(--ink);
       cursor: pointer;
       font-weight: 800;
+      box-shadow: var(--glass-sheen), 0 4px 14px rgba(216, 173, 0, 0.28);
     }
+    button:hover { background: linear-gradient(180deg, #ffe066, #ffd633); }
     input, select, textarea {
       width: 100%;
       border: 1px solid var(--line);
-      border-radius: 6px;
+      border-radius: 10px;
       padding: 8px;
       font: inherit;
+      background: var(--glass-strong);
+      -webkit-backdrop-filter: var(--glass-blur);
+      backdrop-filter: var(--glass-blur);
+      color: var(--ink);
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: #0a5aa3;
+      outline: 2px solid rgba(10, 90, 163, 0.18);
     }
     textarea { min-height: 92px; }
     .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
@@ -270,11 +302,32 @@ export function renderDashboard(auth: AuthContext): string {
     pre {
       overflow: auto;
       padding: 12px;
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      background: #fff;
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      background: var(--glass-strong);
+      -webkit-backdrop-filter: var(--glass-blur);
+      backdrop-filter: var(--glass-blur);
+      box-shadow: var(--glass-sheen);
     }
     a { color: var(--blue); font-weight: 700; }
+    /* Fallback: senza backdrop-filter o con trasparenza ridotta, superfici opache. */
+    @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+      .card, pre, .kv, input, select, textarea, .view-toggle button { background: #fff; }
+      header { background: var(--ink); }
+    }
+    @media (prefers-reduced-transparency: reduce) {
+      body { background: var(--soft); }
+      .card, pre, .kv, input, select, textarea, .view-toggle button {
+        background: #fff;
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+      }
+      header {
+        background: var(--ink);
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+      }
+    }
   </style>
 </head>
 <body>

@@ -3,16 +3,53 @@ import { escapeHtml } from './html.js';
 
 // Shared minimal style for the standalone auth pages (login / change password).
 const AUTH_PAGE_STYLE = `
-    :root { --ink: #0b1f3a; --yellow: #ffcc00; --soft: #f5f7fa; --line: #d8e0ea; --muted: #5f6f82; --err: #a4262c; }
+    :root {
+      --ink: #0b1f3a; --yellow: #ffcc00; --soft: #f5f7fa; --line: #d8e0ea; --muted: #5f6f82; --err: #a4262c;
+      --glass: rgba(255, 255, 255, 0.68);
+      --glass-strong: rgba(255, 255, 255, 0.86);
+      --glass-border: rgba(255, 255, 255, 0.6);
+      --glass-blur: blur(18px) saturate(160%);
+      --glass-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    }
     * { box-sizing: border-box; }
-    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color: var(--ink); background: var(--soft); display: flex; min-height: 100vh; align-items: center; justify-content: center; }
-    .auth-card { width: 340px; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 24px; border-top: 4px solid var(--yellow); }
+    body {
+      margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color: var(--ink);
+      background:
+        radial-gradient(1000px 560px at 15% -10%, rgba(10, 90, 163, 0.18), transparent 60%),
+        radial-gradient(820px 480px at 100% 0%, rgba(255, 204, 0, 0.14), transparent 55%),
+        linear-gradient(180deg, #e9eef4, var(--soft));
+      background-attachment: fixed;
+      display: flex; min-height: 100vh; align-items: center; justify-content: center;
+    }
+    .auth-card {
+      width: 340px; background: var(--glass); border: 1px solid var(--glass-border); border-radius: 14px; padding: 24px;
+      border-top: 4px solid var(--yellow);
+      -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+      box-shadow: var(--glass-sheen), 0 18px 50px rgba(11, 31, 58, 0.22);
+    }
     h1 { margin: 0 0 4px; font-size: 20px; }
     p.sub { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
     label { display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--muted); margin: 12px 0 4px; }
-    input { width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 9px; font: inherit; }
-    button { width: 100%; margin-top: 18px; border: 1px solid #d8ad00; border-radius: 6px; padding: 10px; background: var(--yellow); color: var(--ink); cursor: pointer; font-weight: 800; font-size: 14px; }
-    .error { display: none; margin-top: 12px; padding: 9px; border-radius: 6px; background: #fdecea; color: var(--err); font-size: 13px; }
+    input {
+      width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 9px; font: inherit; color: var(--ink);
+      background: var(--glass-strong);
+      -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+    }
+    input:focus { border-color: #0a5aa3; outline: 2px solid rgba(10, 90, 163, 0.18); }
+    button {
+      width: 100%; margin-top: 18px; border: 1px solid #d8ad00; border-radius: 10px; padding: 10px;
+      background: linear-gradient(180deg, #ffd84d, var(--yellow)); color: var(--ink); cursor: pointer; font-weight: 800; font-size: 14px;
+      box-shadow: var(--glass-sheen), 0 4px 14px rgba(216, 173, 0, 0.28);
+    }
+    button:hover { background: linear-gradient(180deg, #ffe066, #ffd633); }
+    .error { display: none; margin-top: 12px; padding: 9px; border-radius: 10px; background: rgba(253, 236, 234, 0.85); color: var(--err); font-size: 13px; }
+    @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+      .auth-card, input { background: #fff; }
+    }
+    @media (prefers-reduced-transparency: reduce) {
+      body { background: var(--soft); }
+      .auth-card, input { background: #fff; -webkit-backdrop-filter: none; backdrop-filter: none; }
+    }
 `;
 
 function authPage(options: {
