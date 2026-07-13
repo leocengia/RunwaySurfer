@@ -4,6 +4,7 @@ import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { createUser, initDb } from '../src/db.js';
 import { hashPassword } from '../src/auth.js';
+import { metrics } from '../src/metrics.js';
 
 const app = createApp();
 
@@ -129,6 +130,8 @@ describe('POST /ask', () => {
     expect(events[0].plan.model).toBeTruthy();
     expect(events.some((e) => e.type === 'delta')).toBe(true);
     expect(events.at(-1)?.type).toBe('done');
+    // Il contatore richieste attive è stato rilasciato dal finally (Bug 4).
+    expect(metrics.activeRequests).toBe(0);
   });
 
   it('registra la richiesta nello storico consultabile via /requests', async () => {
