@@ -16,6 +16,7 @@ import {
 import { findLinkElement } from '../../lib/highlight';
 import { findTourTargetUrl } from '../../lib/tour-target';
 import {
+  abortableSleep,
   bannerComplete,
   cursorClick,
   cursorGlideTo,
@@ -116,7 +117,7 @@ export function useTourDriver(deps: TourDriverDeps): (initial: TourState) => Pro
                 // semantics and navigate anyway.
                 void narrate(`Non trovo il link «${target.text}» in pagina, lo apro direttamente…`);
                 await saveTour({ ...t, phase: 'navigating' });
-                await sleep(700);
+                await abortableSleep(350, () => tourAbortRef.current);
                 if (tourAbortRef.current) {
                   teardownFx();
                   return;
@@ -126,17 +127,29 @@ export function useTourDriver(deps: TourDriverDeps): (initial: TourState) => Pro
               }
               void narrate(narrationOpen(target, step, total));
               const offSpotlight = spotlightOn(el);
+              const shouldAbort = () => tourAbortRef.current;
+              // Glide the bar forward across the approach so it advances
+              // continuously instead of snapping at phase boundaries.
+              setBannerProgress((t.index + 0.5) / units, false, 700);
               // Cinematic approach: the page glides while the ghost cursor
               // curves toward the link, landing just after the scroll settles.
-              await Promise.all([smoothScrollTo(el), cursorGlideTo(el)]);
-              await saveTour({ ...t, phase: 'navigating' });
-              await sleep(t.dwellMs);
+              await Promise.all([
+                smoothScrollTo(el, { shouldAbort }),
+                cursorGlideTo(el, 650, shouldAbort),
+              ]);
               if (tourAbortRef.current) {
                 offSpotlight();
                 teardownFx();
                 return;
               }
-              await cursorClick();
+              await saveTour({ ...t, phase: 'navigating' });
+              await abortableSleep(t.dwellMs, shouldAbort);
+              if (tourAbortRef.current) {
+                offSpotlight();
+                teardownFx();
+                return;
+              }
+              await cursorClick(el);
               offSpotlight();
               location.href = target.url;
               return;
@@ -148,30 +161,35 @@ export function useTourDriver(deps: TourDriverDeps): (initial: TourState) => Pro
                 await saveTour(t);
                 continue;
               }
-              const visited = t.targets[t.index];
+              const idx = t.index;
+              const visited = t.targets[idx];
               mountBanner({
-                step: Math.min(t.index + 1, total),
+                step: Math.min(idx + 1, total),
                 total,
                 rightOffsetPx: rightOffset(),
               });
-              setBannerProgress((t.index + 0.5) / units);
+              setBannerProgress((idx + 0.5) / units);
               void narrate(`Sto leggendo «${document.title}»…`);
               const page: KbPage = { ...extractCurrentPage(t.query), origin: 'followed' };
               const pages = [...t.pages, page];
-              t = { ...t, pages, index: t.index + 1, phase: 'returning' };
+              t = { ...t, pages, index: idx + 1, phase: 'returning' };
               setPagesUsed(pages);
               // Persist BEFORE the scan so a reload mid-scan resumes correctly.
               await saveTour(t);
+              const scanMs = t.scanMs ?? DEFAULT_SCAN_MS;
+              // Glide the bar toward the next step across the reading scan.
+              setBannerProgress((idx + 1) / units, false, scanMs);
               await runReadingScan({
                 keywords: visited?.matchedKeywords ?? [],
-                durationMs: t.scanMs ?? DEFAULT_SCAN_MS,
+                durationMs: scanMs,
+                shouldAbort: () => tourAbortRef.current,
               });
               if (tourAbortRef.current) {
                 teardownFx();
                 return;
               }
               void narrate('Torno alla pagina di partenza…');
-              await sleep(350);
+              await abortableSleep(150, () => tourAbortRef.current);
               location.href = t.startUrl;
               return;
             }
@@ -189,7 +207,7 @@ export function useTourDriver(deps: TourDriverDeps): (initial: TourState) => Pro
               await clearTour();
               setTour(null);
               bannerComplete('Fatto! Risposta pronta nella sidebar.');
-              await sleep(900);
+              await sleep(500);
               unmountBanner();
               teardownFx();
               const targetUrl = findTourTargetUrl(result.outcome, t.pages);

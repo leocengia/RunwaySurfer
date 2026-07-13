@@ -18,10 +18,32 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Abortable sleep: resolves after `ms`, or early (in ~60ms ticks) as soon as
+ * `shouldAbort()` becomes true, so a stop click during a pause is felt quickly.
+ */
+export function abortableSleep(ms: number, shouldAbort: () => boolean): Promise<void> {
+  return new Promise((resolve) => {
+    const step = 60;
+    let elapsed = 0;
+    const tick = () => {
+      if (shouldAbort() || elapsed >= ms) {
+        resolve();
+        return;
+      }
+      elapsed += step;
+      setTimeout(tick, Math.min(step, ms - elapsed + step));
+    };
+    tick();
+  });
+}
+
 export interface SmoothScrollOptions {
   durationMs?: number;
   /** Fraction of the viewport height where the target should land (0 = top). */
   viewportAnchor?: number;
+  /** Bail out of the tween as soon as this returns true (e.g. tour aborted). */
+  shouldAbort?: () => boolean;
 }
 
 /**
@@ -29,7 +51,7 @@ export interface SmoothScrollOptions {
  * A user gesture (wheel/touch/keys) cancels the tween — the user always wins.
  */
 export function smoothScrollTo(el: HTMLElement, options: SmoothScrollOptions = {}): Promise<void> {
-  const { durationMs = 950, viewportAnchor = 0.4 } = options;
+  const { durationMs = 550, viewportAnchor = 0.4, shouldAbort } = options;
   if (prefersReducedMotion()) {
     el.scrollIntoView({ block: 'center' });
     return Promise.resolve();
@@ -58,7 +80,7 @@ export function smoothScrollTo(el: HTMLElement, options: SmoothScrollOptions = {
     };
 
     const frame = (now: number) => {
-      if (cancelled) {
+      if (cancelled || shouldAbort?.()) {
         cleanup();
         return;
       }

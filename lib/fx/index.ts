@@ -20,8 +20,8 @@ const FX_CSS = `
     animation: rs-fx-pulse 1.2s ease-in-out infinite;
   }
   @keyframes rs-fx-pulse {
-    0%, 100% { box-shadow: 0 0 0 4px rgba(255, 204, 0, 0.85), 0 0 18px 6px rgba(255, 204, 0, 0.35); }
-    50% { box-shadow: 0 0 0 8px rgba(255, 204, 0, 0.45), 0 0 34px 14px rgba(255, 204, 0, 0.55); }
+    0%, 100% { box-shadow: 0 0 0 3px rgba(255, 204, 0, 0.7), 0 0 10px 3px rgba(255, 204, 0, 0.25); }
+    50% { box-shadow: 0 0 0 5px rgba(255, 204, 0, 0.35), 0 0 18px 7px rgba(255, 204, 0, 0.35); }
   }
 
   #rs-fx-spotlight {
@@ -32,7 +32,7 @@ const FX_CSS = `
     background: radial-gradient(
       circle at var(--rs-spot-x, 50%) var(--rs-spot-y, 50%),
       transparent var(--rs-spot-r, 80px),
-      rgba(4, 16, 34, 0.55) calc(var(--rs-spot-r, 80px) + 90px)
+      rgba(4, 16, 34, 0.32) calc(var(--rs-spot-r, 80px) + 50px)
     );
     animation: rs-fx-fade-in 250ms ease-out;
   }
@@ -47,15 +47,15 @@ const FX_CSS = `
     height: 28px;
     pointer-events: none;
     z-index: 2147483646;
-    filter: drop-shadow(0 0 7px rgba(255, 204, 0, 0.85));
+    filter: drop-shadow(0 0 4px rgba(255, 204, 0, 0.8));
     transition: none;
   }
   #rs-fx-cursor::after {
     content: '';
     position: absolute;
-    inset: -8px;
+    inset: -4px;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(255, 204, 0, 0.35), transparent 70%);
+    background: radial-gradient(circle, rgba(255, 204, 0, 0.22), transparent 70%);
   }
   #rs-fx-cursor.rs-fx-press svg { animation: rs-fx-press 200ms ease-in-out; }
   @keyframes rs-fx-press {
@@ -75,7 +75,7 @@ const FX_CSS = `
   }
   @keyframes rs-fx-ripple {
     from { transform: scale(1); opacity: 0.95; }
-    to { transform: scale(2.8); opacity: 0; }
+    to { transform: scale(1.9); opacity: 0; }
   }
 
   #rs-fx-banner {
@@ -91,7 +91,10 @@ const FX_CSS = `
     gap: 12px;
     padding: 0 16px;
     box-sizing: border-box;
-    background: linear-gradient(90deg, #0b1f3a, #00355f);
+    background: linear-gradient(90deg, rgba(11, 31, 58, 0.72), rgba(0, 53, 95, 0.72));
+    -webkit-backdrop-filter: blur(12px) saturate(160%);
+    backdrop-filter: blur(12px) saturate(160%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
     color: #fff;
     font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
     font-size: 13px;
@@ -149,8 +152,10 @@ const FX_CSS = `
     flex-shrink: 0;
     pointer-events: auto;
     border: 1px solid rgba(255, 255, 255, 0.35);
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
     color: #fff;
     font: inherit;
     font-size: 11px;
@@ -196,16 +201,15 @@ const FX_CSS = `
     position: fixed;
     left: 0;
     right: 0;
-    top: -120px;
-    height: 90px;
+    top: -60px;
+    height: 40px;
     pointer-events: none;
     z-index: 2147483641;
-    background: linear-gradient(180deg, transparent, rgba(255, 204, 0, 0.14) 70%, rgba(255, 204, 0, 0.32));
-    border-bottom: 2px solid rgba(255, 214, 51, 0.95);
-    box-shadow: 0 4px 22px rgba(255, 204, 0, 0.45);
+    background: linear-gradient(180deg, transparent, rgba(255, 204, 0, 0.08) 70%, rgba(255, 204, 0, 0.16));
+    border-bottom: 1px solid rgba(255, 214, 51, 0.7);
   }
   @keyframes rs-fx-scan {
-    from { top: -120px; }
+    from { top: -60px; }
     to { top: 105vh; }
   }
 
@@ -215,11 +219,11 @@ const FX_CSS = `
     padding: 0 !important;
     display: inline;
     border-radius: 2px;
-    animation: rs-fx-hit 900ms ease-out both;
+    animation: rs-fx-hit 500ms ease-out both;
   }
   @keyframes rs-fx-hit {
     0% { background-color: transparent; box-shadow: none; }
-    35% { background-color: #ffe14d; box-shadow: 0 0 14px 4px rgba(255, 204, 0, 0.85); }
+    35% { background-color: #ffe14d; box-shadow: 0 0 9px 3px rgba(255, 204, 0, 0.7); }
     100% { background-color: rgba(255, 204, 0, 0.55); box-shadow: none; }
   }
 
