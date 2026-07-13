@@ -100,6 +100,15 @@ export function unmountBanner(): void {
 let cancelNarration: (() => void) | null = null;
 
 /**
+ * Cancel any running typewriter interval without touching the DOM. Called by
+ * teardownFx (which removes the banner by id) so the interval does not keep
+ * firing on a detached node after an abort/teardown.
+ */
+export function stopNarration(): void {
+  cancelNarration?.();
+}
+
+/**
  * Typewriter narration into the banner. A new call cancels the previous one;
  * the returned promise resolves when the text is fully typed (or immediately
  * under reduced motion).

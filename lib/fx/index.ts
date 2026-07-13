@@ -7,6 +7,8 @@
 // z-index ladder (sidebar stays on top at 2147483647):
 //   spotlight 2147483640 < beam 2147483641 < banner 2147483645 < cursor 2147483646
 
+import { stopNarration } from './banner';
+
 export const FX_STYLE_ID = 'rs-fx-style';
 const LEGACY_STYLE_ID = 'rs-tour-style';
 
@@ -251,6 +253,9 @@ export function ensureFxStyles(): void {
  * abort, completion, re-init and the bfcache safety net.
  */
 export function teardownFx(): void {
+  // Stop the typewriter interval before detaching the banner, otherwise it
+  // keeps firing on a now-removed node until the text finishes.
+  stopNarration();
   for (const id of ['rs-fx-banner', 'rs-fx-spotlight', 'rs-fx-cursor', 'rs-fx-beam']) {
     document.getElementById(id)?.remove();
   }

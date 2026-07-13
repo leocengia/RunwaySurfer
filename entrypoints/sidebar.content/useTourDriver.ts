@@ -67,10 +67,13 @@ export function useTourDriver(deps: TourDriverDeps): (initial: TourState) => Pro
     async (initial: TourState) => {
       if (drivingRef.current) return;
       drivingRef.current = true;
-      ensureFxStyles();
-      installFxSafetyNet();
       const rightOffset = () => (openRef.current ? sidebarWidthRef.current : 0);
       try {
+        // Inside the try so a throw here still hits the finally that clears
+        // drivingRef — otherwise the reentrancy guard would wedge on and every
+        // later visual run would silently no-op.
+        ensureFxStyles();
+        installFxSafetyNet();
         let t = initial;
         setTour(t);
         setQuery(t.query);
@@ -204,6 +207,15 @@ export function useTourDriver(deps: TourDriverDeps): (initial: TourState) => Pro
                   : 'Analizzo la pagina e scrivo la risposta…',
               );
               const result = await runAsk(t.query, t.pages, t.targets);
+              // The fetch may have returned a partial outcome because the user
+              // pressed stop; without this guard the driver would still navigate
+              // the tab (location.href below) after an abort.
+              if (tourAbortRef.current) {
+                await clearTour();
+                setTour(null);
+                teardownFx();
+                return;
+              }
               await clearTour();
               setTour(null);
               bannerComplete('Fatto! Risposta pronta nella sidebar.');
