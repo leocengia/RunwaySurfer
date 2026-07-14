@@ -129,6 +129,18 @@ function isUsefulInternalUrl(url: URL): boolean {
   return !siteProfile.rejectPathIncludes.some((frag) => path.includes(frag));
 }
 
+/**
+ * True se il documento contiene un vero content-root, non solo lo shell
+ * dell'app. Le pagine Salesforce Aura sono client-rendered: un fetch() ne
+ * restituisce lo shell (i selettori del contenuto compaiono solo dopo il boot
+ * JS), quindi non avrebbe testo utile. Usato da fetchPage per scartarle invece
+ * di mandare pagine vuote all'AI. Su una pagina server-rendered (es. Wikipedia)
+ * i selettori sono già presenti nell'HTML grezzo → true.
+ */
+export function hasRenderedContent(doc: Document): boolean {
+  return siteProfile.contentSelectors.some((sel) => doc.querySelector(sel));
+}
+
 /** Extract the readable text of the current page. */
 export function extractPageText(doc: Document = document, query = ''): string {
   const root = pickContentRoot(doc);

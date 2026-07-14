@@ -5,7 +5,7 @@
 // reuses whatever session the browser already has for this origin. On the real
 // Runway KB that is the agent's SSO session: no separate credentials.
 import type { KbLink, KbPage } from './outcome';
-import { extractPageText } from './extract';
+import { extractPageText, hasRenderedContent } from './extract';
 
 const MAX_FOLLOW = 3;
 const MIN_SELECTED_SCORE = 5;
@@ -210,6 +210,15 @@ async function fetchPage(link: KbLink, query: string): Promise<KbPage | null> {
     if (!res.ok) return null;
     const html = await res.text();
     const doc = new DOMParser().parseFromString(html, 'text/html');
+    // Pagina client-rendered (es. Salesforce Aura): il fetch vede solo lo
+    // shell, senza il testo dell'articolo. La scarto invece di inviare una
+    // pagina vuota all'AI (token sprecati + risposta peggiore).
+    if (!hasRenderedContent(doc)) {
+      console.warn(
+        `[rs] pagina client-rendered senza contenuto nell'HTML grezzo, la salto: ${link.url}`,
+      );
+      return null;
+    }
     return {
       url: link.url,
       title: doc.title || link.text,

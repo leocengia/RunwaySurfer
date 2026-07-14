@@ -14,9 +14,20 @@ function target(text: string, url: string, score: number, matchedKeywords: strin
   return { text, url, score, matchedKeywords };
 }
 
+// Pagina server-rendered: il body ha un vero content-root (<main>), così
+// hasRenderedContent la considera valida (a differenza di uno shell client-side).
 function htmlResponse(title: string, body: string): Response {
   return new Response(
-    `<!doctype html><html><head><title>${title}</title></head><body>${body}</body></html>`,
+    `<!doctype html><html><head><title>${title}</title></head><body><main>${body}</main></body></html>`,
+    { status: 200, headers: { 'content-type': 'text/html' } },
+  );
+}
+
+// Shell di un'app client-rendered (es. Salesforce Aura): niente content-root,
+// solo script di bootstrap. hasRenderedContent → false, va scartata.
+function shellResponse(): Response {
+  return new Response(
+    `<!doctype html><html><head><title>App</title></head><body><div id="app"></div><script>/* aura boot */</script></body></html>`,
     { status: 200, headers: { 'content-type': 'text/html' } },
   );
 }
@@ -63,6 +74,22 @@ describe('shallowFollow — lettura in-page del tour', () => {
 
     expect(pages).toHaveLength(1);
     expect(pages[0].url).toBe(`${BASE}/Buona`);
+  });
+
+  it('scarta le pagine client-rendered (solo shell, niente content-root)', async () => {
+    const targets = [
+      target('Rendered', `${BASE}/Rendered`, 12),
+      target('Shell', `${BASE}/Shell`, 10),
+    ];
+    const fetchMock = vi.fn(async (url: string) =>
+      url === targets[1].url ? shellResponse() : htmlResponse('Rendered', '<p>contenuto vero</p>'),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const pages = await shallowFollow(targets, 'contenuto', targets.length);
+
+    expect(pages).toHaveLength(1);
+    expect(pages[0].url).toBe(`${BASE}/Rendered`);
   });
 
   it('legge senza mai navigare: location.href resta invariato', async () => {

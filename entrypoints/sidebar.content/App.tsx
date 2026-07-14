@@ -55,7 +55,10 @@ export default function App() {
   const [authPhase, setAuthPhase] = useState<AuthPhase>('checking');
   const [me, setMe] = useState<AuthUser | null>(null);
   const [query, setQuery] = useState('');
-  const [mode, setMode] = useState<Mode>('visual');
+  // Default single-page: sulla KB Salesforce (client-rendered) le altre modalità
+  // non possono leggere altre pagine via fetch (vedi hasRenderedContent), e la
+  // pagina corrente è la più economica in token.
+  const [mode, setMode] = useState<Mode>('single');
   const [status, setStatus] = useState<Status>('idle');
   const [plan, setPlan] = useState<AiPlan | null>(null);
   const [outcome, setOutcome] = useState('');
