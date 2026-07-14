@@ -17,7 +17,7 @@ import {
   type SettingsRecord,
 } from '../db.js';
 import { requireAuth, type AuthContext } from '../auth.js';
-import { metrics, recordMetric, canAcceptRequest } from '../metrics.js';
+import { metrics, recordMetric, canAcceptRequest, beginActive, endActive } from '../metrics.js';
 import { truncate, newRequestId } from '../util.js';
 import { MAX_QUERY_CHARS } from '../config.js';
 
@@ -131,80 +131,105 @@ askRoutes.post('/ask', requireAuth('agent'), async (req, res) => {
   // Per-request usage log (cost visibility for the CED / FinOps).
   const requestId = newRequestId();
   const startedAt = Date.now();
-  metrics.activeRequests += 1;
-  metrics.activeByAgent[agentId] = (metrics.activeByAgent[agentId] ?? 0) + 1;
-  console.log(
-    `[ask:${requestId}] agent=${agentId} provider=${provider.name} model=${spec.id} pages=${request.pages.length} ` +
-      `inTok≈${estimatedInputTokens} cost≈$${estimatedCostUsd.toFixed(4)} :: "${request.query.slice(0, 60)}"`,
-  );
-
-  // SSE setup.
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders?.();
-
-  const send = (event: AskEvent) => res.write(`data: ${JSON.stringify(event)}\n\n`);
-
-  // Abort the provider stream if the *client* disconnects. Use res 'close'
-  // (not req 'close', which fires as soon as the already-parsed body stream ends).
-  const ac = new AbortController();
-  res.on('close', () => ac.abort());
-
-  const historyBase = {
-    userId: user.id,
-    agentId,
-    teamId: user.team_id,
-    query: request.query,
-    provider: provider.name,
-    model: spec.id,
-    pagesCount: request.pages.length,
-    linksCount: request.links.length,
-    estimatedInputTokens,
-    estimatedOutputTokens,
-    estimatedCostUsd,
-    selectedLinks: request.links,
-    sources: request.pages.map((p) => ({ title: p.title, url: p.url, origin: p.origin })),
-  };
-  const metricBase = {
-    id: requestId,
-    at: new Date(startedAt).toISOString(),
-    agentId,
-    provider: provider.name,
-    model: spec.id,
-    pages: request.pages.length,
-    links: request.links.length,
-    inputTokens: estimatedInputTokens,
-    outputTokens: estimatedOutputTokens,
-    estimatedCostUsd,
-  };
-
-  send({ type: 'plan', plan });
+  // Increment the live counter and release it in the finally below, so a throw
+  // during SSE setup (e.g. flushHeaders/write on an already-closed socket) can
+  // never leak it and eventually trip the concurrency guardrail (429).
+  beginActive(agentId);
   try {
-    await provider.streamOutcome(
-      { ...request, model: spec.id },
-      (text) => send({ type: 'delta', text }),
-      ac.signal,
+    console.log(
+      `[ask:${requestId}] agent=${agentId} provider=${provider.name} model=${spec.id} pages=${request.pages.length} ` +
+        `inTok≈${estimatedInputTokens} cost≈$${estimatedCostUsd.toFixed(4)} :: "${request.query.slice(0, 60)}"`,
     );
-    send({ type: 'done' });
-    recordMetric({ ...metricBase, ms: Date.now() - startedAt, ok: true });
-    persistRequest({
-      ...historyBase,
+
+    // SSE setup.
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+
+    const send = (event: AskEvent) => res.write(`data: ${JSON.stringify(event)}\n\n`);
+
+    // Abort the provider stream if the *client* disconnects. Use res 'close'
+    // (not req 'close', which fires as soon as the already-parsed body stream ends).
+    const ac = new AbortController();
+    res.on('close', () => ac.abort());
+
+    const historyBase = {
+      userId: user.id,
+      agentId,
+      teamId: user.team_id,
+      query: request.query,
+      provider: provider.name,
+      model: spec.id,
+      pagesCount: request.pages.length,
+      linksCount: request.links.length,
+      estimatedInputTokens,
+      estimatedOutputTokens,
+      estimatedCostUsd,
+      selectedLinks: request.links,
+      sources: request.pages.map((p) => ({ title: p.title, url: p.url, origin: p.origin })),
+    };
+    const metricBase = {
       id: requestId,
-      durationMs: Date.now() - startedAt,
-      status: 'ok',
-    });
-  } catch (e) {
-    const message = String(e);
-    send({ type: 'error', message });
-    recordMetric({ ...metricBase, ms: Date.now() - startedAt, ok: false, error: message });
-    persistRequest({
-      ...historyBase,
-      id: requestId,
-      durationMs: Date.now() - startedAt,
-      status: 'error',
-      error: message,
-    });
+      at: new Date(startedAt).toISOString(),
+      agentId,
+      provider: provider.name,
+      model: spec.id,
+      pages: request.pages.length,
+      links: request.links.length,
+      inputTokens: estimatedInputTokens,
+      outputTokens: estimatedOutputTokens,
+      estimatedCostUsd,
+    };
+
+    send({ type: 'plan', plan });
+    try {
+      await provider.streamOutcome(
+        { ...request, model: spec.id },
+        (text) => send({ type: 'delta', text }),
+        ac.signal,
+      );
+      if (ac.signal.aborted) {
+        // Client disconnected mid-stream: the mock provider resolves normally
+        // on abort (unlike the real one, which throws), so without this branch
+        // the request would be logged as a successful completion it never was.
+        const message = 'client disconnected';
+        recordMetric({ ...metricBase, ms: Date.now() - startedAt, ok: false, error: message });
+        persistRequest({
+          ...historyBase,
+          id: requestId,
+          durationMs: Date.now() - startedAt,
+          status: 'error',
+          error: message,
+        });
+      } else {
+        send({ type: 'done' });
+        recordMetric({ ...metricBase, ms: Date.now() - startedAt, ok: true });
+        persistRequest({
+          ...historyBase,
+          id: requestId,
+          durationMs: Date.now() - startedAt,
+          status: 'ok',
+        });
+      }
+    } catch (e) {
+      const message = String(e);
+      send({ type: 'error', message });
+      recordMetric({ ...metricBase, ms: Date.now() - startedAt, ok: false, error: message });
+      persistRequest({
+        ...historyBase,
+        id: requestId,
+        durationMs: Date.now() - startedAt,
+        status: 'error',
+        error: message,
+      });
+    }
+  } finally {
+    endActive(agentId);
+    try {
+      res.end();
+    } catch {
+      /* socket already closed */
+    }
   }
-  res.end();
 });

@@ -1,16 +1,20 @@
-// Visual guided tour state machine.
+// Visual guided tour state.
 //
-// The "visual" mode navigates the current tab through the top-N relevant links
-// one by one (hub-and-spoke: start → link → back to start → next link → …) so
-// the agent visually sees which pages the AI reads. Because the content script
-// RELOADS on every same-tab navigation (wiping React state), the tour is driven
-// by this small state machine persisted in extension storage and rehydrated on
-// each mount — that is what makes the sidebar appear fixed and continuous.
+// The "visual" mode is an IN-PAGE walk: the sidebar stays on the start page for
+// the whole tour (no per-link navigation, no "back"), so the content script
+// never reloads — no flash, React state survives naturally. The animations
+// (spotlight, ghost cursor, click ripple, narrating banner, reading beam) run
+// on the start page while the target pages' content is read via `fetch`
+// (shallowFollow), prefetched in parallel. The ONLY navigation shown is the
+// final one, toward the chosen source. Because there is no cross-navigation
+// mid-tour, the tour state no longer needs to be persisted/rehydrated: this
+// module only carries the runtime `TourState` and the final `TourResultState`
+// that survives the single closing navigation.
 //
 // Storage note: we use storage.local (not storage.session) because storage.session
 // is not reachable from a content-script context by default. To avoid a stale
-// tour resurrecting on an unrelated page days later, we stamp `startedAt` and
-// discard tours older than MAX_TOUR_AGE_MS on load.
+// result resurrecting on an unrelated page days later, we stamp `startedAt` and
+// discard results older than MAX_TOUR_AGE_MS on load.
 import { browser } from 'wxt/browser';
 import type { AiPlan, KbLink, KbPage } from './outcome';
 import { extractCurrentPage, extractInternalLinks } from './extract';
@@ -18,17 +22,15 @@ import { pickRelevantLinks } from './crawl';
 
 export type TourPhase =
   | 'idle'
-  | 'scrolling' // on the start page: highlight targets[index], then navigate to it
-  | 'navigating' // just left start toward a target; on load we collect it
-  | 'returning' // heading back to the start page (hub) for the next target
-  | 'asking' // back on start with all pages collected: stream the outcome
+  | 'scrolling' // on the start page: highlight targets[index] and read it in-page
+  | 'asking' // all pages collected: stream the outcome
   | 'done'
   | 'error';
 
 export interface TourState {
   phase: TourPhase;
   query: string;
-  /** The hub we return to between targets and where the AI request runs. */
+  /** The page the walk runs on and where the AI request is issued. */
   startUrl: string;
   /** Relevant links chosen once on the start page. */
   targets: KbLink[];
@@ -97,9 +99,10 @@ export function startTour(
 }
 
 /**
- * Cross-navigation abort flag: the banner stop button may be clicked while a
- * navigation is committing (its DOM event dies with the page), so it also
- * stamps this key; loadTour() on the next page then discards the tour.
+ * Cross-navigation abort flag: the banner stop button may be clicked while the
+ * final navigation is committing (its DOM event dies with the page), so it also
+ * stamps this key; loadTourResult() on the next page then discards the result so
+ * a stopped tour never restores its answer after landing.
  */
 export async function markTourAborted(): Promise<void> {
   try {
@@ -109,35 +112,11 @@ export async function markTourAborted(): Promise<void> {
   }
 }
 
-export async function loadTour(): Promise<TourState | null> {
-  try {
-    const stored = await browser.storage.local.get([KEY, ABORT_KEY]);
-    const tour = stored[KEY] as TourState | undefined;
-    if (!tour || typeof tour !== 'object') return null;
-    if (Date.now() - tour.startedAt > MAX_TOUR_AGE_MS) {
-      await clearTour();
-      return null;
-    }
-    // A new tour has startedAt > abortedAt, so the flag never needs clearing.
-    const abortedAt = stored[ABORT_KEY];
-    if (typeof abortedAt === 'number' && abortedAt >= tour.startedAt) {
-      await clearTour();
-      return null;
-    }
-    return tour;
-  } catch {
-    return null;
-  }
-}
-
-export async function saveTour(state: TourState): Promise<void> {
-  try {
-    await browser.storage.local.set({ [KEY]: state });
-  } catch {
-    /* best-effort: a lost write only aborts the tour, never breaks the page */
-  }
-}
-
+/**
+ * Defensive cleanup of any legacy `rs:tour` state left by an older build (the
+ * in-page walk no longer persists the tour). Still called on run/reset/stop so
+ * a stale key from a previous version can never resurrect.
+ */
 export async function clearTour(): Promise<void> {
   try {
     await browser.storage.local.remove(KEY);
@@ -148,10 +127,19 @@ export async function clearTour(): Promise<void> {
 
 export async function loadTourResult(): Promise<TourResultState | null> {
   try {
-    const stored = await browser.storage.local.get(RESULT_KEY);
+    const stored = await browser.storage.local.get([RESULT_KEY, ABORT_KEY]);
     const result = stored[RESULT_KEY] as TourResultState | undefined;
     if (!result || typeof result !== 'object') return null;
     if (Date.now() - result.startedAt > MAX_TOUR_AGE_MS) {
+      await clearTourResult();
+      return null;
+    }
+    // Stop-during-final-navigation guard: the stop button stamps ABORT_KEY as
+    // the closing navigation commits, so a result written just before the stop
+    // must not restore its answer after landing. (Previously enforced by
+    // loadTour, which no longer exists.) A fresh tour has startedAt > abortedAt.
+    const abortedAt = stored[ABORT_KEY];
+    if (typeof abortedAt === 'number' && abortedAt >= result.startedAt) {
       await clearTourResult();
       return null;
     }

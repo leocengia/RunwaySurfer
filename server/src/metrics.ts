@@ -35,13 +35,24 @@ export const metrics = {
   recent: [] as RequestMetric[],
 };
 
+/**
+ * Mark a request as in-flight. Pair with endActive() in a try/finally so the
+ * live counter is always balanced — otherwise a throw during /ask setup would
+ * leak it and eventually trip the concurrency guardrail (429 for everyone).
+ */
+export function beginActive(agentId: string): void {
+  metrics.activeRequests += 1;
+  metrics.activeByAgent[agentId] = (metrics.activeByAgent[agentId] ?? 0) + 1;
+}
+
+/** Release an in-flight request. Idempotent-safe (never goes below 0). */
+export function endActive(agentId: string): void {
+  metrics.activeRequests = Math.max(0, metrics.activeRequests - 1);
+  metrics.activeByAgent[agentId] = Math.max(0, (metrics.activeByAgent[agentId] ?? 0) - 1);
+}
+
 export function recordMetric(metric: RequestMetric): void {
   metrics.totalRequests += 1;
-  metrics.activeRequests = Math.max(0, metrics.activeRequests - 1);
-  metrics.activeByAgent[metric.agentId] = Math.max(
-    0,
-    (metrics.activeByAgent[metric.agentId] ?? 0) - 1,
-  );
   if (metric.ok) metrics.successfulRequests += 1;
   else metrics.failedRequests += 1;
   metrics.totalEstimatedInputTokens += metric.inputTokens;

@@ -15,11 +15,9 @@ import type { AiPlan, KbPage } from '../../lib/outcome';
 import {
   clearTour,
   clearTourResult,
-  loadTour,
   loadTourResult,
   markTourAborted,
   normalizeUrl,
-  saveTour,
   startTour,
   type TourState,
 } from '../../lib/tour';
@@ -171,7 +169,11 @@ export default function App() {
   const resetSession = useCallback(async () => {
     abortRef.current?.abort();
     tourAbortRef.current = true;
+    drivingRef.current = false;
     teardownFx();
+    // Stamp the cross-navigation abort flag (like stopTour) so a tour whose
+    // navigation is already committing does not resurrect on the next page.
+    await markTourAborted();
     await clearTour();
     await clearTourResult();
     setQuery('');
@@ -260,7 +262,14 @@ export default function App() {
     (async () => {
       const result = await loadTourResult();
       if (cancelled || !result) return;
-      if (normalizeUrl(result.targetUrl) !== normalizeUrl(location.href)) return;
+      // Tolerant match: normalizeUrl only strips the hash, so a redirect that
+      // adds/removes a trailing slash would drop the answer. Also accept a very
+      // fresh result (the tour just navigated here) even if the landing URL
+      // differs slightly, so the generated answer is never silently lost.
+      const stripSlash = (u: string) => normalizeUrl(u).replace(/\/+$/, '');
+      const urlMatches = stripSlash(result.targetUrl) === stripSlash(location.href);
+      const fresh = Date.now() - result.startedAt < 15_000;
+      if (!urlMatches && !fresh) return;
       setOpen(true);
       setMode('visual');
       setQuery(result.query);
@@ -278,44 +287,31 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      // Sweep any FX leftover from a previous content-script life (e.g. after
-      // an aborted tour) before deciding whether to resume.
-      teardownFx();
-      const t = await loadTour();
-      if (cancelled || !t) return;
-      if (t.phase === 'idle' || t.phase === 'done' || t.phase === 'error') return;
-      setMode('visual');
-      tourAbortRef.current = false;
-      // Rehydrate the visible tour state immediately: the content script remounts
-      // on every navigation, so without this the sidebar flashes empty fields
-      // (looking like an error) until driveTour kicks in.
-      setTour(t);
-      setQuery(t.query);
-      setPagesUsed(t.pages);
-      setStatus(t.phase === 'asking' ? 'streaming' : 'reading');
-      setTimeout(() => {
-        if (!cancelled) driveTour(t);
-      }, 100);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [driveTour]);
+    // The in-page walk never crosses a reload, so there is no tour to resume on
+    // mount. Just sweep any FX leftover from a previous content-script life
+    // (e.g. an aborted tour) and drop any legacy persisted tour state.
+    teardownFx();
+    void clearTour();
+  }, []);
 
   const run = useCallback(async () => {
     if (!query.trim() || status === 'reading' || status === 'streaming') return;
 
     if (mode === 'visual') {
       teardownFx();
+      // A user-initiated run is authoritative: reset the reentrancy guard and
+      // drop any leftover/stale tour so a fresh visual run always starts, even
+      // if a previous driveTour left drivingRef stuck (see Bug 0). Safe because
+      // the button is disabled while busy, so no live loop can be running here.
+      drivingRef.current = false;
       tourAbortRef.current = false;
+      await clearTour();
+      await clearTourResult();
       setStatus('reading');
       setOutcome('');
       setPlan(null);
       setError('');
       const t = startTour(query.trim());
-      await saveTour(t);
       await driveTour(t);
       return;
     }
@@ -334,6 +330,7 @@ export default function App() {
 
   const stopTour = useCallback(async () => {
     tourAbortRef.current = true;
+    drivingRef.current = false;
     abortRef.current?.abort();
     teardownFx();
     await markTourAborted();
