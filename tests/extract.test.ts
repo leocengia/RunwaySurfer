@@ -60,6 +60,26 @@ describe('extractInternalLinks', () => {
     expect(links[0].order).toBeTypeOf('number');
   });
 
+  it('mantiene i link con query-string e deduplica le varianti (KB Salesforce)', () => {
+    // Origin uguale a quello dei test (kb.example.com) ma path in stile
+    // Salesforce Experience Cloud, con ?language / ?nocache / #.
+    document.body.innerHTML = `
+      <main>
+        <a href="/Runway/s/article/Rimborso?language=en_US">Rimborso</a>
+        <a href="/Runway/s/article/Rimborso?language=en_US#">Rimborso (fragment)</a>
+        <a href="/Runway/s/article/Rimborso?nocache=abc123">Rimborso (cache-buster)</a>
+        <a href="/Runway/s/topic/0TO5f000000/hotelscom">Hotels.com</a>
+      </main>
+    `;
+    const links = extractInternalLinks(document);
+    // Le tre varianti dell'articolo collassano in una (con ?language preservato);
+    // il topic resta distinto.
+    expect(links.map((l) => l.url)).toEqual([
+      'https://kb.example.com/Runway/s/article/Rimborso?language=en_US',
+      'https://kb.example.com/Runway/s/topic/0TO5f000000/hotelscom',
+    ]);
+  });
+
   it('rispetta il limite massimo', () => {
     document.body.innerHTML = `<main>${Array.from(
       { length: 60 },

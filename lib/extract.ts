@@ -2,20 +2,12 @@
 // the current KB page. In the demo this runs on Wikipedia; in production the
 // same code reads the authenticated Runway KB page from the rendered DOM.
 import type { KbPage, KbLink } from './outcome';
+import { linkIdentity, normalizeLinkUrl, siteProfile } from './site-profile';
 
 /** Rough token budget for a single page's text (~4 chars/token). */
 const MAX_PAGE_CHARS = 6_000;
 const FOCUSED_PAGE_CHARS = 4_500;
 const MIN_QUERY_TEXT_CHARS = 900;
-
-/** Selectors that usually hold the meaningful content, best-effort. */
-const CONTENT_SELECTORS = [
-  'main',
-  'article',
-  '#mw-content-text', // Wikipedia main content
-  '#content',
-  '[role="main"]',
-];
 
 const STOP_WORDS = new Set([
   'alla',
@@ -44,7 +36,7 @@ const STOP_WORDS = new Set([
 ]);
 
 function pickContentRoot(doc: Document): Element {
-  for (const sel of CONTENT_SELECTORS) {
+  for (const sel of siteProfile.contentSelectors) {
     const el = doc.querySelector(sel);
     if (el) return el;
   }
@@ -131,14 +123,10 @@ function queryFocusedText(root: Element, query: string): string | null {
 
 function isUsefulInternalUrl(url: URL): boolean {
   const path = decodeURIComponent(url.pathname).toLowerCase();
-  if (path.includes('/wiki/special:')) return false;
-  if (path.includes('/wiki/help:')) return false;
-  if (path.includes('/wiki/category:')) return false;
-  if (path.includes('/wiki/file:')) return false;
-  if (path.includes('/wiki/template:')) return false;
-  if (path.includes('/wiki/talk:')) return false;
-  if (url.search) return false;
-  return true;
+  // NB: non si scartano più gli URL con query-string — la KB Salesforce usa
+  // ?language= per identificare la pagina. La normalizzazione (normalizeLinkUrl)
+  // rimuove i param non essenziali, così le varianti (?nocache=…) deduplicano.
+  return !siteProfile.rejectPathIncludes.some((frag) => path.includes(frag));
 }
 
 /** Extract the readable text of the current page. */
@@ -146,9 +134,7 @@ export function extractPageText(doc: Document = document, query = ''): string {
   const root = pickContentRoot(doc);
   // Drop obvious non-content nodes before reading innerText.
   const clone = root.cloneNode(true) as Element;
-  clone
-    .querySelectorAll('script, style, nav, footer, aside, .navbox, .reference, .mw-editsection')
-    .forEach((n) => n.remove());
+  clone.querySelectorAll(siteProfile.noiseSelectors).forEach((n) => n.remove());
 
   const focused = queryFocusedText(clone, query);
   return focused ?? normalizeText((clone as HTMLElement).innerText ?? clone.textContent ?? '');
@@ -160,6 +146,7 @@ export function extractPageText(doc: Document = document, query = ''): string {
  */
 export function extractInternalLinks(doc: Document = document, max = 40): KbLink[] {
   const here = new URL(doc.location.href);
+  const hereId = linkIdentity(here);
   const root = pickContentRoot(doc);
   const seen = new Set<string>();
   const links: KbLink[] = [];
@@ -174,13 +161,12 @@ export function extractInternalLinks(doc: Document = document, max = 40): KbLink
     }
     if (url.origin !== here.origin) continue; // same-origin only
     if (!isUsefulInternalUrl(url)) continue;
-    url.hash = '';
-    const key = url.href;
-    if (key === here.href || seen.has(key)) continue;
+    const id = linkIdentity(url);
+    if (id === hereId || seen.has(id)) continue;
     const text = (a.textContent ?? '').replace(/\s+/g, ' ').trim();
     if (!text) continue;
-    seen.add(key);
-    links.push({ url: key, text, context: nearbyText(a), order });
+    seen.add(id);
+    links.push({ url: normalizeLinkUrl(url), text, context: nearbyText(a), order });
     if (links.length >= max) break;
   }
   return links;
