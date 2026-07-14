@@ -15,11 +15,9 @@ import type { AiPlan, KbPage } from '../../lib/outcome';
 import {
   clearTour,
   clearTourResult,
-  loadTour,
   loadTourResult,
   markTourAborted,
   normalizeUrl,
-  saveTour,
   startTour,
   type TourState,
 } from '../../lib/tour';
@@ -289,31 +287,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      // Sweep any FX leftover from a previous content-script life (e.g. after
-      // an aborted tour) before deciding whether to resume.
-      teardownFx();
-      const t = await loadTour();
-      if (cancelled || !t) return;
-      if (t.phase === 'idle' || t.phase === 'done' || t.phase === 'error') return;
-      setMode('visual');
-      tourAbortRef.current = false;
-      // Rehydrate the visible tour state immediately: the content script remounts
-      // on every navigation, so without this the sidebar flashes empty fields
-      // (looking like an error) until driveTour kicks in.
-      setTour(t);
-      setQuery(t.query);
-      setPagesUsed(t.pages);
-      setStatus(t.phase === 'asking' ? 'streaming' : 'reading');
-      setTimeout(() => {
-        if (!cancelled) driveTour(t);
-      }, 100);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [driveTour]);
+    // The in-page walk never crosses a reload, so there is no tour to resume on
+    // mount. Just sweep any FX leftover from a previous content-script life
+    // (e.g. an aborted tour) and drop any legacy persisted tour state.
+    teardownFx();
+    void clearTour();
+  }, []);
 
   const run = useCallback(async () => {
     if (!query.trim() || status === 'reading' || status === 'streaming') return;
@@ -333,7 +312,6 @@ export default function App() {
       setPlan(null);
       setError('');
       const t = startTour(query.trim());
-      await saveTour(t);
       await driveTour(t);
       return;
     }

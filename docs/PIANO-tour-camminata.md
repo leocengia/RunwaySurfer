@@ -1,9 +1,10 @@
 # Piano — Tour visivo: "camminata in-page" (niente avanti-e-indietro)
 
-> Piano salvato per riprendere il lavoro da qualsiasi dispositivo. Quando vuoi eseguirlo,
-> apri il repo in Claude Code e di': «esegui il piano in `docs/PIANO-tour-camminata.md`».
-> Stato: **non ancora implementato**. I fix dei bug precedenti sono già committati su questo
-> branch (`claude/fix-tour-mode-bug-and-more`).
+> Piano salvato per riprendere il lavoro da qualsiasi dispositivo.
+> Stato: **implementato** su questo branch (`claude/fix-tour-mode-bug-and-more`) —
+> `lib/tour.ts`, `entrypoints/sidebar.content/useTourDriver.ts`, `App.tsx` e il nuovo
+> `tests/tour-walk.test.ts`; compile/lint/test/build verdi. I fix dei bug precedenti erano
+> già committati sullo stesso branch.
 
 ## Context
 
