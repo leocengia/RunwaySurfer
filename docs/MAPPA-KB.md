@@ -5,18 +5,84 @@
 > settings backend. Compila incollando i JSON prodotti dagli script e scrivendo le
 > conclusioni. Piano di riferimento: il piano "Mappatura della KB Salesforce".
 
-## Come raccogliere i dati
+## Procedura passo-passo
 
-Script (Console DevTools, profilo autenticato):
+### Prerequisiti (una volta sola)
 
-- **`docs/recon-kb-map.js`** — Passe 0-4. Eseguilo su **≥5 articoli di tipo diverso**, su
-  **1 pagina topic**, su **1 pagina categoria**. (Naviga per la Passa 4: aspetta che finisca.)
-  Per saltare la navigazione: `window.RS_MAP_SPA = false` prima di incollare.
-- **`docs/recon-kb-search.js`** — Passa 5. Preferibile: lancia una ricerca a mano, poi
-  eseguilo sulla pagina risultati. In alternativa `window.RS_SEARCH_Q = 'rimborso'` e lascialo
-  provare da solo.
+1. Apri Chrome con il **profilo loggato alla KB** (quello che ha accesso a
+   `traveler.my.site.com`). Verifica di vedere gli articoli senza schermata di login.
+2. Apri gli script che ti servono dal repo: `docs/recon-kb-map.js` e
+   `docs/recon-kb-search.js`. Servono i **contenuti** dei file (li incollerai in console).
+3. Su un articolo, apri **DevTools**: `F12` (o `Ctrl+Shift+I`) → scheda **Console**.
+4. La prima volta, se compare l'avviso _"Don't paste code you don't understand"_, digita
+   `allow pasting` e premi Invio (poi non lo richiede più per quella sessione).
+5. Lavora in italiano: assicurati che l'URL abbia `?language=it`. Se noti differenze di
+   contenuto con `en_US`, annotalo nelle conclusioni.
 
-Lingua: esegui in `?language=it`; se noti differenze rilevanti col contenuto `en_US`, annotalo.
+### Step 1 — Passe 0-4 su un articolo (recon-map)
+
+1. Vai su una **pagina-articolo** rappresentativa (URL tipo `/Runway/s/article/...` o
+   `/Runway/s/detail/...`). Meglio se ha **link ad altri articoli nel corpo** (per la Passa 4).
+2. Nella Console: incolla **tutto** il contenuto di `docs/recon-kb-map.js` e premi Invio.
+3. ⚠️ Lo script è **asincrono e NAVIGA**: per la Passa 4 clicca ~3 link e torna indietro da
+   solo (~10-15s). **Non toccare la pagina** finché non stampa il blocco verde `RS-MAP`.
+4. Se preferisci NON far navigare la pagina, prima di incollare digita in console:
+   `window.RS_MAP_SPA = false` (poi incolla lo script). Perdi la Passa 4 ma non naviga.
+5. A fine esecuzione l'output è stampato **e copiato in clipboard**. Incollamelo in chat
+   (o nel file `recon-results.md` che hai aperto). Dimmi anche di che tipo era la pagina.
+6. Se la copia in clipboard non è disponibile, seleziona il JSON sotto `RS-MAP` e copialo a
+   mano.
+
+### Step 2 — Ripeti su più pagine (campionamento ampio)
+
+Ri-esegui lo Step 1 (stesso script) su:
+
+- **≥5 articoli di tipo diverso** (procedura, policy, FAQ, refund/billing, lodging… quelli
+  che gli agenti aprono davvero);
+- **1 pagina topic** (`/Runway/s/topic/...`);
+- **1 pagina categoria** (se esiste).
+
+Mandami i JSON separati (basta indicare a quale pagina si riferisce ciascuno). Su topic e
+categoria la Passa 4 si salta da sola (non sono articoli navigabili): è normale.
+
+### Step 3 — Passa 5: la ricerca (recon-search)
+
+Modo consigliato (più affidabile):
+
+1. Digita una parola nella **barra di ricerca** della KB (es. `rimborso`) e lancia la ricerca
+   a mano; aspetta che compaiano i **risultati** (URL tipo `/Runway/s/global-search/...`).
+2. Nella Console incolla **tutto** `docs/recon-kb-search.js` e premi Invio.
+3. Aspetta il blocco verde `RS-SEARCH` e incollami il JSON.
+
+Modo automatico (se il primo non ti è comodo): su una pagina qualsiasi con la barra di
+ricerca, prima digita `window.RS_SEARCH_Q = 'rimborso'`, poi incolla lo script: proverà a
+compilare e inviare la ricerca da solo. Se `reachedResults` risulta `false`, usa il modo
+consigliato.
+
+### Step 4 — Passa 6: tassonomia e domande frequenti (input tuo, non recon)
+
+Mandami, anche in testo libero:
+
+- i **topic/categorie principali** della KB (la struttura ad albero, se c'è);
+- **10-15 domande/richieste reali** che gli agenti fanno (es. "il cliente vuole annullare una
+  prenotazione hotel", "come emetto un rimborso CFAR"…). Servono a rifare lo scoring dei link
+  sul dominio vero al posto di quello e-commerce.
+
+### Step 5 — Passa 7: baseline token (richiede l'estensione caricata)
+
+1. Builda e carica l'estensione nel profilo KB: `npm run build`, poi `chrome://extensions` →
+   **Modalità sviluppatore** → **Carica estensione non pacchettizzata** → cartella
+   `.output/chrome-mv3`.
+2. Su 3-5 **query reali**, esegui una richiesta in **single-page** e (se il tour gira) in
+   **tour**; dal pannello sidebar, sotto la risposta, leggi la riga **AiPlan** e mandami:
+   stima **input token**, **modello** scelto, **costo $**, **n. pagine** e **n. link**.
+3. Questi numeri sono la _baseline_ per misurare il risparmio dopo l'ottimizzazione.
+
+### Cosa faccio io
+
+Man mano che mi reincolli i dati, compilo le sezioni qui sotto e traduco ogni rilevazione in
+valori concreti per le manopole (content-root, rumore, caps, timing SPA, scoring, soglie
+backend). Quando la mappa è piena, pianifichiamo la fase di ottimizzazione sui numeri reali.
 
 ---
 
