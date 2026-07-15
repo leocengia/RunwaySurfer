@@ -10,14 +10,19 @@
  *   3) sorgenti dei "collegati" (cross-link nel corpo, related, topic)
  *   4) profilo navigazione SPA (click→render→back), fino a N campioni di latenza
  *
+ * ROBUSTO: ogni passa è isolata; se una fallisce, le altre proseguono e alla
+ * fine stampa comunque `RS-MAP` con un campo `errors`. Il JSON è anche in
+ * `window.RS_MAP_JSON` (rileggilo con `copy(RS_MAP_JSON)`).
+ *
  * COME USARLO
  * -----------
+ * Consiglio: prima digita `console.clear()` per pulire i log di Salesforce.
  * Su una pagina-ARTICOLO (o detail/topic/categoria), Console DevTools nel profilo
  * autenticato: incolla tutto e Invio. È ASINCRONO e — per la Passa 4 — NAVIGA
- * (clicca alcuni link e torna indietro con history.back). Aspetta "RS-MAP".
- * Reincollami il JSON. Ripeti su pagine di tipo diverso (vedi docs/MAPPA-KB.md).
+ * (clicca alcuni link e torna indietro con history.back). Aspetta "RS-MAP",
+ * poi fai Ctrl+V in chat (il JSON è già in clipboard).
  *
- * Opzioni (facoltative, impostale PRIMA di incollare):
+ * Opzioni (impostale PRIMA di incollare):
  *   window.RS_MAP_SPA = false           // salta la Passa 4 (nessuna navigazione)
  *   window.RS_MAP_SPA_SAMPLES = 3        // quante navigazioni misurare (default 3)
  *
@@ -25,9 +30,15 @@
  * invia nulla a nessuno, non modifica nulla sul server.
  */
 (async () => {
-  const origin = location.origin;
-  const doSpa = window.RS_MAP_SPA !== false;
-  const spaSamples = Number(window.RS_MAP_SPA_SAMPLES) || 3;
+  const out = { errors: [] };
+  const safe = async (name, fn) => {
+    try {
+      await fn();
+    } catch (e) {
+      out.errors.push({ passa: name, error: String((e && e.message) || e) });
+      console.warn(`[RS-MAP] errore in ${name}:`, e);
+    }
+  };
 
   const norm = (s) => (s || '').replace(/\s+/g, ' ').trim();
   const classify = (u) => {
@@ -42,10 +53,15 @@
   };
   const selOf = (el) => {
     if (!el) return null;
-    const cls = el.className
-      ? '.' + String(el.className).split(/\s+/).filter(Boolean).slice(0, 3).join('.')
-      : '';
-    return el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + cls;
+    let cls = '';
+    try {
+      cls = el.className
+        ? '.' + String(el.className).split(/\s+/).filter(Boolean).slice(0, 3).join('.')
+        : '';
+    } catch {
+      cls = '';
+    }
+    return (el.tagName || '').toLowerCase() + (el.id ? '#' + el.id : '') + cls;
   };
   const containerOf = (a) => {
     let n = a.parentElement;
@@ -55,19 +71,19 @@
     return null;
   };
   const mainEl = () => document.querySelector('[role="main"]') || document.body;
-  const mainText = () => norm(mainEl().innerText || '');
-
-  const out = {
-    // --- Passa 0: tipo pagina + URL --------------------------------------------
-    pageType: classify(new URL(location.href)),
-    url: location.href,
-    pathname: location.pathname,
-    params: [...new URLSearchParams(location.search).keys()],
-    lang: document.documentElement.lang || null,
-    title: document.title,
+  const textOf = (el) => {
+    // innerText può non essere disponibile su alcuni nodi proxati: fallback.
+    try {
+      return norm((el && el.innerText) || (el && el.textContent) || '');
+    } catch {
+      return norm((el && el.textContent) || '');
+    }
   };
+  const mainText = () => textOf(mainEl());
 
-  // --- Passa 1: content-root candidati + rumore --------------------------------
+  const origin = location.origin;
+  const doSpa = window.RS_MAP_SPA !== false;
+  const spaSamples = Number(window.RS_MAP_SPA_SAMPLES) || 3;
   const BODY_CANDIDATES = [
     '.slds-rich-text-editor__output', // corpo rich-text articolo (visto nel recon-3)
     '.forceCommunityArticleLayout',
@@ -77,112 +93,144 @@
     'article',
     '[role="main"]',
   ];
-  const describe = (el) =>
-    el && {
-      selector: selOf(el),
-      chars: norm(el.innerText || '').length,
-      headSnippet: norm(el.innerText || '').slice(0, 160),
-    };
-  out.contentRoot = {
-    candidatesPresent: BODY_CANDIDATES.filter((s) => document.querySelector(s)).map((s) => ({
-      candidate: s,
-      ...describe(document.querySelector(s)),
-    })),
-    roleMainChars: mainText().length,
-  };
+  // Condivisi tra passe (con fallback se una passa fallisce).
+  let anchors = [];
+  let bestBody = null;
 
-  // Rumore: pannello metadati "Article Detail" — cerco i contenitori che portano
-  // etichette tipiche, così ricavo il selettore da aggiungere a noiseSelectors.
-  const NOISE_LABELS = [
-    'Legacy Id',
-    'Stato pubblicazione',
-    'Pubblicato',
-    'Article Number',
-    'URL Name',
-    'Data ultima modifica',
-    'Last Modified',
-    'Article Total View',
-    'Valuta questo articolo',
-    'Rate this article',
-  ];
-  const noiseHits = [];
-  const seenNoise = new Set();
-  for (const el of Array.from(mainEl().querySelectorAll('*'))) {
-    const txt = norm(el.textContent || '');
-    if (txt.length > 400) continue; // salta contenitori grossi (il corpo)
-    const label = NOISE_LABELS.find((l) => txt.includes(l));
-    if (label) {
-      // risali al contenitore "di sezione" più vicino con una classe
-      let box = el;
-      for (let i = 0; i < 4 && box.parentElement; i++) box = box.parentElement;
-      const sel = selOf(box);
-      if (sel && !seenNoise.has(sel)) {
-        seenNoise.add(sel);
-        noiseHits.push({ label, container: sel });
+  // --- Passa 0: tipo pagina + URL ----------------------------------------------
+  await safe('0-url', () => {
+    out.pageType = classify(new URL(location.href));
+    out.url = location.href;
+    out.pathname = location.pathname;
+    out.params = [...new URLSearchParams(location.search).keys()];
+    out.lang = document.documentElement.lang || null;
+    out.title = document.title;
+  });
+
+  // --- Passa 1: content-root candidati + rumore --------------------------------
+  await safe('1-contentRoot', () => {
+    const describe = (el) =>
+      el && {
+        selector: selOf(el),
+        chars: textOf(el).length,
+        headSnippet: textOf(el).slice(0, 160),
+      };
+    out.contentRoot = {
+      candidatesPresent: BODY_CANDIDATES.filter((s) => document.querySelector(s)).map((s) => ({
+        candidate: s,
+        ...describe(document.querySelector(s)),
+      })),
+      roleMainChars: mainText().length,
+    };
+
+    const NOISE_LABELS = [
+      'Legacy Id',
+      'Stato pubblicazione',
+      'Pubblicato',
+      'Article Number',
+      'URL Name',
+      'Data ultima modifica',
+      'Last Modified',
+      'Article Total View',
+      'Valuta questo articolo',
+      'Rate this article',
+    ];
+    out._noiseLabels = NOISE_LABELS;
+    const noiseHits = [];
+    const seenNoise = new Set();
+    for (const el of Array.from(mainEl().querySelectorAll('*'))) {
+      const txt = norm(el.textContent || '');
+      if (txt.length > 400) continue;
+      const label = NOISE_LABELS.find((l) => txt.includes(l));
+      if (label) {
+        let box = el;
+        for (let i = 0; i < 4 && box.parentElement; i++) box = box.parentElement;
+        const sel = selOf(box);
+        if (sel && !seenNoise.has(sel)) {
+          seenNoise.add(sel);
+          noiseHits.push({ label, container: sel });
+        }
       }
     }
-  }
-  out.noiseCandidates = noiseHits;
+    out.noiseCandidates = noiseHits;
+  });
 
   // --- Passa 2: campione qualità estrazione ------------------------------------
-  const bestBody = BODY_CANDIDATES.map((s) => document.querySelector(s)).find(Boolean) || mainEl();
-  const bodyText = norm(bestBody.innerText || '');
-  out.extractionSample = {
-    bestBodySelector: selOf(bestBody),
-    bodyChars: bodyText.length,
-    roleMainChars: mainText().length,
-    // Se i metadati compaiono qui, il selettore corpo non è abbastanza stretto.
-    metadataLeaks: NOISE_LABELS.filter((l) => bodyText.includes(l)),
-    head: bodyText.slice(0, 200),
-    tail: bodyText.slice(-200),
-  };
+  await safe('2-extraction', () => {
+    bestBody = BODY_CANDIDATES.map((s) => document.querySelector(s)).find(Boolean) || mainEl();
+    const bodyText = textOf(bestBody);
+    const NOISE_LABELS = out._noiseLabels || [];
+    out.extractionSample = {
+      bestBodySelector: selOf(bestBody),
+      bodyChars: bodyText.length,
+      roleMainChars: mainText().length,
+      metadataLeaks: NOISE_LABELS.filter((l) => bodyText.includes(l)),
+      head: bodyText.slice(0, 200),
+      tail: bodyText.slice(-200),
+    };
+  });
+  if (!bestBody) bestBody = mainEl();
 
   // --- Passa 3: sorgenti dei "collegati" ---------------------------------------
-  const anchors = Array.from(document.querySelectorAll('a[href]'))
-    .map((a) => {
+  await safe('3-collegati', () => {
+    anchors = Array.from(document.querySelectorAll('a[href]'))
+      .map((a) => {
+        try {
+          return { a, u: new URL(a.href) };
+        } catch {
+          return null;
+        }
+      })
+      .filter((x) => x && x.u.origin === origin);
+    const inBody = (a) => {
       try {
-        return { a, u: new URL(a.href) };
+        return bestBody.contains(a);
       } catch {
-        return null;
+        return false;
       }
-    })
-    .filter((x) => x && x.u.origin === origin);
-  const inBody = (a) => bestBody.contains(a);
-  const byType = { article: 0, detail: 0, topic: 0, category: 0, search: 0, home: 0, other: 0 };
-  const collegati = [];
-  const seenLink = new Set();
-  for (const { a, u } of anchors) {
-    const type = classify(u);
-    byType[type]++;
-    const key = u.pathname;
-    if ((type === 'article' || type === 'detail') && !seenLink.has(key)) {
-      seenLink.add(key);
-      collegati.push({
-        type,
-        inArticleBody: inBody(a),
-        text: norm(a.textContent).slice(0, 70),
-        container: containerOf(a),
-        href: a.href,
-      });
+    };
+    const byType = { article: 0, detail: 0, topic: 0, category: 0, search: 0, home: 0, other: 0 };
+    const collegati = [];
+    const seenLink = new Set();
+    for (const { a, u } of anchors) {
+      const type = classify(u);
+      byType[type]++;
+      const key = u.pathname;
+      if ((type === 'article' || type === 'detail') && !seenLink.has(key)) {
+        seenLink.add(key);
+        collegati.push({
+          type,
+          inArticleBody: inBody(a),
+          text: norm(a.textContent).slice(0, 70),
+          container: containerOf(a),
+          href: a.href,
+        });
+      }
     }
-  }
-  // Sezione "Articoli correlati / Related Articles" per heading.
-  const relatedHeading = Array.from(document.querySelectorAll('h1,h2,h3,h4,span,div'))
-    .map((e) => norm(e.textContent))
-    .find(
-      (t) => /articoli correlati|related articles|contenuti correlati/i.test(t) && t.length < 60,
-    );
-  out.collegati = {
-    counts: byType,
-    articleLinks: collegati.slice(0, 20),
-    inBodyArticleLinks: collegati.filter((c) => c.inArticleBody).length,
-    relatedSectionHeading: relatedHeading || null,
-  };
+    const relatedHeading = Array.from(document.querySelectorAll('h1,h2,h3,h4,span,div'))
+      .map((e) => norm(e.textContent))
+      .find(
+        (t) => /articoli correlati|related articles|contenuti correlati/i.test(t) && t.length < 60,
+      );
+    out.collegati = {
+      counts: byType,
+      articleLinks: collegati.slice(0, 20),
+      inBodyArticleLinks: collegati.filter((c) => c.inArticleBody).length,
+      relatedSectionHeading: relatedHeading || null,
+    };
+  });
 
   // --- Passa 4: profilo navigazione SPA ----------------------------------------
-  if (doSpa && (out.pageType === 'article' || out.pageType === 'detail')) {
+  await safe('4-spaNav', async () => {
+    if (!doSpa || !(out.pageType === 'article' || out.pageType === 'detail')) {
+      out.spaNav = {
+        skipped: doSpa ? `tipo pagina «${out.pageType}» non navigabile` : 'disabilitato',
+      };
+      return;
+    }
     const startUrl = location.href;
-    const startId = new URL(startUrl).origin + new URL(startUrl).pathname.replace(/\/+$/, '');
+    const pathId = (href) => new URL(href).origin + new URL(href).pathname.replace(/\/+$/, '');
+    const startId = pathId(startUrl);
     const idOf = () => location.origin + location.pathname.replace(/\/+$/, '');
     const bodyMarginBefore = document.body.style.marginRight || '';
     const navTargets = anchors
@@ -213,7 +261,6 @@
       }
       const fullReload = unloaded || typeof window.__rsMark === 'undefined';
       removeEventListener('beforeunload', onU);
-      // torna all'hub
       history.back();
       let backOk = false;
       for (let i = 0; i < 120; i++) {
@@ -224,7 +271,7 @@
         }
       }
       samples.push({ renderMs, fullReload, backOk });
-      if (!backOk) break; // non siamo tornati: fermati per non perderti
+      if (!backOk) break;
     }
     const lat = samples.map((s) => s.renderMs).filter((n) => typeof n === 'number');
     out.spaNav = {
@@ -241,19 +288,18 @@
       bodyMarginBefore,
       bodyMarginAfter: document.body.style.marginRight || '',
     };
-  } else {
-    out.spaNav = {
-      skipped: doSpa ? `tipo pagina «${out.pageType}» non navigabile` : 'disabilitato',
-    };
-  }
+  });
 
+  delete out._noiseLabels;
   const json = JSON.stringify(out, null, 2);
+  window.RS_MAP_JSON = json; // rileggibile con: copy(RS_MAP_JSON)
   console.log('%cRS-MAP', 'font-weight:bold;color:#0a7', '\n' + json);
+  if (out.errors.length) console.warn('[RS-MAP] alcune passe hanno dato errore:', out.errors);
   try {
     copy(json);
-    console.log('%c✓ Copiato nella clipboard — reincollalo in chat.', 'color:#0a7');
+    console.log('%c✓ Copiato nella clipboard — fai Ctrl+V in chat.', 'color:#0a7');
   } catch {
-    console.log('Clipboard non disponibile: copia manualmente il JSON qui sopra.');
+    console.log('Clipboard non disponibile: copia manualmente, o esegui  copy(RS_MAP_JSON)');
   }
   return out;
-})();
+})().catch((e) => console.error('[RS-MAP] errore fatale:', e));
