@@ -1,15 +1,16 @@
-// Il tour visivo è una "camminata in-page": driveTour legge il contenuto dei
-// target via shallowFollow(targets, query, targets.length) SENZA navigare. Qui
-// verifichiamo l'invariante centrale di quella lettura — pagine marcate
-// `followed`, una fetch per target con la sessione inclusa, target falliti
-// saltati e nessuna navigazione — con fetch stubato (pattern di client.test.ts).
+// shallowFollow alimenta la modalità "follow" (lettura in background via fetch;
+// il tour visivo su KB Salesforce usa invece la navigazione SPA). Qui
+// verifichiamo le invarianti di quella lettura via fetch: pagine marcate
+// `followed`, una fetch per target con la sessione inclusa, target falliti o
+// client-rendered (solo shell) scartati, e nessuna navigazione — con fetch
+// stubato (pattern di client.test.ts).
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { shallowFollow } from '../lib/crawl';
 import type { KbLink } from '../lib/outcome';
 
 const BASE = 'https://kb.example.com/wiki';
 
-/** Target come li passa driveTour: già dotati di `score` da pickRelevantLinks. */
+/** Target con `score`, come li seleziona pickRelevantLinks. */
 function target(text: string, url: string, score: number, matchedKeywords: string[] = []): KbLink {
   return { text, url, score, matchedKeywords };
 }
@@ -36,7 +37,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('shallowFollow — lettura in-page del tour', () => {
+describe('shallowFollow — modalità follow (lettura via fetch)', () => {
   it('legge in parallelo i target e li restituisce marcati followed', async () => {
     const targets = [
       target('Cambio indirizzo', `${BASE}/Cambio_indirizzo`, 12, ['indirizzo']),

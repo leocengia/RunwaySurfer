@@ -1,8 +1,13 @@
 # Piano — Tour a navigazione SPA (KB Salesforce)
 
-> Stato: **progettato, non ancora implementato.** Gated su `docs/recon-kb-3.js`.
-> Decisioni prese con l'utente: (1) tour a navigazione SPA; (2) le risposte
-> spesso richiedono articoli **collegati**, non solo quello corrente.
+> Stato: **hub-and-spoke via SPA implementato** (recon-3 ha confermato la
+> meccanica: route SPA ~1s, content-script sopravvive, `history.back()` torna
+> all'hub; i collegati sono cross-link nel corpo articolo). Costruiti
+> `lib/spa-nav.ts` (`waitForSpaRender`), `findLinkElement` per identità di path,
+> e il nuovo `useTourDriver.ts`. **Search-driven rimandata**: la pagina
+> `/s/global-search/<q>` è client-rendered e il recon non ne ha catturato i link
+> risultato. Da validare manualmente nel profilo KB (vedi Verifica).
+> Decisioni con l'utente: (1) tour a navigazione SPA; (2) servono i collegati.
 
 ## Contesto e vincolo
 
