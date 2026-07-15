@@ -295,11 +295,26 @@
   window.RS_MAP_JSON = json; // rileggibile con: copy(RS_MAP_JSON)
   console.log('%cRS-MAP', 'font-weight:bold;color:#0a7', '\n' + json);
   if (out.errors.length) console.warn('[RS-MAP] alcune passe hanno dato errore:', out.errors);
+
+  // Consegna a prova di rumore: SCARICA un file (la console di Salesforce spamma
+  // tantissimo e la riga può sfuggire). In più prova la clipboard.
+  try {
+    const blob = new Blob([json], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `rs-map-${out.pageType || 'page'}.json`;
+    document.documentElement.appendChild(a);
+    a.click();
+    a.remove();
+    console.log('%c✓ Scaricato file rs-map-*.json (guarda la barra download).', 'color:#0a7');
+  } catch (e) {
+    console.warn('[RS-MAP] download non riuscito:', e);
+  }
   try {
     copy(json);
-    console.log('%c✓ Copiato nella clipboard — fai Ctrl+V in chat.', 'color:#0a7');
+    console.log('%c✓ Copiato anche nella clipboard — fai Ctrl+V in chat.', 'color:#0a7');
   } catch {
-    console.log('Clipboard non disponibile: copia manualmente, o esegui  copy(RS_MAP_JSON)');
+    console.log('Clipboard non disponibile: apri il file scaricato, o esegui  copy(RS_MAP_JSON)');
   }
   return out;
 })().catch((e) => console.error('[RS-MAP] errore fatale:', e));
