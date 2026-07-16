@@ -204,6 +204,29 @@ _Dal pannello sidebar (AiPlan) su 3-5 query reali, prima di ottimizzare._
 
 ---
 
+## Passa 8 — Enumerazione (deep scan, Fase A)
+
+Obiettivo: inventario URL quasi-completo + tassonomia topic↔articolo, senza aprire ogni articolo.
+Esegui in ordine, in inglese (`?language=en_US`), profilo autenticato:
+
+1. **`docs/recon-kb-sitemap.js`** — su una pagina `…/Runway/s/`: cerca robots/sitemap. Scarica
+   `rs-sitemap-inventory.json`. (Prima, a mano: apri `…/robots.txt` e `…/Runway/s/sitemap.xml`
+   e dimmi se sono XML o pagina/redirect.)
+2. **`docs/recon-kb-topics.js`** — parti dalla **home** `/Runway/s/`, poi apri ogni pagina
+   **topic** e ri-eseguilo (scrolla/"load more" da solo). Scarica un `rs-topic-<id>.json` per
+   topic; segui i `childTopics` non ancora visitati.
+3. **`docs/recon-kb-search.js`** — cerca a mano alcuni termini **inglesi** ampi (`booking`,
+   `refund`, `schedule`, `baggage`…) e, sulla pagina risultati, eseguilo. Annota `resultTotal`.
+4. **`docs/recon-kb-merge.js`** — su una pagina qualsiasi: seleziona TUTTI i JSON scaricati →
+   `rs-kb-inventory.jsonl` + `rs-kb-summary.json`. Reincollami il summary.
+
+**Conteggi (cross-check copertura):** sitemap S = _..._ · topic-sweep T = _..._ · search-total = _..._
+Delta guest/auth (una URL in incognito) = _..._ → **coverage confidence:** _(alta/media/bassa)_
+
+**Tassonomia (topic → n. articoli):** _(dal summary)_
+
+**Conclusioni (→ inventario per l'indice KB, tassonomia per lo scoring):** _..._
+
 ## Sintesi finale (input per la fase di ottimizzazione)
 
 _Una volta compilate le passe, riassumi qui i valori decisi per ciascuna manopola._

@@ -128,6 +128,12 @@
   out.results = items.slice(0, 12);
   // contenitori distinti (per capire il selettore della lista risultati)
   out.distinctItemContainers = [...new Set(items.map((r) => r.itemContainer))];
+  // Totale risultati dichiarato dalla KB (per il cross-check di copertura, Fase A3):
+  // cerca un pattern tipo "123 results" / "123 risultati" nel testo di [role=main].
+  const mainTxt = norm(mainEl().innerText || mainEl().textContent || '');
+  const totalMatch = mainTxt.match(/([\d.,]+)\s*(results?|risultati?|articles?|articoli?)/i);
+  out.resultTotalText = totalMatch ? totalMatch[0] : null;
+  out.resultTotal = totalMatch ? Number(totalMatch[1].replace(/[.,]/g, '')) : null;
 
   const json = JSON.stringify(out, null, 2);
   console.log('%cRS-SEARCH', 'font-weight:bold;color:#0a7', '\n' + json);
