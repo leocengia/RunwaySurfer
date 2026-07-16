@@ -190,6 +190,23 @@
       head: bodyText.slice(0, 200),
       tail: bodyText.slice(-200),
     };
+
+    // Anteprima del corpo DOPO la rimozione del rumore proposto: misura quanti
+    // caratteri (≈ token) risparmieremmo e se i metadati spariscono davvero.
+    const PROPOSED_NOISE =
+      '.comm-content-header, .comm-content-footer, header.forceHighlightsPanel,' +
+      ' .forceCommunityRecordHeadline, .slds-page-header_record-home,' +
+      ' .slds-medium-size--4-of-12, script, style, nav, footer';
+    const clone = mainEl().cloneNode(true);
+    clone.querySelectorAll(PROPOSED_NOISE).forEach((n) => n.remove());
+    const cleaned = norm(clone.textContent || '');
+    out.extractionSample.cleanedPreview = {
+      proposedNoiseSelectors: PROPOSED_NOISE,
+      chars: cleaned.length,
+      metadataLeaks: NOISE_LABELS.filter((l) => cleaned.includes(l)),
+      head: cleaned.slice(0, 200),
+      tail: cleaned.slice(-200),
+    };
   });
   if (!bestBody) bestBody = mainEl();
 
@@ -254,6 +271,40 @@
       inBodyArticleLinks: collegati.filter((c) => c.inArticleBody).length,
       relatedSectionHeading: relatedHeading || null,
     };
+
+    // Pannello "Suggested Articles" (colonna 4-of-12): sorgente di collegati.
+    // I suoi elementi cliccabili potrebbero NON essere <a href> classici, quindi
+    // catturo sia gli <a> sia gli elementi con role/data-* per capire come sono
+    // resi (e quindi come navigarli).
+    const boxes = Array.from(mainEl().querySelectorAll('div, section, aside')).filter((el) => {
+      const t = norm(el.textContent || '');
+      return (
+        /suggested articles|articoli suggeriti|related articles|contenuti correlati/i.test(t) &&
+        t.length < 3000
+      );
+    });
+    const suggBox = boxes.sort((a, b) => textOf(a).length - textOf(b).length)[0];
+    if (suggBox) {
+      out.suggestedArticles = {
+        container: selOf(suggBox),
+        chars: textOf(suggBox).length,
+        anchors: Array.from(suggBox.querySelectorAll('a[href]'))
+          .slice(0, 10)
+          .map((a) => ({ text: norm(a.textContent).slice(0, 80), href: a.href })),
+        clickable: Array.from(
+          suggBox.querySelectorAll('[role="link"],[data-target-selection-name],button,li,span'),
+        )
+          .filter((e) => norm(e.textContent).length > 8)
+          .slice(0, 10)
+          .map((e) => ({
+            tag: e.tagName.toLowerCase(),
+            selector: selOf(e),
+            text: norm(e.textContent).slice(0, 80),
+          })),
+      };
+    } else {
+      out.suggestedArticles = { note: 'nessun pannello Suggested/Correlati trovato' };
+    }
   });
 
   // --- Passa 4: profilo navigazione SPA ----------------------------------------
