@@ -86,6 +86,15 @@ backend). Quando la mappa è piena, pianifichiamo la fase di ottimizzazione sui 
 
 ---
 
+## Decisione lingua (emersa dal recon)
+
+Il **contenuto degli articoli è in inglese** (`lang=en-US`) e la **ricerca della KB non funziona
+con query in italiano**. Decisione: **retrieval/ricerca in inglese** (dove stanno i dati e dove la
+ricerca funziona) + **UI sidebar in italiano** + **risposta generata in italiano** (il backend già
+produce sezioni IT). Conseguenza: lo scoring locale per keyword è debole cross-lingua → appoggiarsi
+a ricerca KB / Suggested Articles più che al matching di parole; eventualmente tradurre la query
+IT→EN prima della ricerca (raffinamento futuro).
+
 ## Passa 0 — Tassonomia URL / tipi di pagina
 
 _Incolla il campo `pageType`/`pathname`/`params` da ogni run + una riga di sintesi._
@@ -109,8 +118,17 @@ _Incolla `contentRoot` e `noiseCandidates` di 2-3 articoli._
 (incolla qui)
 ```
 
-**Selettore corpo articolo scelto (→ `contentSelectors` / probe `waitForSpaRender`):** _..._
-**Selettori di rumore da aggiungere (→ `noiseSelectors`):** _..._
+**Selettore corpo articolo scelto (→ `contentSelectors` / probe `waitForSpaRender`) — PRELIMINARE (1 articolo):**
+`[role="main"]` = `div.body.isPageWidthFixed-true` (27.8k char, tutto incluso). Il corpo vero è
+la colonna **8-of-12** (`div.slds-col--padded.slds-size--12-of-12.slds-medium-size--8-of-12`, ~26k).
+Le classi SLDS sono generiche → più robusto tenere `[role="main"]` e rimuovere il rumore (sotto).
+
+**Selettori di rumore da aggiungere (→ `noiseSelectors`) — PRELIMINARE:**
+`.comm-content-header` (metadati: Preferred Language/Record Type/Article Number/Legacy Id/Publication
+Status), `.comm-content-footer` (Report a Problem/feedback), `header.forceHighlightsPanel` +
+`.forceCommunityRecordHeadline` + `.slds-page-header_record-home` (record headline), e — per
+l'estrazione del TESTO — la colonna `.slds-medium-size--4-of-12` (Suggested Articles, utile come
+LINK ma non come testo). Da confermare su più articoli.
 
 ## Passa 2 — Qualità estrazione (≥5 articoli)
 
@@ -130,7 +148,12 @@ _Incolla `collegati` per ciascun articolo._
 | -------- | --------------- | ----------- | -------------------- | ---------------- |
 |          |                 |             |                      |                  |
 
-**Conclusioni (→ `extractInternalLinks` max, pesi scoring, `MAX_FOLLOW`; serve la ricerca?):** _..._
+**Conclusioni (→ `extractInternalLinks` max, pesi scoring, `MAX_FOLLOW`; serve la ricerca?) — PRELIMINARE:**
+I "collegati" NON sono cross-link nel corpo (0 in 2 articoli), ma un pannello **"Suggested Articles"**
+(colonna 4-of-12) con le raccomandazioni della KB. I suoi link non sono `<a href>` classici catturati
+dallo scan generico (sonda `suggestedArticles` in verifica). → due sorgenti reali di collegati:
+**Suggested Articles** + **ricerca KB**. Lo scoring per-keyword locale conta poco (query IT vs
+contenuto EN). Serve la ricerca (Passa 5) e/o leggere i Suggested.
 
 ## Passa 4 — Profilo navigazione SPA
 
