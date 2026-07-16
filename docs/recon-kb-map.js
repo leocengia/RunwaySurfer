@@ -123,10 +123,30 @@
       roleMainChars: mainText().length,
     };
 
+    // Outline: struttura interna di [role=main] (selettore + n. char per blocco),
+    // per capire dove si spezzano header-metadati / corpo / footer-feedback e
+    // scegliere il content-root e i selettori di rumore giusti.
+    const outline = [];
+    const walk = (el, depth) => {
+      if (depth > 3 || outline.length > 45 || !el) return;
+      for (const c of Array.from(el.children || [])) {
+        const t = textOf(c);
+        if (t.length < 150) continue;
+        outline.push({ depth, selector: selOf(c), chars: t.length, head: t.slice(0, 60) });
+        walk(c, depth + 1);
+      }
+    };
+    walk(mainEl(), 0);
+    out.contentRoot.outline = outline;
+
     const NOISE_LABELS = [
       'Legacy Id',
       'Stato pubblicazione',
+      'Publication Status',
       'Pubblicato',
+      'Preferred Language',
+      'Record Type',
+      'New Info',
       'Article Number',
       'URL Name',
       'Data ultima modifica',
@@ -134,6 +154,8 @@
       'Article Total View',
       'Valuta questo articolo',
       'Rate this article',
+      'feedback about',
+      'upcoming survey',
     ];
     out._noiseLabels = NOISE_LABELS;
     const noiseHits = [];
@@ -189,6 +211,14 @@
         return false;
       }
     };
+    const selfPath = location.pathname.replace(/\/+$/, '');
+    const inError = (a) => {
+      try {
+        return !!a.closest('#auraError, .auraErrorBox');
+      } catch {
+        return false;
+      }
+    };
     const byType = { article: 0, detail: 0, topic: 0, category: 0, search: 0, home: 0, other: 0 };
     const collegati = [];
     const seenLink = new Set();
@@ -196,7 +226,13 @@
       const type = classify(u);
       byType[type]++;
       const key = u.pathname;
-      if ((type === 'article' || type === 'detail') && !seenLink.has(key)) {
+      // Esclude il self-link (stesso articolo) e i link fasulli dell'auraErrorBox.
+      if (
+        (type === 'article' || type === 'detail') &&
+        !seenLink.has(key) &&
+        u.pathname.replace(/\/+$/, '') !== selfPath &&
+        !inError(a)
+      ) {
         seenLink.add(key);
         collegati.push({
           type,
