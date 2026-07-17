@@ -220,6 +220,12 @@ Esegui in ordine, in inglese (`?language=en_US`), profilo autenticato:
 4. **`docs/recon-kb-merge.js`** — su una pagina qualsiasi: seleziona TUTTI i JSON scaricati →
    `rs-kb-inventory.jsonl` + `rs-kb-summary.json`. Reincollami il summary.
 
+**Sitemap: TROVATA** ✅ — `…/Runway/s/sitemap.xml` è un `<sitemapindex>` con 7 figli:
+`sitemap-topicarticle-1..4.xml` + `-weekly.xml` (URL articoli), `sitemap-topic-1.xml` (topic),
+`sitemap-view-1.xml`. `robots.txt` = `Allow: /` (nessun blocco). → enumerazione quasi completa e
+gratuita via sitemap; lo sweep manuale dei topic serve solo per il mapping topic→articolo se la
+sitemap non lo codifica. (`recon-kb-sitemap.js` segue l'index e scarica tutti i figli.)
+
 **Conteggi (cross-check copertura):** sitemap S = _..._ · topic-sweep T = _..._ · search-total = _..._
 Delta guest/auth (una URL in incognito) = _..._ → **coverage confidence:** _(alta/media/bassa)_
 
