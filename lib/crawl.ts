@@ -6,39 +6,12 @@
 // Runway KB that is the agent's SSO session: no separate credentials.
 import type { KbLink, KbPage } from './outcome';
 import { extractPageText, hasRenderedContent } from './extract';
+import { matchedKeywords, normalize, unique, wordsOf } from './text';
 
 const MAX_FOLLOW = 3;
 const MIN_SELECTED_SCORE = 5;
 const STRONG_SINGLE_SCORE = 13;
 const SECONDARY_RATIO = 0.58;
-
-const STOP_WORDS = new Set([
-  'alla',
-  'allo',
-  'anche',
-  'come',
-  'con',
-  'dalla',
-  'delle',
-  'dello',
-  'deve',
-  'dopo',
-  'fare',
-  'gli',
-  'per',
-  'puo',
-  'puoi',
-  'qual',
-  'quale',
-  'sono',
-  'the',
-  'and',
-  'for',
-  'with',
-  'from',
-  'that',
-  'this',
-]);
 
 const GENERIC_LINK_WORDS = new Set([
   'overview',
@@ -66,25 +39,6 @@ const INTENT_ALIASES: Record<string, string[]> = {
   return: ['return', 'returns', 'reso', 'restituzione', 'restituire'],
 };
 
-function normalize(raw: string): string {
-  return raw
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
-}
-
-function unique<T>(values: T[]): T[] {
-  return Array.from(new Set(values));
-}
-
-function wordsOf(text: string): string[] {
-  return unique(
-    normalize(text)
-      .split(/[^a-z0-9]+/)
-      .filter((w) => w.length > 3 && !STOP_WORDS.has(w)),
-  );
-}
-
 function slugText(url: string): string {
   try {
     const parsed = new URL(url);
@@ -92,11 +46,6 @@ function slugText(url: string): string {
   } catch {
     return url;
   }
-}
-
-function matchedKeywords(text: string, keywords: string[]): string[] {
-  const haystack = normalize(text);
-  return keywords.filter((kw) => haystack.includes(kw));
 }
 
 function queryConcepts(query: string): string[] {

@@ -37,6 +37,39 @@ describe('extractPageText', () => {
     expect(text.length).toBeLessThanOrEqual(6003); // budget + '...'
     expect(text.endsWith('...')).toBe(true);
   });
+
+  it('isola la sezione pertinente in un articolo strutturato per heading', () => {
+    // Articolo lungo, più sezioni con intestazione: solo quella sui rimborsi
+    // deve arrivare; le sezioni bagaglio/check-in restano fuori.
+    const filler = (topic: string) =>
+      Array.from(
+        { length: 12 },
+        (_, i) => `<p>Dettagli su ${topic}, paragrafo ${i}, testo di riempimento lungo.</p>`,
+      ).join('');
+    document.body.innerHTML = `
+      <main>
+        <h2>Politica bagagli</h2>${filler('il bagaglio a mano e in stiva')}
+        <h2>Procedura di rimborso del volo</h2>
+        <p>Per il rimborso del volo cancellato apri una richiesta entro 30 giorni.</p>
+        ${filler('la procedura di rimborso passo passo')}
+        <h2>Check-in online</h2>${filler('il check-in e la carta di imbarco')}
+      </main>
+    `;
+    const text = extractPageText(document, 'come richiedo il rimborso di un volo?');
+    expect(text).toContain('rimborso del volo cancellato');
+    expect(text).toContain('Procedura di rimborso');
+    expect(text).not.toContain('carta di imbarco');
+  });
+
+  it('ricade sul retrieval per-blocco quando la pagina non ha heading', () => {
+    const filler = Array.from(
+      { length: 20 },
+      (_, i) => `<p>Paragrafo ${i} di contorno senza informazioni pertinenti.</p>`,
+    ).join('');
+    document.body.innerHTML = `<main>${filler}<p>Il rimborso del volo si richiede dal portale.</p></main>`;
+    const text = extractPageText(document, 'come ottengo il rimborso del volo?');
+    expect(text).toContain('rimborso del volo');
+  });
 });
 
 describe('extractInternalLinks', () => {
