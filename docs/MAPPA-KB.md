@@ -275,10 +275,33 @@ niente token live da leggere. `$A` presente ma `getContext().fwuid` non esposto 
 → corpo API ≥ corpo DOM. Tutti i criteri GO soddisfatti.
 
 **Conseguenze:** i 2.964 corpi si tirano via **una sola action `getRecord`** (veloce,
-strutturato, niente rumore DOM). La **ricerca** resta SPA (come da piano → ibrido). **Gap
-aperto:** la `getRecord` richiede il **`recordId`** (`ka0…`), la sitemap dà lo **slug** (`UrlName`).
-Serve risolvere slug→recordId (probe successiva: getRecord by UrlName, o action della pagina
-articolo che espone il mapping) prima del pull di massa (Fase C).
+strutturato, niente rumore DOM). La **ricerca** resta SPA (come da piano → ibrido).
+
+**Percorso di estrazione (VERIFICATO 2026-07-17 — era il pezzo che mi mancava):** il record
+**NON** sta in `action.returnValue` (è `null`!). Sta nei **`globalValueProviders`** della
+risposta:
+
+```
+resp.context.globalValueProviders[type="$Record"].values.records[<recordId>]
+    .Article__kav.record.fields
+```
+
+`fields` contiene: `Title`, `UrlName` (=slug), `Summary`, **`Details__c.value` (=corpo HTML)**,
+`Legacy_Id__c`, `LastModifiedDate`, `CreatedDate`, `Id`, `RecordTypeId`, `SystemModstamp`,
+`CurrencyIsoCode`, `LastModifiedBy(Id)`. Prova su `ka0Vs0000019bEHIAY`: `Details__c.value` =
+**125.973 caratteri** (~31k token per UN articolo → conferma che i corpi sono ancora più grandi
+del previsto; la leva "retrieval per-heading" della Fase E2 è ancora più importante).
+
+**slug→recordId (RISOLTO parzialmente):** la sitemap dà lo slug, `getRecord` vuole il `ka0…`.
+Vie **scartate** (tutte `ran:0` / non registrate): action Aura "by UrlName"
+(KnowledgeArticle*Controller, ArticleController…), `$A.get('c.…')` di server-controller,
+Knowledge REST `/services/data/vXX/support/knowledgeArticles/<slug>` (→ **401 INVALID_SESSION_ID**,
+serve Bearer OAuth che il cookie community non dà), `RecordUiController.getListsByObjectName`
+(→ `INCOMPLETE`), sniffer `fetch`/XHR installato tardi (Aura cattura il transport al boot →
+0 catture in isolated/late world). Via **che FUNZIONA:** il **LDS store** (`$A.storageService`)
+contiene i `ka0` degli articoli **caricati** dalla SPA (probe: 21 ka0 letti dalla cache). →
+strategia pull: **navigare l'articolo (SPA) → leggere il `ka0` da LDS → `getRecord` per il corpo**.
+Nessun mapping slug→recordId offline in blocco disponibile: serve un **crawler SPA** (Fase C).
 
 ## Sintesi finale (input per la fase di ottimizzazione)
 
