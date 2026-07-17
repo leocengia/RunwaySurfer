@@ -226,12 +226,28 @@ Esegui in ordine, in inglese (`?language=en_US`), profilo autenticato:
 gratuita via sitemap; lo sweep manuale dei topic serve solo per il mapping topic→articolo se la
 sitemap non lo codifica. (`recon-kb-sitemap.js` segue l'index e scarica tutti i figli.)
 
-**Conteggi (cross-check copertura):** sitemap S = _..._ · topic-sweep T = _..._ · search-total = _..._
-Delta guest/auth (una URL in incognito) = _..._ → **coverage confidence:** _(alta/media/bassa)_
+**Conteggi (da `rs-sitemap-inventory.json`, eseguito 2026-07-17):** `totalUrls` = **3.102** →
+**article 2.964**, **topic 135**, home 1, other 2 (`contactsupport`, `topiccatalog`). Le varianti
+di lingua (`?language=de/es/fr/it/ja/ko/pt_BR/zh_CN`) collassano sullo stesso `linkIdentity`
+(dedup già a 2.964). robots = `Allow:/`. → **coverage confidence: ALTA** (sitemap ufficiale,
+completa, non guest-only vista la sessione autenticata). Cross-check ricerca/topic-sweep NON
+necessario: enumerazione considerata completa.
 
-**Tassonomia (topic → n. articoli):** _(dal summary)_
+**Tassonomia (135 topic da `sitemap-topic-1.xml`):** ID Salesforce + slug noti. Categorie
+principali osservate: prodotti (`flight`, `lodging`, `car`, `package`, `cruise`, `insurance`,
+`activity`), azioni (`book`, `change`, `cancel`, `refund`, `billing`, `authorization`, `taxes`,
+`relocation`, `escalate`, `compensation`), brand/partner (`amex`, `rbc`, `mastercard`, `chase`,
+`bilt`, `sofi`, `cibc`, `scene`, `td-bank`, `expedia`, `hotelscom`, `vrbo`, `wotif`, `orbitz`,
+`cheaptickets`, `ebookers`, `travelocity`, `walmart`), ruoli/canali (`frontline-voice`,
+`frontline-chat`, `tier-2`, `offline`, `social-media`, `eps`, `taap`), aree (`us`, `ca`, `emea`,
+`apac`, `latam`), lingua (`english`, `nonenglish`). **La sitemap NON lega articolo→topic** (i
+record hanno solo `sources`): il legame si ricostruisce in Fase C (Suggested/headings/topic-page).
 
-**Conclusioni (→ inventario per l'indice KB, tassonomia per lo scoring):** _..._
+**Conclusioni (→ indice KB + vocabolario scoring):** l'inventario URL è pronto come base
+dell'indice KB (Fase D). La tassonomia dei 135 topic (slug) è già un ottimo **vocabolario di
+dominio** per rimpiazzare `INTENT_ALIASES` e-commerce (Fase E1) — è aviazione/travel, non generico.
+Resta da raccogliere per-articolo: `title` (la sitemap non lo dà), `topics[]`, `sizeChars`,
+`headings[]` → Fase B/C.
 
 ## Sintesi finale (input per la fase di ottimizzazione)
 
