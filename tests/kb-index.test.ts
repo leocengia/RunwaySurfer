@@ -7,9 +7,15 @@ function link(text: string, url: string, context?: string, order?: number): KbLi
   return { text, url, context, order };
 }
 
-describe('pickCandidatesWithKbIndex — indice vuoto (placeholder)', () => {
+describe('pickCandidatesWithKbIndex — indice vuoto', () => {
   it('ricade su pickRelevantLinks quando l’indice è vuoto', async () => {
-    // Con il placeholder (articles: []) deve comportarsi come lo scorer base.
+    // Indice vuoto esplicito (mock): deve comportarsi come lo scorer base.
+    // NB: l'asset reale lib/kb-index.json è popolato, quindi il caso "vuoto" va
+    // simulato con un mock per restare deterministico.
+    vi.resetModules();
+    vi.doMock('../lib/kb-index.json', () => ({
+      default: { origin: '', count: 0, articles: [] },
+    }));
     const { pickCandidatesWithKbIndex, pickRelevantLinks } = await import('../lib/crawl');
     const links = [
       link('Flight refund policy', `${BASE}/Flight-refund-policy`, 'refund for cancelled flights'),
@@ -19,6 +25,8 @@ describe('pickCandidatesWithKbIndex — indice vuoto (placeholder)', () => {
     expect(pickCandidatesWithKbIndex(links, query).map((l) => l.url)).toEqual(
       pickRelevantLinks(links, query).map((l) => l.url),
     );
+    vi.doUnmock('../lib/kb-index.json');
+    vi.resetModules();
   });
 });
 
@@ -80,5 +88,24 @@ describe('pickCandidatesWithKbIndex — indice popolato', () => {
     expect(matches).toHaveLength(1);
     vi.doUnmock('../lib/kb-index.json');
     vi.resetModules();
+  });
+});
+
+describe('indice KB reale (asset bundle-ato)', () => {
+  it('carica i 2.964 articoli e li espone come candidati', async () => {
+    const { kbIndexSize, kbIndexAsLinks } = await import('../lib/kb-index');
+    expect(kbIndexSize()).toBeGreaterThan(2_000);
+    const links = kbIndexAsLinks();
+    expect(links.length).toBe(kbIndexSize());
+    expect(links.every((l) => l.url.startsWith('http') && l.text.length > 0)).toBe(true);
+  });
+
+  it('una query IT su una pagina fuori tema pesca un articolo refund dalla KB reale', async () => {
+    const { pickCandidatesWithKbIndex } = await import('../lib/crawl');
+    // Pagina corrente senza link pertinenti: il candidato viene solo dall'indice.
+    const pageLinks = [link('Company history', `${BASE}/History`, 'about the company')];
+    const picked = pickCandidatesWithKbIndex(pageLinks, 'come chiedo il rimborso di un volo?');
+    expect(picked.length).toBeGreaterThan(0);
+    expect(picked.some((l) => /refund|flight/i.test(l.url))).toBe(true);
   });
 });
