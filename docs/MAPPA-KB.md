@@ -303,10 +303,32 @@ contiene i `ka0` degli articoli **caricati** dalla SPA (probe: 21 ka0 letti dall
 strategia pull: **navigare l'articolo (SPA) → leggere il `ka0` da LDS → `getRecord` per il corpo**.
 Nessun mapping slug→recordId offline in blocco disponibile: serve un **crawler SPA** (Fase C).
 
-## Sintesi finale (input per la fase di ottimizzazione)
+## Passa 10 — Ottimizzazione sidebar (Fase E) — **IMPLEMENTATA** ✅
 
-_Una volta compilate le passe, riassumi qui i valori decisi per ciascuna manopola._
+Decisione a monte: **on-demand, zero crawl** — il corpo si legge dal **DOM già
+renderizzato** (dove la sidebar è presente), non via API/crawler. L'API Aura (Passa 9) è servita
+solo come ricognizione (struttura dati, dimensioni reali). Le 4 leve, tutte con test, verdi
+`compile|lint|test|build`:
 
-- Sidebar: content-root=_..._, noise=_..._, rejectPathIncludes(SF)=_..._, caps=_..._,
-  spa-nav timing=_..._, scoring/vocabolario=_..._, search-driven sì/no=_..._
-- Backend: soglie router=_..._, max_request_pages/links/text=_..._, link-map ridotto=_..._
+- **E0 — `lib/text.ts`** (nuovo): util testo condivise (`normalize`, `STOP_WORDS`, `wordsOf`,
+  `matchedKeywords`, `countKeywords`, `unique`). `extract.ts` e `crawl.ts` deduplicati.
+- **E2 — retrieval per-heading** (`lib/extract.ts`, `queryFocusedText`): `sectionsByHeading`
+  segmenta l'articolo in sezioni intestazione→corpo; selezione a due stadi (sezione per
+  heading+lead, poi blocchi pertinenti dentro la sezione). Fallback per-blocco su pagine piatte.
+  **Leva #1 token:** da ~31k a ~4,5k per articolo, coeso. Server `max_page_text_chars` (6.000)
+  ≥ budget focalizzato (4.500): nessun ritaglio.
+- **E1 — vocabolario di dominio** (`lib/kb-vocab.ts`, nuovo): `INTENT_ALIASES` derivato dai 135
+  topic KB (refund/cancel/change/flight/baggage/lodging/billing…) al posto dell'e-commerce.
+- **E3 — cross-lingua IT→EN** (`expandQueryTerms`): per ogni concetto colpito dalla query (anche
+  via alias IT) inietta i termini EN; applicato a retrieval per-heading **e** scorer link. Risolve
+  "cercando in italiano non funziona".
+- **E4 — indice KB leggero** (`lib/kb-index.ts` + asset `lib/kb-index.json`, generato da
+  `docs/build-kb-index.mjs` dalla sitemap): `pickCandidatesWithKbIndex` unisce i link del DOM con
+  l'intero indice e li scora insieme → l'articolo giusto emerge anche se non linkato nella pagina,
+  **costo-token zero**. Dedup per identità. Innestato in `App.run` (follow); il tour resta sui
+  link di pagina (deve cliccarli). _NB: l'asset è placeholder finché non lo si popola col
+  `rs-sitemap-inventory.json` reale._
+
+**Manopole backend (E4-token) NON ancora ri-tarate:** `router.ts` (`SIMPLE_/MODERATE_*`, oggi
+tarate su Wikipedia), link-map in `provider/shared.ts`. Da fare dopo la **baseline token** reale
+(Passa 7) per un before/after quantificato.

@@ -6,3 +6,7 @@ server/dist/
 server/data/
 package-lock.json
 server/package-lock.json
+
+# Asset dati generato (indice KB dalla sitemap): minificato di proposito,
+# rigenerato da docs/build-kb-index.mjs — non va formattato.
+lib/kb-index.json
