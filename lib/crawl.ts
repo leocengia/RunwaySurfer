@@ -8,6 +8,8 @@ import type { KbLink, KbPage } from './outcome';
 import { extractPageText, hasRenderedContent } from './extract';
 import { matchedKeywords, normalize, unique, wordsOf } from './text';
 import { INTENT_ALIASES, expandQueryTerms } from './kb-vocab';
+import { kbIndexAsLinks } from './kb-index';
+import { linkIdentity } from './site-profile';
 
 const MAX_FOLLOW = 3;
 const MIN_SELECTED_SCORE = 5;
@@ -144,6 +146,40 @@ export function pickRelevantLinks(links: KbLink[], query: string, max = MAX_FOLL
   });
 
   return dynamicSelection(scored, max);
+}
+
+/**
+ * E4 · Candidati KB-wide a costo-token zero. `pickRelevantLinks` vede solo i
+ * link presenti nel DOM della pagina corrente; qui uniamo quei link con l'INTERO
+ * indice della KB (asset statico, consultato in locale) e li ordiniamo insieme
+ * con lo stesso scorer. Così l'articolo giusto emerge anche se non è linkato
+ * dalla pagina — senza alcun costo per l'AI (nessun corpo viene letto qui).
+ *
+ * I candidati dell'indice si deduplicano contro i link di pagina per identità
+ * canonica: un articolo già presente nella pagina non viene proposto due volte
+ * (e conserva il `context` reale del DOM, che l'indice non ha).
+ */
+export function pickCandidatesWithKbIndex(
+  pageLinks: KbLink[],
+  query: string,
+  max = MAX_FOLLOW,
+): KbLink[] {
+  const index = kbIndexAsLinks();
+  if (!index.length) return pickRelevantLinks(pageLinks, query, max);
+
+  const pageIds = new Set(pageLinks.map((l) => identityOf(l.url)));
+  const indexOnly = index.filter((l) => !pageIds.has(identityOf(l.url)));
+  // I link di pagina vengono per primi: a parità di score, il loro `order`
+  // reale (e il tie-break su URL) li tiene stabili rispetto ai sintetici.
+  return pickRelevantLinks([...pageLinks, ...indexOnly], query, max);
+}
+
+function identityOf(url: string): string {
+  try {
+    return linkIdentity(new URL(url));
+  } catch {
+    return url;
+  }
 }
 
 /** Fetch one same-origin page reusing the current session and extract its text. */

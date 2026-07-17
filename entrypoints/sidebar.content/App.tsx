@@ -7,7 +7,7 @@ import {
 } from 'react';
 import { browser } from 'wxt/browser';
 import { extractCurrentPage, extractInternalLinks } from '../../lib/extract';
-import { pickRelevantLinks, shallowFollow } from '../../lib/crawl';
+import { pickCandidatesWithKbIndex, shallowFollow } from '../../lib/crawl';
 import { streamAsk } from '../../lib/client';
 import { getProxyUrl } from '../../lib/messaging';
 import { clearToken, fetchMe, getToken, logout, type AuthUser } from '../../lib/auth';
@@ -323,7 +323,12 @@ export default function App() {
     const current = extractCurrentPage(query);
     const links = extractInternalLinks();
     const pages: KbPage[] = [current];
-    const askLinks = mode === 'follow' ? pickRelevantLinks(links, query) : links;
+    // E4 · in follow mode i candidati non vengono solo dai link della pagina ma
+    // dall'intero indice KB (a costo-token zero): l'articolo giusto emerge anche
+    // se non è linkato qui. shallowFollow legge il corpo solo di quelli
+    // effettivamente fetchabili (pagine renderizzate same-origin); i candidati
+    // dell'indice non leggibili restano come suggerimenti per la risposta.
+    const askLinks = mode === 'follow' ? pickCandidatesWithKbIndex(links, query) : links;
     if (mode === 'follow') {
       const followed = await shallowFollow(askLinks, query, askLinks.length);
       pages.push(...followed);
