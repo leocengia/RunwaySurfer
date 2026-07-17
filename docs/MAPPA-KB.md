@@ -249,6 +249,37 @@ dominio** per rimpiazzare `INTENT_ALIASES` e-commerce (Fase E1) — è aviazione
 Resta da raccogliere per-articolo: `title` (la sitemap non lo dà), `topics[]`, `sizeChars`,
 `headings[]` → Fase B/C.
 
+## Passa 9 — Cattura API Aura (deep scan, Fase B) — **DECISIONE: GO** ✅
+
+Verificato 2026-07-17 (cattura Network + probe in console, profilo autenticato).
+
+**Endpoint:** `POST /Runway/s/sfsites/aura` (form-urlencoded).
+**Action che porta il corpo:** `serviceComponent://ui.force.components.controllers.recordGlobalValueProvider.RecordGvpController/ACTION$getRecord` (descriptor **nominato e stabile**, non hash).
+**Param:** `recordDescriptor = "<recordId>.undefined.FULL.null.null.<campi>.VIEW.true.null.null.null"`.
+La lista `<campi>` va **richiesta esplicitamente**: con solo `Summary` il `returnValue` è `null`;
+aggiungendo `Details__c,Summary,Title,UrlName` la risposta contiene il record pieno.
+
+**Modello dati KB:** 1 articolo = 1 record **`Article__kav`** (keyPrefix `ka0`, nameField `Title`).
+Campi utili: **`Title`**, **`UrlName`** (= lo slug degli URL sitemap), **`Summary`**,
+**`Details__c`** (= **corpo HTML completo**, in `fields.Details__c.value`), `CreatedDate`,
+`CurrencyIsoCode`, `LastModifiedDate`, `Legacy_Id__c`.
+
+**Auth/token:** l'auth passa dal **cookie di sessione** — `aura.token` è `null` ed è normale
+su Experience Cloud pubblico. La probe ha funzionato con `aura.token:'null'` e `fwuid`
+hard-coded (`OUcwT3JDYUZld21JQ2ZOckR1VnppUWtVMjdnTGFERUU2S3FfSVdrcU92bkExNC4xOTIuODM4ODYwOA`) —
+niente token live da leggere. `$A` presente ma `getContext().fwuid` non esposto direttamente
+(irrilevante: il `fwuid` sta nel body della cattura).
+
+**Prova (WestJet `ka0Vs0000019bEHIAY`):** una singola POST → `status 200`, **139.340 byte**,
+`state:SUCCESS`, `fields.Details__c.value` = `"<p><strong>Update history</strong></p>\n<table…"`
+→ corpo API ≥ corpo DOM. Tutti i criteri GO soddisfatti.
+
+**Conseguenze:** i 2.964 corpi si tirano via **una sola action `getRecord`** (veloce,
+strutturato, niente rumore DOM). La **ricerca** resta SPA (come da piano → ibrido). **Gap
+aperto:** la `getRecord` richiede il **`recordId`** (`ka0…`), la sitemap dà lo **slug** (`UrlName`).
+Serve risolvere slug→recordId (probe successiva: getRecord by UrlName, o action della pagina
+articolo che espone il mapping) prima del pull di massa (Fase C).
+
 ## Sintesi finale (input per la fase di ottimizzazione)
 
 _Una volta compilate le passe, riassumi qui i valori decisi per ciascuna manopola._
