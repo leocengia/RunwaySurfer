@@ -4,6 +4,7 @@
 import type { KbPage, KbLink } from './outcome';
 import { linkIdentity, normalizeLinkUrl, siteProfile } from './site-profile';
 import { countKeywords, wordsOf } from './text';
+import { expandQueryTerms } from './kb-vocab';
 
 /** Rough token budget for a single page's text (~4 chars/token). */
 const MAX_PAGE_CHARS = 6_000;
@@ -19,12 +20,15 @@ function pickContentRoot(doc: Document): Element {
 }
 
 /**
- * Keyword della query per il retrieval: non deduplica (una keyword ripetuta
- * nella query \u00e8 un segnale, non rumore) e mantiene la semantica dello storico
- * `keywordsOf`.
+ * Keyword della query per il retrieval. Non deduplica (una keyword ripetuta \u00e8
+ * un segnale). In coda aggiunge l'espansione cross-lingua (E3): i termini EN
+ * del concetto di dominio colpito dalla query, cos\u00ec il retrieval trova la
+ * sezione giusta anche quando la query \u00e8 in italiano e il contenuto in inglese
+ * (es. "rimborso" \u2192 "refund").
  */
 function keywordsOf(query: string): string[] {
-  return wordsOf(query, false);
+  const base = wordsOf(query, false);
+  return [...base, ...expandQueryTerms(query, base)];
 }
 
 /** Collapse whitespace and trim to the page budget. */

@@ -70,6 +70,27 @@ describe('extractPageText', () => {
     const text = extractPageText(document, 'come ottengo il rimborso del volo?');
     expect(text).toContain('rimborso del volo');
   });
+
+  it('cross-lingua: query IT trova la sezione EN pertinente (rimborso→refund)', () => {
+    const filler = (topic: string) =>
+      Array.from(
+        { length: 12 },
+        (_, i) => `<p>About ${topic}, paragraph ${i}, long filler text.</p>`,
+      ).join('');
+    document.body.innerHTML = `
+      <main>
+        <h2>Baggage allowance</h2>${filler('carry-on and checked baggage')}
+        <h2>Flight refund policy</h2>
+        <p>Refund requests for a cancelled flight must be filed within 30 days.</p>
+        ${filler('the refund process step by step')}
+        <h2>Online check-in</h2>${filler('check-in and boarding pass')}
+      </main>
+    `;
+    // Query interamente in italiano; contenuto interamente in inglese.
+    const text = extractPageText(document, 'come richiedo il rimborso di un volo cancellato?');
+    expect(text).toContain('Refund requests');
+    expect(text).not.toContain('boarding pass');
+  });
 });
 
 describe('extractInternalLinks', () => {

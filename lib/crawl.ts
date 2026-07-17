@@ -7,6 +7,7 @@
 import type { KbLink, KbPage } from './outcome';
 import { extractPageText, hasRenderedContent } from './extract';
 import { matchedKeywords, normalize, unique, wordsOf } from './text';
+import { INTENT_ALIASES, expandQueryTerms } from './kb-vocab';
 
 const MAX_FOLLOW = 3;
 const MIN_SELECTED_SCORE = 5;
@@ -27,17 +28,6 @@ const GENERIC_LINK_WORDS = new Set([
   'category',
   'help',
 ]);
-
-const INTENT_ALIASES: Record<string, string[]> = {
-  address: ['address', 'indirizzo', 'deliveryaddress', 'shippingaddress', 'recapito'],
-  cancel: ['cancel', 'cancellation', 'annulla', 'annullare', 'cancellare', 'rimborso'],
-  change: ['change', 'changed', 'modify', 'update', 'edit', 'cambiare', 'modifica', 'aggiorna'],
-  delivery: ['delivery', 'shipping', 'shipment', 'spedizione', 'consegna'],
-  order: ['order', 'booking', 'purchase', 'ordine', 'acquisto', 'prenotazione'],
-  payment: ['payment', 'billing', 'invoice', 'pagamento', 'fattura', 'addebito'],
-  refund: ['refund', 'reimbursement', 'rimborso', 'rimborsare', 'credito'],
-  return: ['return', 'returns', 'reso', 'restituzione', 'restituire'],
-};
 
 function slugText(url: string): string {
   try {
@@ -132,8 +122,12 @@ function dynamicSelection(
 
 /** Pick the top relevant links, dynamically narrowing weak candidates. */
 export function pickRelevantLinks(links: KbLink[], query: string, max = MAX_FOLLOW): KbLink[] {
-  const kws = wordsOf(query);
-  if (!kws.length) return [];
+  const base = wordsOf(query);
+  if (!base.length) return [];
+  // E3 · espansione cross-lingua: aggiunge i termini EN dei concetti colpiti
+  // dalla query (anche via alias IT), così label/slug inglesi matchano una
+  // query italiana. I concetti restano gestiti a parte in scoreLink.
+  const kws = unique([...base, ...expandQueryTerms(query, base)]);
 
   const scored = links.map((link, fallbackOrder) => {
     const result = scoreLink(link, kws, query);
