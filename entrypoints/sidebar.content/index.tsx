@@ -6,7 +6,8 @@ import App from './App';
 import './style.css';
 
 export default defineContentScript({
-  matches: ['*://*.wikipedia.org/*'],
+  // KB reale (Salesforce Experience Cloud) + Wikipedia per il demo/dev.
+  matches: ['https://traveler.my.site.com/Runway/*', '*://*.wikipedia.org/*'],
   cssInjectionMode: 'ui',
   async main(ctx) {
     const ui = await createShadowRootUi(ctx, {

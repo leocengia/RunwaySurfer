@@ -5,40 +5,16 @@
 // reuses whatever session the browser already has for this origin. On the real
 // Runway KB that is the agent's SSO session: no separate credentials.
 import type { KbLink, KbPage } from './outcome';
-import { extractPageText } from './extract';
+import { extractPageText, hasRenderedContent } from './extract';
+import { matchedKeywords, normalize, unique, wordsOf } from './text';
+import { INTENT_ALIASES, expandQueryTerms } from './kb-vocab';
+import { kbIndexAsLinks } from './kb-index';
+import { linkIdentity } from './site-profile';
 
 const MAX_FOLLOW = 3;
 const MIN_SELECTED_SCORE = 5;
 const STRONG_SINGLE_SCORE = 13;
 const SECONDARY_RATIO = 0.58;
-
-const STOP_WORDS = new Set([
-  'alla',
-  'allo',
-  'anche',
-  'come',
-  'con',
-  'dalla',
-  'delle',
-  'dello',
-  'deve',
-  'dopo',
-  'fare',
-  'gli',
-  'per',
-  'puo',
-  'puoi',
-  'qual',
-  'quale',
-  'sono',
-  'the',
-  'and',
-  'for',
-  'with',
-  'from',
-  'that',
-  'this',
-]);
 
 const GENERIC_LINK_WORDS = new Set([
   'overview',
@@ -55,36 +31,6 @@ const GENERIC_LINK_WORDS = new Set([
   'help',
 ]);
 
-const INTENT_ALIASES: Record<string, string[]> = {
-  address: ['address', 'indirizzo', 'deliveryaddress', 'shippingaddress', 'recapito'],
-  cancel: ['cancel', 'cancellation', 'annulla', 'annullare', 'cancellare', 'rimborso'],
-  change: ['change', 'changed', 'modify', 'update', 'edit', 'cambiare', 'modifica', 'aggiorna'],
-  delivery: ['delivery', 'shipping', 'shipment', 'spedizione', 'consegna'],
-  order: ['order', 'booking', 'purchase', 'ordine', 'acquisto', 'prenotazione'],
-  payment: ['payment', 'billing', 'invoice', 'pagamento', 'fattura', 'addebito'],
-  refund: ['refund', 'reimbursement', 'rimborso', 'rimborsare', 'credito'],
-  return: ['return', 'returns', 'reso', 'restituzione', 'restituire'],
-};
-
-function normalize(raw: string): string {
-  return raw
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
-}
-
-function unique<T>(values: T[]): T[] {
-  return Array.from(new Set(values));
-}
-
-function wordsOf(text: string): string[] {
-  return unique(
-    normalize(text)
-      .split(/[^a-z0-9]+/)
-      .filter((w) => w.length > 3 && !STOP_WORDS.has(w)),
-  );
-}
-
 function slugText(url: string): string {
   try {
     const parsed = new URL(url);
@@ -92,11 +38,6 @@ function slugText(url: string): string {
   } catch {
     return url;
   }
-}
-
-function matchedKeywords(text: string, keywords: string[]): string[] {
-  const haystack = normalize(text);
-  return keywords.filter((kw) => haystack.includes(kw));
 }
 
 function queryConcepts(query: string): string[] {
@@ -183,8 +124,12 @@ function dynamicSelection(
 
 /** Pick the top relevant links, dynamically narrowing weak candidates. */
 export function pickRelevantLinks(links: KbLink[], query: string, max = MAX_FOLLOW): KbLink[] {
-  const kws = wordsOf(query);
-  if (!kws.length) return [];
+  const base = wordsOf(query);
+  if (!base.length) return [];
+  // E3 · espansione cross-lingua: aggiunge i termini EN dei concetti colpiti
+  // dalla query (anche via alias IT), così label/slug inglesi matchano una
+  // query italiana. I concetti restano gestiti a parte in scoreLink.
+  const kws = unique([...base, ...expandQueryTerms(query, base)]);
 
   const scored = links.map((link, fallbackOrder) => {
     const result = scoreLink(link, kws, query);
@@ -203,6 +148,40 @@ export function pickRelevantLinks(links: KbLink[], query: string, max = MAX_FOLL
   return dynamicSelection(scored, max);
 }
 
+/**
+ * E4 · Candidati KB-wide a costo-token zero. `pickRelevantLinks` vede solo i
+ * link presenti nel DOM della pagina corrente; qui uniamo quei link con l'INTERO
+ * indice della KB (asset statico, consultato in locale) e li ordiniamo insieme
+ * con lo stesso scorer. Così l'articolo giusto emerge anche se non è linkato
+ * dalla pagina — senza alcun costo per l'AI (nessun corpo viene letto qui).
+ *
+ * I candidati dell'indice si deduplicano contro i link di pagina per identità
+ * canonica: un articolo già presente nella pagina non viene proposto due volte
+ * (e conserva il `context` reale del DOM, che l'indice non ha).
+ */
+export function pickCandidatesWithKbIndex(
+  pageLinks: KbLink[],
+  query: string,
+  max = MAX_FOLLOW,
+): KbLink[] {
+  const index = kbIndexAsLinks();
+  if (!index.length) return pickRelevantLinks(pageLinks, query, max);
+
+  const pageIds = new Set(pageLinks.map((l) => identityOf(l.url)));
+  const indexOnly = index.filter((l) => !pageIds.has(identityOf(l.url)));
+  // I link di pagina vengono per primi: a parità di score, il loro `order`
+  // reale (e il tie-break su URL) li tiene stabili rispetto ai sintetici.
+  return pickRelevantLinks([...pageLinks, ...indexOnly], query, max);
+}
+
+function identityOf(url: string): string {
+  try {
+    return linkIdentity(new URL(url));
+  } catch {
+    return url;
+  }
+}
+
 /** Fetch one same-origin page reusing the current session and extract its text. */
 async function fetchPage(link: KbLink, query: string): Promise<KbPage | null> {
   try {
@@ -210,6 +189,15 @@ async function fetchPage(link: KbLink, query: string): Promise<KbPage | null> {
     if (!res.ok) return null;
     const html = await res.text();
     const doc = new DOMParser().parseFromString(html, 'text/html');
+    // Pagina client-rendered (es. Salesforce Aura): il fetch vede solo lo
+    // shell, senza il testo dell'articolo. La scarto invece di inviare una
+    // pagina vuota all'AI (token sprecati + risposta peggiore).
+    if (!hasRenderedContent(doc)) {
+      console.warn(
+        `[rs] pagina client-rendered senza contenuto nell'HTML grezzo, la salto: ${link.url}`,
+      );
+      return null;
+    }
     return {
       url: link.url,
       title: doc.title || link.text,

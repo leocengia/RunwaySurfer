@@ -57,4 +57,17 @@ describe('pickRelevantLinks', () => {
     const picked = pickRelevantLinks(links, 'rimborso ordine', 3);
     expect(picked.length).toBeLessThanOrEqual(3);
   });
+
+  it('usa il vocabolario di dominio (aviazione) per collegare query IT a slug EN', () => {
+    // Query in italiano ("rimborso del volo"); l'articolo giusto ha slug/label
+    // inglesi. Il concetto refund/flight deve farlo emergere sopra il rumore.
+    const links = [
+      link('Flight refund policy', `${BASE}/Flight-refund-policy`, 'refund for cancelled flights'),
+      link('Baggage allowance', `${BASE}/Baggage-allowance`, 'checked and carry-on bags'),
+      link('Company history', `${BASE}/History`),
+    ];
+    const picked = pickRelevantLinks(links, 'come chiedo il rimborso del volo cancellato?');
+    expect(picked[0].url).toBe(`${BASE}/Flight-refund-policy`);
+    expect(picked[0].reason).toContain('intent');
+  });
 });

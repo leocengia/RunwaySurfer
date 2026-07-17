@@ -3,18 +3,29 @@
 // This operates on the host document (Wikipedia in the demo), NOT the sidebar's
 // shadow root. The visual effects that used to live here (highlight style,
 // scroll, dwell) moved to lib/fx/.
-import { normalizeUrl } from './tour';
+import { linkIdentity } from './site-profile';
 
 /**
- * Find the host-page anchor whose fragment-stripped href matches `targetUrl`.
- * Uses the same normalization as extractInternalLinks so the target captured on
- * the start page reliably matches its live anchor.
+ * Find the host-page anchor that points to the same page as `targetUrl`.
+ * Matches by PATH IDENTITY (origin+pathname), non per URL pieno: sulla KB
+ * Salesforce lo stesso articolo compare con param diversi (?language / ?nocache)
+ * e il target memorizzato tiene solo ?language, quindi un confronto sull'URL
+ * completo mancherebbe l'anchor. linkIdentity ignora query e fragment.
  */
 export function findLinkElement(targetUrl: string): HTMLAnchorElement | null {
-  const want = normalizeUrl(targetUrl);
+  let want: string;
+  try {
+    want = linkIdentity(new URL(targetUrl, location.href));
+  } catch {
+    return null;
+  }
   for (const a of Array.from(document.querySelectorAll('a[href]'))) {
     const href = a.getAttribute('href') ?? '';
-    if (normalizeUrl(href) === want) return a as HTMLAnchorElement;
+    try {
+      if (linkIdentity(new URL(href, location.href)) === want) return a as HTMLAnchorElement;
+    } catch {
+      /* href non valido: salta */
+    }
   }
   return null;
 }

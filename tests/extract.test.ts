@@ -37,6 +37,60 @@ describe('extractPageText', () => {
     expect(text.length).toBeLessThanOrEqual(6003); // budget + '...'
     expect(text.endsWith('...')).toBe(true);
   });
+
+  it('isola la sezione pertinente in un articolo strutturato per heading', () => {
+    // Articolo lungo, più sezioni con intestazione: solo quella sui rimborsi
+    // deve arrivare; le sezioni bagaglio/check-in restano fuori.
+    const filler = (topic: string) =>
+      Array.from(
+        { length: 12 },
+        (_, i) => `<p>Dettagli su ${topic}, paragrafo ${i}, testo di riempimento lungo.</p>`,
+      ).join('');
+    document.body.innerHTML = `
+      <main>
+        <h2>Politica bagagli</h2>${filler('il bagaglio a mano e in stiva')}
+        <h2>Procedura di rimborso del volo</h2>
+        <p>Per il rimborso del volo cancellato apri una richiesta entro 30 giorni.</p>
+        ${filler('la procedura di rimborso passo passo')}
+        <h2>Check-in online</h2>${filler('il check-in e la carta di imbarco')}
+      </main>
+    `;
+    const text = extractPageText(document, 'come richiedo il rimborso di un volo?');
+    expect(text).toContain('rimborso del volo cancellato');
+    expect(text).toContain('Procedura di rimborso');
+    expect(text).not.toContain('carta di imbarco');
+  });
+
+  it('ricade sul retrieval per-blocco quando la pagina non ha heading', () => {
+    const filler = Array.from(
+      { length: 20 },
+      (_, i) => `<p>Paragrafo ${i} di contorno senza informazioni pertinenti.</p>`,
+    ).join('');
+    document.body.innerHTML = `<main>${filler}<p>Il rimborso del volo si richiede dal portale.</p></main>`;
+    const text = extractPageText(document, 'come ottengo il rimborso del volo?');
+    expect(text).toContain('rimborso del volo');
+  });
+
+  it('cross-lingua: query IT trova la sezione EN pertinente (rimborso→refund)', () => {
+    const filler = (topic: string) =>
+      Array.from(
+        { length: 12 },
+        (_, i) => `<p>About ${topic}, paragraph ${i}, long filler text.</p>`,
+      ).join('');
+    document.body.innerHTML = `
+      <main>
+        <h2>Baggage allowance</h2>${filler('carry-on and checked baggage')}
+        <h2>Flight refund policy</h2>
+        <p>Refund requests for a cancelled flight must be filed within 30 days.</p>
+        ${filler('the refund process step by step')}
+        <h2>Online check-in</h2>${filler('check-in and boarding pass')}
+      </main>
+    `;
+    // Query interamente in italiano; contenuto interamente in inglese.
+    const text = extractPageText(document, 'come richiedo il rimborso di un volo cancellato?');
+    expect(text).toContain('Refund requests');
+    expect(text).not.toContain('boarding pass');
+  });
 });
 
 describe('extractInternalLinks', () => {
@@ -58,6 +112,26 @@ describe('extractInternalLinks', () => {
     ]);
     expect(links[0].context).toContain('Sezione');
     expect(links[0].order).toBeTypeOf('number');
+  });
+
+  it('mantiene i link con query-string e deduplica le varianti (KB Salesforce)', () => {
+    // Origin uguale a quello dei test (kb.example.com) ma path in stile
+    // Salesforce Experience Cloud, con ?language / ?nocache / #.
+    document.body.innerHTML = `
+      <main>
+        <a href="/Runway/s/article/Rimborso?language=en_US">Rimborso</a>
+        <a href="/Runway/s/article/Rimborso?language=en_US#">Rimborso (fragment)</a>
+        <a href="/Runway/s/article/Rimborso?nocache=abc123">Rimborso (cache-buster)</a>
+        <a href="/Runway/s/topic/0TO5f000000/hotelscom">Hotels.com</a>
+      </main>
+    `;
+    const links = extractInternalLinks(document);
+    // Le tre varianti dell'articolo collassano in una (con ?language preservato);
+    // il topic resta distinto.
+    expect(links.map((l) => l.url)).toEqual([
+      'https://kb.example.com/Runway/s/article/Rimborso?language=en_US',
+      'https://kb.example.com/Runway/s/topic/0TO5f000000/hotelscom',
+    ]);
   });
 
   it('rispetta il limite massimo', () => {
