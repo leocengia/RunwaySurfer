@@ -6,7 +6,7 @@
 // server/network requirements) before AI licenses/tokens are sorted out.
 // Switching AI_PROVIDER=anthropic swaps in the real provider with no other
 // changes.
-import type { AiProvider, GenerateInput } from './shared.js';
+import type { AiProvider, GenerateInput, StreamResult } from './shared.js';
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -40,14 +40,16 @@ export class MockProvider implements AiProvider {
     input: GenerateInput,
     onDelta: (text: string) => void,
     signal?: AbortSignal,
-  ): Promise<void> {
+  ): Promise<StreamResult> {
     const text = buildOutcome(input);
     // Stream in small word groups to mimic token streaming.
     const tokens = text.match(/\S+\s*/g) ?? [text];
     for (let i = 0; i < tokens.length; i += 3) {
-      if (signal?.aborted) return;
+      if (signal?.aborted) return {};
       onDelta(tokens.slice(i, i + 3).join(''));
       await sleep(35);
     }
+    // Il mock non chiama alcun modello: nessun token reale da riportare.
+    return {};
   }
 }

@@ -19,14 +19,33 @@ export interface GenerateInput {
   model: string;
 }
 
+/** Token reali riportati dal provider (SDK), quando disponibili. */
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/**
+ * Esito dello streaming. `usage` è popolato solo dal provider reale quando l'SDK
+ * espone i conteggi (`message.usage`); il mock lo lascia assente. Chi persiste la
+ * history usa questi valori ACCANTO alle stime (non le sostituisce), così si vede
+ * stima-vs-reale.
+ */
+export interface StreamResult {
+  usage?: TokenUsage;
+}
+
 export interface AiProvider {
   readonly name: 'mock' | 'anthropic';
-  /** Stream the operational outcome as markdown, chunk by chunk. */
+  /**
+   * Stream the operational outcome as markdown, chunk by chunk. Ritorna gli
+   * eventuali token reali del provider (assenti sul mock).
+   */
   streamOutcome(
     input: GenerateInput,
     onDelta: (text: string) => void,
     signal?: AbortSignal,
-  ): Promise<void>;
+  ): Promise<StreamResult>;
 }
 
 /** System prompt: grounded, structured, final-answer-only (latency). */

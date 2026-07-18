@@ -86,16 +86,21 @@ function teamsRows(): string {
 
 function recentRows(): string {
   const rows = listRequests({ limit: 10 });
-  if (!rows.length) return '<tr><td colspan="7">Nessuna richiesta ancora registrata</td></tr>';
+  if (!rows.length) return '<tr><td colspan="8">Nessuna richiesta ancora registrata</td></tr>';
   return rows
-    .map(
-      (m) =>
-        `<tr><td>${escapeHtml(m.created_at.slice(11, 19))}</td><td>${escapeHtml(m.agent_id)}</td><td>${escapeHtml(
-          m.model,
-        )}</td><td>${m.pages_count}</td><td>${m.estimated_input_tokens}</td><td>$${m.estimated_cost_usd.toFixed(
-          4,
-        )}</td><td>${m.status === 'ok' ? '<span class="pill ok-bg">ok</span>' : '<span class="pill warn-bg">' + escapeHtml(m.status) + '</span>'}</td></tr>`,
-    )
+    .map((m) => {
+      // Token reali dal provider quando presenti (colonne actual_*, popolate solo
+      // dal provider reale): mostrati accanto alla stima come "in/out", "—" se null.
+      const real =
+        m.actual_input_tokens != null || m.actual_output_tokens != null
+          ? `${m.actual_input_tokens ?? '—'}/${m.actual_output_tokens ?? '—'}`
+          : '—';
+      return `<tr><td>${escapeHtml(m.created_at.slice(11, 19))}</td><td>${escapeHtml(m.agent_id)}</td><td>${escapeHtml(
+        m.model,
+      )}</td><td>${m.pages_count}</td><td>${m.estimated_input_tokens}</td><td>${real}</td><td>$${m.estimated_cost_usd.toFixed(
+        4,
+      )}</td><td>${m.status === 'ok' ? '<span class="pill ok-bg">ok</span>' : '<span class="pill warn-bg">' + escapeHtml(m.status) + '</span>'}</td></tr>`;
+    })
     .join('');
 }
 
@@ -387,7 +392,7 @@ export function renderDashboard(auth: AuthContext): string {
     </section>
     <section class="card" style="margin-top:12px">
       <div class="label">Recent requests</div>
-      <table><thead><tr><th>Time</th><th>Agent</th><th>Model</th><th>Pages</th><th>Input tok</th><th>Cost</th><th>Status</th></tr></thead><tbody>${recentRows()}</tbody></table>
+      <table><thead><tr><th>Time</th><th>Agent</th><th>Model</th><th>Pages</th><th>Est. in tok</th><th>Real in/out</th><th>Cost</th><th>Status</th></tr></thead><tbody>${recentRows()}</tbody></table>
     </section>
     <section class="card" style="margin-top:12px">
       <div class="label">Utenti (${listUsers().length})</div>

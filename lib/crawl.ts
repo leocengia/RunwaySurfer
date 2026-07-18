@@ -11,7 +11,7 @@ import { INTENT_ALIASES, expandQueryTerms } from './kb-vocab';
 import { kbIndexAsLinks } from './kb-index';
 import { linkIdentity } from './site-profile';
 
-const MAX_FOLLOW = 3;
+export const MAX_FOLLOW = 3;
 const MIN_SELECTED_SCORE = 5;
 const STRONG_SINGLE_SCORE = 13;
 const SECONDARY_RATIO = 0.58;
