@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { linkIdentity, normalizeLinkUrl } from '../lib/site-profile';
+import { linkIdentity, normalizeLinkUrl, withRetrievalLanguage } from '../lib/site-profile';
 
 const BASE = 'https://traveler.my.site.com/Runway/s/article/Rimborso';
 
@@ -37,5 +37,26 @@ describe('linkIdentity', () => {
     expect(linkIdentity(new URL('https://traveler.my.site.com/Runway/s/'))).toBe(
       linkIdentity(new URL('https://traveler.my.site.com/Runway/s')),
     );
+  });
+});
+
+describe('withRetrievalLanguage', () => {
+  it('forza ?language=en_US sostituendo una lingua diversa', () => {
+    expect(withRetrievalLanguage(`${BASE}?language=de`)).toBe(`${BASE}?language=en_US`);
+    expect(withRetrievalLanguage(`${BASE}?language=ko`)).toBe(`${BASE}?language=en_US`);
+  });
+
+  it('aggiunge ?language=en_US se assente, preservando il resto', () => {
+    expect(withRetrievalLanguage(BASE)).toBe(`${BASE}?language=en_US`);
+  });
+
+  it('non tocca gli URL già in en_US e non altera path/identità', () => {
+    const out = withRetrievalLanguage(`${BASE}?language=en_US`);
+    expect(out).toBe(`${BASE}?language=en_US`);
+    expect(linkIdentity(new URL(out))).toBe(BASE);
+  });
+
+  it('ritorna invariato un input non parsabile', () => {
+    expect(withRetrievalLanguage('non-un-url')).toBe('non-un-url');
   });
 });

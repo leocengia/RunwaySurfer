@@ -7,6 +7,7 @@
 // vengono ordinati dallo stesso scorer dei link reali (pickRelevantLinks),
 // così non c'è una seconda logica di rilevanza da mantenere.
 import type { KbLink } from './outcome';
+import { withRetrievalLanguage } from './site-profile';
 import indexData from './kb-index.json';
 
 interface KbIndexRecord {
@@ -36,7 +37,12 @@ export function kbIndexSize(): number {
  * con gli stessi pesi dei link reali. Lo slug entra sia come `text` (label
  * leggibile) sia — implicitamente — nell'URL, dove lo scorer già lo pesa. Non
  * hanno `order` (verrà usato il fallback deterministico dello scorer).
+ *
+ * L'URL è normalizzato alla lingua di retrieval (`en_US`): la sitemap indicizza
+ * gli articoli in lingue miste, ma noi leggiamo l'inglese (dove il contenuto è
+ * popolato). Così sia il candidato mostrato come fonte sia la navigazione B2
+ * puntano alla variante inglese, non a quella tedesca/coreana della sitemap.
  */
 export function kbIndexAsLinks(): KbLink[] {
-  return index.articles.map((a) => ({ url: a.u, text: a.l }));
+  return index.articles.map((a) => ({ url: withRetrievalLanguage(a.u), text: a.l }));
 }

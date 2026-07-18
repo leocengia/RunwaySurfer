@@ -90,3 +90,28 @@ export function linkIdentity(url: URL): string {
   const path = decodeURIComponent(url.pathname).replace(/\/+$/, '');
   return url.origin + path;
 }
+
+/**
+ * Lingua di **retrieval**: gli articoli si leggono in **inglese**, dove il
+ * contenuto è popolato e la ricerca della KB funziona (la ricerca in italiano
+ * no). La risposta all'agente resta comunque in italiano: la genera il backend.
+ * La sitemap indicizza gli articoli in lingue miste (~1 su 5 non è `en_US`):
+ * senza questa normalizzazione la navigazione B2 aprirebbe la variante tedesca/
+ * coreana/… di quegli articoli.
+ */
+export const RETRIEVAL_LANGUAGE = 'en_US';
+
+/**
+ * Forza `?language=en_US` su un URL KB (assoluto), preservando path e resto
+ * dei param. Su URL non parsabili ritorna l'input invariato. `linkIdentity`
+ * ignora comunque il param, quindi la deduplica non cambia.
+ */
+export function withRetrievalLanguage(rawUrl: string, language = RETRIEVAL_LANGUAGE): string {
+  try {
+    const url = new URL(rawUrl);
+    url.searchParams.set('language', language);
+    return url.href;
+  } catch {
+    return rawUrl;
+  }
+}

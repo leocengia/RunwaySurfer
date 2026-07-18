@@ -103,6 +103,17 @@ export async function openAndReadArticle(
     return { ...extractCurrentPage(query), origin: 'followed' };
   }
 
+  // La navigazione SPA è **solo same-origin**: un URL di altra origin non è una
+  // route client-side e un click ci porterebbe FUORI dalla pagina corrente
+  // (es. dal demo Wikipedia verso la KB). In quel caso si degrada a suggerimento.
+  let targetOrigin: string | null = null;
+  try {
+    targetOrigin = new URL(url, location.href).origin;
+  } catch {
+    return null;
+  }
+  if (targetOrigin !== location.origin) return null;
+
   // Tentativo 1: anchor sintetico (click → router Aura, client-side).
   clickSyntheticAnchor(url);
   let rendered = await waitForSpaRender(targetId, shouldAbort, waitOptions);

@@ -32,6 +32,15 @@ describe('openAndReadArticle', () => {
     expect(page).toBeNull();
   });
 
+  it('degrada a null su URL cross-origin (la nav SPA è solo same-origin)', async () => {
+    // Un candidato di altra origin (es. la KB dal demo Wikipedia) non è una route
+    // client-side: non deve navigare fuori pagina, deve degradare a suggerimento.
+    const page = await openAndReadArticle('https://traveler.my.site.com/Runway/s/article/X', 'q', {
+      waitOptions: { timeoutMs: 20, pollMs: 5 },
+    });
+    expect(page).toBeNull();
+  });
+
   it('degrada a null (non errore) se il render non arriva entro il timeout', async () => {
     // Target diverso dall'hub: nessun router SPA nei test, quindi il render non
     // si stabilizza mai → deve degradare a suggerimento entro un timeout breve.

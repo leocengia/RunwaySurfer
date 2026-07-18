@@ -100,6 +100,17 @@ describe('indice KB reale (asset bundle-ato)', () => {
     expect(links.every((l) => l.url.startsWith('http') && l.text.length > 0)).toBe(true);
   });
 
+  it('normalizza ogni candidato alla lingua di retrieval (en_US)', async () => {
+    // ~1 articolo su 5 nella sitemap ha ?language non inglese: i candidati
+    // esposti devono comunque puntare tutti alla variante en_US, così la
+    // navigazione B2 non apre l'articolo in tedesco/coreano/…
+    const { kbIndexAsLinks } = await import('../lib/kb-index');
+    const links = kbIndexAsLinks();
+    for (const l of links) {
+      expect(new URL(l.url).searchParams.get('language')).toBe('en_US');
+    }
+  });
+
   it('una query IT su una pagina fuori tema pesca un articolo refund dalla KB reale', async () => {
     const { pickCandidatesWithKbIndex } = await import('../lib/crawl');
     // Pagina corrente senza link pertinenti: il candidato viene solo dall'indice.
