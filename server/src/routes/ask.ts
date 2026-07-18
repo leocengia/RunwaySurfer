@@ -184,7 +184,7 @@ askRoutes.post('/ask', requireAuth('agent'), async (req, res) => {
 
     send({ type: 'plan', plan });
     try {
-      await provider.streamOutcome(
+      const { usage } = await provider.streamOutcome(
         { ...request, model: spec.id },
         (text) => send({ type: 'delta', text }),
         ac.signal,
@@ -210,6 +210,9 @@ askRoutes.post('/ask', requireAuth('agent'), async (req, res) => {
           id: requestId,
           durationMs: Date.now() - startedAt,
           status: 'ok',
+          // Token reali dal provider (mock: undefined → resta solo la stima).
+          actualInputTokens: usage?.inputTokens ?? null,
+          actualOutputTokens: usage?.outputTokens ?? null,
         });
       }
     } catch (e) {

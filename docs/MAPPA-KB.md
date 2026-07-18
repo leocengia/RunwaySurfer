@@ -68,15 +68,23 @@ Mandami, anche in testo libero:
   prenotazione hotel", "come emetto un rimborso CFAR"…). Servono a rifare lo scoring dei link
   sul dominio vero al posto di quello e-commerce.
 
-### Step 5 — Passa 7: baseline token (richiede l'estensione caricata)
+### Step 5 — Passa 7: baseline token (cattura AUTOMATICA, niente trascrizioni)
 
-1. Builda e carica l'estensione nel profilo KB: `npm run build`, poi `chrome://extensions` →
-   **Modalità sviluppatore** → **Carica estensione non pacchettizzata** → cartella
-   `.output/chrome-mv3`.
-2. Su 3-5 **query reali**, esegui una richiesta in **single-page** e (se il tour gira) in
-   **tour**; dal pannello sidebar, sotto la risposta, leggi la riga **AiPlan** e mandami:
-   stima **input token**, **modello** scelto, **costo $**, **n. pagine** e **n. link**.
-3. Questi numeri sono la _baseline_ per misurare il risparmio dopo l'ottimizzazione.
+I numeri non vanno più ricopiati a mano dalla sidebar: **ogni `/ask` è già persistito** nella
+tabella `requests` (token stimati, modello, costo, pagine, durata) — vedi Passa 7 sotto per il
+dettaglio. Ti basta:
+
+1. Lanciare un **set fisso di 3-5 query reali** (le stesse prima e dopo le leve E), in EN e IT.
+   Due strade:
+   - **Dashboard, senza estensione:** apri la dashboard backend → **"Demo ask request"**
+     (`dashboard.ts`) e lancia le query. Zero build, zero caricamento estensione.
+   - **Sidebar (per confrontare le modalità):** `npm run build`, poi `chrome://extensions` →
+     **Modalità sviluppatore** → **Carica estensione non pacchettizzata** → `.output/chrome-mv3`;
+     lancia le query in **single** e (se gira) in **follow**/**tour**.
+2. Esportare i record: `GET /requests?limit=N` + `GET /analytics/summary`, oppure leggere
+   `server/data/runwaysurfer.db`. Mandami l'export (o il `.db`): compilo io la tabella Passa 7.
+3. Il **delta** before/after di questi numeri è la baseline per ri-tarare le soglie del router.
+   Con il provider reale i **token esatti** (`actual_*_tokens`, vedi Passa 7) affiancano le stime.
 
 ### Cosa faccio io
 
@@ -193,14 +201,57 @@ _Da compilare con input dell'utente (non da recon)._
 
 ## Passa 7 — Baseline token (per modalità)
 
-_Dal pannello sidebar (AiPlan) su 3-5 query reali, prima di ottimizzare._
+Obiettivo: quantificare l'effetto delle leve E (Passa 10) su **token/costo/modello** con query
+reali, per (a) dimostrare il risparmio e (b) ri-tarare le soglie del router (`router.ts`) con
+numeri veri invece che a occhio.
 
-| Query | Modalità | # pagine | # link | est. input tok | modello | costo $ |
-| ----- | -------- | -------- | ------ | -------------- | ------- | ------- |
-|       | single   |          |        |                |         |         |
-|       | tour SPA |          |        |                |         |         |
+### Cattura AUTOMATICA dalla tabella `requests` (zero codice)
 
-**Conclusioni (→ soglie router `SIMPLE_/MODERATE_*`, `max_request_*`, trimming link-map):** _..._
+Il costo per query **è già misurato e persistito**: l'`AiPlan` (`shared/contracts.d.ts`) è
+costruito in `server/src/routes/ask.ts`, mostrato live nella sidebar (`.rs-plan`, `App.tsx`) e
+salvato per **OGNI** `/ask` nella tabella `requests` (`server/src/db.ts`,
+`insertRequestHistory`). Colonne che contano:
+
+`model`, `pages_count`, `links_count`, `estimated_input_tokens`, `estimated_output_tokens`,
+`estimated_cost_usd`, `actual_input_tokens`, `actual_output_tokens`, `duration_ms`,
+`query_preview`, `status`.
+
+Interrogabile senza trascrizioni via `GET /requests?limit=N` e `GET /analytics/summary`
+(`server/src/routes/admin.ts`, auth `team_lead`), o leggendo direttamente
+`server/data/runwaysurfer.db`. Visibile anche nella dashboard **"Recent requests"**
+(`server/src/views/dashboard.ts`), che ora mostra **stima** e **token reali** affiancati.
+
+**Set di query fisso (3-5), EN + IT**, rappresentative dei topic reali (dal vocabolario dei 135
+topic della Passa 8): es. `refund a cancelled flight` / `rimborso volo cancellato`,
+`change hotel booking`, `baggage allowance`, `WestJet schedule change`. Da lanciare **sempre
+uguali** e **sulla stessa pagina KB** (o dalla dashboard "Demo ask request", che non richiede
+l'estensione). Il metodo di stima è **costante** (`Math.ceil(len/4)`, `router.ts`), quindi il
+**delta** before/after è valido anche se i valori assoluti sono euristici.
+
+> **CAVEAT stima vs reale.** `estimated_*_tokens` sono euristici (`~len/4`, output fisso 500 =
+> `ASSUMED_OUTPUT_TOKENS`); non sono i token del tokenizer. Da questa passa il provider reale
+> (Anthropic) legge `message.usage` e popola `actual_input_tokens`/`actual_output_tokens`
+> accanto alle stime (il mock li lascia `NULL`): con `AI_PROVIDER=anthropic` la tabella sotto
+> si compila con i **token esatti**, altrimenti con le sole stime.
+
+### Tabella before/after
+
+_Da compilare con l'export di `GET /requests` dell'ambiente autenticato dell'utente. "Before" =
+prima delle leve E; "After" = dopo. Un blocco per query, filtrando per finestra temporale._
+
+| Query | Fase   | Modalità | # pagine | # link | tok in (stima) | tok in (reale) | tok out | modello | costo $ | durata ms |
+| ----- | ------ | -------- | -------- | ------ | -------------- | -------------- | ------- | ------- | ------- | --------- |
+|       | before | single   |          |        |                |                |         |         |         |           |
+|       | after  | single   |          |        |                |                |         |         |         |           |
+|       | after  | follow   |          |        |                |                |         |         |         |           |
+
+**Delta atteso** (ipotesi da verificare coi numeri veri): da **~16-31k token/articolo** (corpo
+intero, cfr. Passa 9) verso **~4,5k** (retrieval per-heading, Passa 10 · E2), con **routing
+verso modelli più economici** (meno contesto → più `haiku`/`sonnet` invece di `opus`).
+
+**Conclusioni (→ soglie router `SIMPLE_/MODERATE_*`, `max_request_*`, trimming link-map):** _...
+(da scrivere quando la tabella è piena: quale modello viene scelto in pratica, dove tagliare le
+soglie `SIMPLE_MAX_CONTEXT_CHARS` / `MODERATE_MAX_CONTEXT_CHARS`, se ridurre `max_request_links`.)_
 
 ---
 
@@ -332,3 +383,37 @@ solo come ricognizione (struttura dati, dimensioni reali). Le 4 leve, tutte con 
 **Manopole backend (E4-token) NON ancora ri-tarate:** `router.ts` (`SIMPLE_/MODERATE_*`, oggi
 tarate su Wikipedia), link-map in `provider/shared.ts`. Da fare dopo la **baseline token** reale
 (Passa 7) per un before/after quantificato.
+
+## Passa 11 — Capacità di navigazione (cosa la sidebar sa muoversi/leggere)
+
+Mappa precisa di **come la sidebar si muove nella KB e legge le pagine**, con i limiti verificati
+`file:riga`. Serve perché l'esplorazione ha confermato un limite forte: la sidebar **non può
+leggere nessuno dei ~2.964 articoli dell'indice se non sono già raggiungibili come pagina
+renderizzata** — e da questa passa il caso "solo-indice" è parzialmente sbloccato (vedi GAP → B2).
+
+### Matrice WHAT / LIMITS / GAPS
+
+| Capacità                               | WHAT (cosa fa)                                                                                                         | LIMITS (dove si ferma)                                                                                                      | file:riga                                                         |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Lettura pagina corrente                | Legge il DOM **renderizzato** del content-root, retrieval per-heading focalizzato sulla query.                         | Solo la pagina in cui la sidebar è montata; nessuna navigazione.                                                            | `extract.ts:233`, `extract.ts:276`, `App.tsx:334`                 |
+| Fetch `follow`                         | `fetch(url, credentials:'include')` same-origin, estrae il testo dei link scelti.                                      | **Morto sulla KB Aura**: `hasRenderedContent`→false sullo shell → pagina scartata. Vivo solo su siti server-rendered.       | `crawl.ts:186`, `crawl.ts:195`, `extract.ts:228`                  |
+| Tour SPA `visual`                      | Hub-and-spoke: clicca l'anchor → `waitForSpaRender` → legge il DOM → `history.back()` all'hub.                         | **Richiede un anchor vivo in pagina**; se il link non c'è (o rect 0×0) il target è **saltato**.                             | `useTourDriver.ts:107`, `highlight.ts:15`, `useTourDriver.ts:122` |
+| Link discovery (DOM)                   | `extractInternalLinks` raccoglie i link same-origin del content-root, dedup per identità.                              | Vede **solo** i link presenti nel DOM della pagina corrente.                                                                | `extract.ts:247`                                                  |
+| Candidati KB-wide (E4)                 | `pickCandidatesWithKbIndex` unisce i link del DOM con l'intero indice KB e li scora insieme, costo-token 0.            | Propone l'URL giusto ma **non ne legge il corpo** se non è fetchabile/navigabile.                                           | `crawl.ts:162`, `kb-index.ts:40`                                  |
+| Attesa render (SPA)                    | `waitForSpaRender`: attende route arrivata + testo stabile (non tempo fisso), timeout 9s.                              | Se il render non arriva entro 9s → false (degrada).                                                                         | `spa-nav.ts:46`                                                   |
+| Navigazione finale (tour)              | Click sull'anchor se sull'hub (client-side); altrimenti `location.href` + rehydration.                                 | Solo verso la fonte scelta a fine tour; non è navigazione libera.                                                           | `useTourDriver.ts:201`, `tour.ts:152`                             |
+| **Apertura articolo solo-indice (B2)** | `openAndReadArticle`: naviga client-side **senza anchor** (anchor sintetico → pushState), legge il DOM, torna all'hub. | Additivo alla modalità **follow**; degrada a suggerimento se il render non arriva. No full-reload (perderebbe la sessione). | `nav.ts:91`, `nav.ts:38`, `App.tsx:343`                           |
+
+### GAP trasversali (stato dopo B2)
+
+1. **Articolo non-anchor** — prima: non leggibile se non anchor vivo in pagina. **Ora (B2):** i
+   candidati **solo-indice** in modalità `follow` sono aperti via SPA e letti (`openAndReadArticle`).
+   Resta scoperto: un candidato che è anchor in pagina ma non renderizza via fetch nel `follow`
+   (lo copre il tour `visual`, che lo clicca).
+2. **`fetch`/`follow` morto** sulla KB client-rendered → `single`/`visual`/`follow+SPA` sono le
+   uniche letture reali del corpo.
+3. **Niente pilotaggio della barra di ricerca KB** (opzione scartata a monte): la scoperta degli
+   articoli passa dall'indice E4, non dalla ricerca in-app.
+4. **Niente multi-hop / crawl ricorsivo**: si legge un livello di candidati, non i loro link.
+5. **Cap fisso `MAX_FOLLOW = 3`** (`crawl.ts:14`): al più 3 pagine seguite per richiesta (fetch +
+   SPA insieme rispettano lo stesso tetto).

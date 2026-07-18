@@ -89,6 +89,26 @@ describe('storico richieste', () => {
     expect(errori[0].error).toBe('boom');
   });
 
+  it('persiste i token reali quando forniti e li lascia null altrimenti', () => {
+    insertRequestHistory(
+      historyInput({
+        id: 'req-actual',
+        agentId: 'actual-test',
+        actualInputTokens: 1234,
+        actualOutputTokens: 567,
+      }),
+    );
+    insertRequestHistory(historyInput({ id: 'req-solo-stima', agentId: 'stima-test' }));
+    const [conReali] = listRequests({ agentId: 'actual-test' });
+    expect(conReali.actual_input_tokens).toBe(1234);
+    expect(conReali.actual_output_tokens).toBe(567);
+    // Senza usage dal provider (es. mock) le colonne reali restano NULL: si vede
+    // subito stima-vs-reale senza confonderle.
+    const [soloStima] = listRequests({ agentId: 'stima-test' });
+    expect(soloStima.actual_input_tokens).toBeNull();
+    expect(soloStima.actual_output_tokens).toBeNull();
+  });
+
   it('salva hash e preview della query, non il testo completo oltre il limite', () => {
     const query = 'q '.repeat(400);
     insertRequestHistory(historyInput({ id: 'req-preview', query }));

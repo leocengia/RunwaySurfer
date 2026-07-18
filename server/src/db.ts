@@ -56,6 +56,10 @@ export interface RequestHistoryRecord {
   estimated_input_tokens: number;
   estimated_output_tokens: number;
   estimated_cost_usd: number;
+  // Token REALI dal provider (SDK `message.usage`); NULL quando il provider non
+  // li espone (es. mock) o la richiesta non è arrivata a completamento.
+  actual_input_tokens: number | null;
+  actual_output_tokens: number | null;
   duration_ms: number;
   status: string;
   error: string | null;
@@ -76,6 +80,9 @@ export interface RequestHistoryInput {
   estimatedInputTokens: number;
   estimatedOutputTokens: number;
   estimatedCostUsd: number;
+  /** Token reali dal provider, se disponibili; assenti/null = solo stima. */
+  actualInputTokens?: number | null;
+  actualOutputTokens?: number | null;
   durationMs: number;
   status: 'ok' | 'error' | 'rejected';
   error?: string;
@@ -173,6 +180,8 @@ export function initDb(): void {
       estimated_input_tokens INTEGER NOT NULL,
       estimated_output_tokens INTEGER NOT NULL,
       estimated_cost_usd REAL NOT NULL,
+      actual_input_tokens INTEGER,
+      actual_output_tokens INTEGER,
       duration_ms INTEGER NOT NULL,
       status TEXT NOT NULL,
       error TEXT,
@@ -207,8 +216,9 @@ export function initDb(): void {
 }
 
 // Schema versioning via PRAGMA user_version. Version 1 adds the auth columns to
-// `users` for databases created before the login feature; the table_info guard
-// keeps the ALTERs idempotent (fresh DBs already have the columns).
+// `users` for databases created before the login feature; version 2 adds the
+// real-token columns to `requests`. Il guard su table_info tiene le ALTER
+// idempotenti (i DB freschi hanno già le colonne dalla CREATE TABLE).
 function migrate(): void {
   const version = db.pragma('user_version', { simple: true }) as number;
   if (version < 1) {
@@ -223,6 +233,21 @@ function migrate(): void {
         db.exec('ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0');
       }
       db.pragma('user_version = 1');
+    })();
+  }
+  if (version < 2) {
+    db.transaction(() => {
+      const columns = (db.pragma('table_info(requests)') as Array<{ name: string }>).map(
+        (c) => c.name,
+      );
+      // Colonne nullable: le righe storiche restano valide (solo stima, actual NULL).
+      if (!columns.includes('actual_input_tokens')) {
+        db.exec('ALTER TABLE requests ADD COLUMN actual_input_tokens INTEGER');
+      }
+      if (!columns.includes('actual_output_tokens')) {
+        db.exec('ALTER TABLE requests ADD COLUMN actual_output_tokens INTEGER');
+      }
+      db.pragma('user_version = 2');
     })();
   }
 }
@@ -463,9 +488,10 @@ export function insertRequestHistory(input: RequestHistoryInput): void {
     `INSERT INTO requests (
       id, created_at, user_id, agent_id, team_id, query_hash, query_preview,
       provider, model, pages_count, links_count, estimated_input_tokens,
-      estimated_output_tokens, estimated_cost_usd, duration_ms, status, error,
+      estimated_output_tokens, estimated_cost_usd, actual_input_tokens,
+      actual_output_tokens, duration_ms, status, error,
       selected_links_json, sources_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     input.id,
     now(),
@@ -481,6 +507,8 @@ export function insertRequestHistory(input: RequestHistoryInput): void {
     input.estimatedInputTokens,
     input.estimatedOutputTokens,
     input.estimatedCostUsd,
+    input.actualInputTokens ?? null,
+    input.actualOutputTokens ?? null,
     input.durationMs,
     input.status,
     input.error ?? null,

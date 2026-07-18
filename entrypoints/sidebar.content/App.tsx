@@ -7,7 +7,9 @@ import {
 } from 'react';
 import { browser } from 'wxt/browser';
 import { extractCurrentPage, extractInternalLinks } from '../../lib/extract';
-import { pickCandidatesWithKbIndex, shallowFollow } from '../../lib/crawl';
+import { MAX_FOLLOW, pickCandidatesWithKbIndex, shallowFollow } from '../../lib/crawl';
+import { readIndexOnlyArticles } from '../../lib/nav';
+import { linkIdentity } from '../../lib/site-profile';
 import { streamAsk } from '../../lib/client';
 import { getProxyUrl } from '../../lib/messaging';
 import { clearToken, fetchMe, getToken, logout, type AuthUser } from '../../lib/auth';
@@ -36,6 +38,15 @@ const MIN_PAGE_WIDTH = 240;
 
 function maxSidebarWidth(): number {
   return Math.max(MIN_SIDEBAR_WIDTH, window.innerWidth - MIN_PAGE_WIDTH);
+}
+
+/** Identità canonica (origin+path) di un URL, per deduplicare pagine e candidati. */
+function identityOf(url: string): string {
+  try {
+    return linkIdentity(new URL(url, location.href));
+  } catch {
+    return url;
+  }
 }
 
 function clampSidebarWidth(width: number): number {
@@ -332,6 +343,25 @@ export default function App() {
     if (mode === 'follow') {
       const followed = await shallowFollow(askLinks, query, askLinks.length);
       pages.push(...followed);
+      // B2 · i candidati SOLO-INDICE (non presenti come anchor in pagina, quindi
+      // né seguibili dal tour né leggibili via fetch sulla KB Aura) vengono aperti
+      // via navigazione SPA e letti dal DOM renderizzato. È additivo: sul demo
+      // (indice KB vuoto) `indexOnly` è vuoto e questo ramo non fa nulla. Cap
+      // invariato a MAX_FOLLOW considerando le pagine già lette dal fetch.
+      const pageIds = new Set(links.map((l) => identityOf(l.url)));
+      const readIds = new Set(pages.map((p) => identityOf(p.url)));
+      const indexOnly = askLinks.filter(
+        (l) => !pageIds.has(identityOf(l.url)) && !readIds.has(identityOf(l.url)),
+      );
+      const spaBudget = MAX_FOLLOW - followed.length;
+      if (spaBudget > 0 && indexOnly.length) {
+        const controller = new AbortController();
+        abortRef.current = controller;
+        const viaSpa = await readIndexOnlyArticles(indexOnly, query, spaBudget, {
+          shouldAbort: () => controller.signal.aborted,
+        });
+        pages.push(...viaSpa);
+      }
     }
     await runAsk(query, pages, askLinks);
   }, [query, mode, status, driveTour, runAsk]);
