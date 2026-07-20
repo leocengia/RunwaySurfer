@@ -1,116 +1,36 @@
 # MAPPA-KB — Rilevazioni sulla KB Salesforce
 
-> Documento di lavoro: qui raccogliamo i risultati dei recon per tarare, nella fase
-> successiva, `lib/site-profile.ts`, `lib/extract.ts`, `lib/crawl.ts`, `lib/spa-nav.ts` e i
-> settings backend. Compila incollando i JSON prodotti dagli script e scrivendo le
-> conclusioni. Piano di riferimento: il piano "Mappatura della KB Salesforce" e
-> `docs/PIANO-verifica-scansione-KB.md` (verifica/scansione con `recon-kb-verify.js`).
+> Rilevazioni + conclusioni sulla KB, usate per tarare `lib/site-profile.ts`, `lib/extract.ts`,
+> `lib/crawl.ts`, `lib/spa-nav.ts` e i settings backend.
+>
+> **Non si compila più a mano.** La raccolta dati è automatizzata: esegui il probe
+> `docs/recon-kb-verify.js` (procedura in `docs/PIANO-verifica-scansione-KB.md`) e passa il JSON a
+> `docs/recon-kb-analyze.mjs`, che stampa la tabella verdetto (assunzione → check → PASS/FAIL →
+> azione). Qui incolli quell'output e scrivi le **conclusioni**; le sezioni "Passa" tengono solo i
+> **reperti già verificati** e le decisioni. Le passe 8-11 sono chiuse (verificate/implementate).
 
-## Sezione 0 — Autorizzazione e data-handling (compilare PRIMA di scansionare)
+## Sezione 0 — Autorizzazione (compilare PRIMA di scansionare)
 
-Scansionare la KB aziendale autenticata (2.964 record, corpi via `getRecord`, export HAR verso chi
-non ha accesso alla KB) tocca policy legali e privacy. Compilare prima di qualunque Passa 8+ e prima
-di far uscire QUALSIASI fixture/HAR dal browser:
+Scansionare la KB autenticata e far uscire fixture/HAR dal browser tocca policy legali/privacy.
 
-- **Approvatore** (nome + ruolo): **\*\*\*\*\*\*\*\*** · **Data**: **\*\*\*\*\*\***
-- ☐ L'account SSO usato è **titolato** a vedere tutti gli articoli scansionati.
-- ☐ L'**export** di corpi articolo + HAR verso l'autore del tooling è **permesso** dalla policy/DPA.
-- ☐ Set **classificati** (PCI/PII/legal-hold) da **escludere**: **\*\*\*\*\*\*\*\*\*\***
-- ☐ Le passe pesanti girano su un **profilo/account dedicato di test**, non sulla sessione di un
-  agente in produzione (un eventuale lockout non deve mettere offline un agente vero).
-- **Do-NOT-capture** (bright-line): mai cookie di sessione, valori `aura.token`/`fwuid`, header
-  `Authorization`/Bearer, identità/username/email dell'agente, PII cliente, HAR non scrubbato,
-  `query_preview` con testo cliente. Lo scrub è imposto da `rsScrub`/`rsVerifyClean` nel prelude
-  degli script (blocca il download se resta un match).
-- **Minimizzazione**: enumerazione (Passa 8) = solo metadati URL, **zero corpi**; taratura selettori
-  su un **campione** (i ≥5 articoli di Passa 2), non sui 2.964 corpi, se non autorizzato qui sopra.
+- **Approvatore:** Leonardo Cengia · **Data:** 20/07/2026
+- ☑ Account SSO titolato a vedere tutti gli articoli · ☑ Export corpi/HAR permesso da policy/DPA
+- ☐ Set classificati (PCI/PII/legal-hold) da escludere: **\_\_\_\_** · ☐ Uso un **profilo/account
+  dedicato di test** (non la sessione di un agente in produzione)
 
-## Procedura passo-passo
+**Regole (già imposte dagli script):** _do-not-capture_ — mai cookie/`aura.token`/`fwuid`/Bearer/
+identità agente/PII: lo scrub `rsScrub`/`rsVerifyClean` **blocca il download** se resta un match.
+_Minimizzazione_ — enumerazione = solo metadati URL; taratura su un campione (≥5 articoli), non sui
+2.964 corpi.
 
-### Prerequisiti (una volta sola)
+## Raccolta dati (automatizzata)
 
-1. Apri Chrome con il **profilo loggato alla KB** (quello che ha accesso a
-   `traveler.my.site.com`). Verifica di vedere gli articoli senza schermata di login.
-2. Apri gli script che ti servono dal repo: `docs/recon-kb-map.js` e
-   `docs/recon-kb-search.js`. Servono i **contenuti** dei file (li incollerai in console).
-3. Su un articolo, apri **DevTools**: `F12` (o `Ctrl+Shift+I`) → scheda **Console**.
-4. La prima volta, se compare l'avviso _"Don't paste code you don't understand"_, digita
-   `allow pasting` e premi Invio (poi non lo richiede più per quella sessione).
-5. Lavora in italiano: assicurati che l'URL abbia `?language=it`. Se noti differenze di
-   contenuto con `en_US`, annotalo nelle conclusioni.
-
-### Step 1 — Passe 0-4 su un articolo (recon-map)
-
-1. Vai su una **pagina-articolo** rappresentativa (URL tipo `/Runway/s/article/...` o
-   `/Runway/s/detail/...`). Meglio se ha **link ad altri articoli nel corpo** (per la Passa 4).
-2. Nella Console: incolla **tutto** il contenuto di `docs/recon-kb-map.js` e premi Invio.
-3. ⚠️ Lo script è **asincrono e NAVIGA**: per la Passa 4 clicca ~3 link e torna indietro da
-   solo (~10-15s). **Non toccare la pagina** finché non stampa il blocco verde `RS-MAP`.
-4. Se preferisci NON far navigare la pagina, prima di incollare digita in console:
-   `window.RS_MAP_SPA = false` (poi incolla lo script). Perdi la Passa 4 ma non naviga.
-5. A fine esecuzione l'output è stampato **e copiato in clipboard**. Incollamelo in chat
-   (o nel file `recon-results.md` che hai aperto). Dimmi anche di che tipo era la pagina.
-6. Se la copia in clipboard non è disponibile, seleziona il JSON sotto `RS-MAP` e copialo a
-   mano.
-
-### Step 2 — Ripeti su più pagine (campionamento ampio)
-
-Ri-esegui lo Step 1 (stesso script) su:
-
-- **≥5 articoli di tipo diverso** (procedura, policy, FAQ, refund/billing, lodging… quelli
-  che gli agenti aprono davvero);
-- **1 pagina topic** (`/Runway/s/topic/...`);
-- **1 pagina categoria** (se esiste).
-
-Mandami i JSON separati (basta indicare a quale pagina si riferisce ciascuno). Su topic e
-categoria la Passa 4 si salta da sola (non sono articoli navigabili): è normale.
-
-### Step 3 — Passa 5: la ricerca (recon-search)
-
-Modo consigliato (più affidabile):
-
-1. Digita una parola nella **barra di ricerca** della KB (es. `rimborso`) e lancia la ricerca
-   a mano; aspetta che compaiano i **risultati** (URL tipo `/Runway/s/global-search/...`).
-2. Nella Console incolla **tutto** `docs/recon-kb-search.js` e premi Invio.
-3. Aspetta il blocco verde `RS-SEARCH` e incollami il JSON.
-
-Modo automatico (se il primo non ti è comodo): su una pagina qualsiasi con la barra di
-ricerca, prima digita `window.RS_SEARCH_Q = 'rimborso'`, poi incolla lo script: proverà a
-compilare e inviare la ricerca da solo. Se `reachedResults` risulta `false`, usa il modo
-consigliato.
-
-### Step 4 — Passa 6: tassonomia e domande frequenti (input tuo, non recon)
-
-Mandami, anche in testo libero:
-
-- i **topic/categorie principali** della KB (la struttura ad albero, se c'è);
-- **10-15 domande/richieste reali** che gli agenti fanno (es. "il cliente vuole annullare una
-  prenotazione hotel", "come emetto un rimborso CFAR"…). Servono a rifare lo scoring dei link
-  sul dominio vero al posto di quello e-commerce.
-
-### Step 5 — Passa 7: baseline token (cattura AUTOMATICA, niente trascrizioni)
-
-I numeri non vanno più ricopiati a mano dalla sidebar: **ogni `/ask` è già persistito** nella
-tabella `requests` (token stimati, modello, costo, pagine, durata) — vedi Passa 7 sotto per il
-dettaglio. Ti basta:
-
-1. Lanciare un **set fisso di 3-5 query reali** (le stesse prima e dopo le leve E), in EN e IT.
-   Due strade:
-   - **Dashboard, senza estensione:** apri la dashboard backend → **"Demo ask request"**
-     (`dashboard.ts`) e lancia le query. Zero build, zero caricamento estensione.
-   - **Sidebar (per confrontare le modalità):** `npm run build`, poi `chrome://extensions` →
-     **Modalità sviluppatore** → **Carica estensione non pacchettizzata** → `.output/chrome-mv3`;
-     lancia le query in **single** e (se gira) in **follow**/**tour**.
-2. Esportare i record: `GET /requests?limit=N` + `GET /analytics/summary`, oppure leggere
-   `server/data/runwaysurfer.db`. Mandami l'export (o il `.db`): compilo io la tabella Passa 7.
-3. Il **delta** before/after di questi numeri è la baseline per ri-tarare le soglie del router.
-   Con il provider reale i **token esatti** (`actual_*_tokens`, vedi Passa 7) affiancano le stime.
-
-### Cosa faccio io
-
-Man mano che mi reincolli i dati, compilo le sezioni qui sotto e traduco ogni rilevazione in
-valori concreti per le manopole (content-root, rumore, caps, timing SPA, scoring, soglie
-backend). Quando la mappa è piena, pianifichiamo la fase di ottimizzazione sui numeri reali.
+La procedura completa è in **`docs/PIANO-verifica-scansione-KB.md`**. In sintesi: su un articolo
+autenticato, Console DevTools → incolla `docs/recon-kb-verify.js` (per i test dinamici prima
+`window.RS_VERIFY_NAV = true`) → scarica `rs-verify-<slug>.json` → `node docs/recon-kb-analyze.mjs
+rs-verify-<slug>.json`. Il probe copre le Passe 0-6 (selettori, rumore, collegati, timing SPA,
+navigazione) e l'analizzatore stampa la tabella verdetto. La baseline token (Passa 7) esce dalla
+tabella `requests`. Incolla qui sotto l'output dell'analizzatore e scrivi le conclusioni.
 
 ---
 
@@ -125,99 +45,58 @@ IT→EN prima della ricerca (raffinamento futuro).
 
 ## Passa 0 — Tassonomia URL / tipi di pagina
 
-_Incolla il campo `pageType`/`pathname`/`params` da ogni run + una riga di sintesi._
+_Raccolto da `recon-kb-verify.js` C1. Riferimento tipi:_
 
-| Tipo     | Esempio pathname              | Contenuto o lista? | Param rilevanti |
-| -------- | ----------------------------- | ------------------ | --------------- |
-| article  | `/Runway/s/article/<slug>`    | contenuto          | `language`      |
-| detail   | `/Runway/s/detail/<id>`       | contenuto          | `language`      |
-| topic    | `/Runway/s/topic/<id>/<slug>` | lista              |                 |
-| category |                               |                    |                 |
-| search   | `/Runway/s/global-search/<q>` | lista              | `language`      |
-| home     | `/Runway/s/`                  | —                  |                 |
+| Tipo    | Esempio pathname              | Contenuto o lista? | Param rilevanti |
+| ------- | ----------------------------- | ------------------ | --------------- |
+| article | `/Runway/s/article/<slug>`    | contenuto          | `language`      |
+| detail  | `/Runway/s/detail/<id>`       | contenuto          | `language`      |
+| topic   | `/Runway/s/topic/<id>/<slug>` | lista              |                 |
+| search  | `/Runway/s/global-search/<q>` | lista              | `language`      |
+| home    | `/Runway/s/`                  | —                  |                 |
 
-**Conclusioni (→ `rejectPathIncludes`, `linkIdentity`, `keepParams`):** _..._
+**Conclusioni:** identità = origin+path (slug), unico param utile `language` (→ `linkIdentity`,
+`keepParams`). Da aggiungere a `rejectPathIncludes`: `/s/topic/`, `/s/global-search/`, `/s/category/`.
 
-## Passa 1 — Content-root & rumore (per tipo pagina)
+## Passa 1 — Content-root & rumore
 
-_Incolla `contentRoot` e `noiseCandidates` di 2-3 articoli._
+_Raccolto da `recon-kb-verify.js` C2 (selettori) / C3 (rumore + delta). Reperto PRELIMINARE (1 articolo):_
 
-```json
-(incolla qui)
-```
+- **Corpo:** `[role="main"]` (`div.body.isPageWidthFixed-true`, ~27.8k char, tutto incluso); il corpo
+  vero è la colonna **8-of-12** (classi SLDS generiche → meglio tenere `[role="main"]` + togliere rumore).
+- **Rumore (→ `noiseSelectors`):** `.comm-content-header` (metadati), `.comm-content-footer`,
+  `header.forceHighlightsPanel` + `.forceCommunityRecordHeadline` + `.slds-page-header_record-home`,
+  e — per il TESTO — la colonna `.slds-medium-size--4-of-12` (Suggested Articles: utile come LINK, non
+  come testo). Da confermare su più articoli.
 
-**Selettore corpo articolo scelto (→ `contentSelectors` / probe `waitForSpaRender`) — PRELIMINARE (1 articolo):**
-`[role="main"]` = `div.body.isPageWidthFixed-true` (27.8k char, tutto incluso). Il corpo vero è
-la colonna **8-of-12** (`div.slds-col--padded.slds-size--12-of-12.slds-medium-size--8-of-12`, ~26k).
-Le classi SLDS sono generiche → più robusto tenere `[role="main"]` e rimuovere il rumore (sotto).
+## Passa 2 — Qualità estrazione
 
-**Selettori di rumore da aggiungere (→ `noiseSelectors`) — PRELIMINARE:**
-`.comm-content-header` (metadati: Preferred Language/Record Type/Article Number/Legacy Id/Publication
-Status), `.comm-content-footer` (Report a Problem/feedback), `header.forceHighlightsPanel` +
-`.forceCommunityRecordHeadline` + `.slds-page-header_record-home` (record headline), e — per
-l'estrazione del TESTO — la colonna `.slds-medium-size--4-of-12` (Suggested Articles, utile come
-LINK ma non come testo). Da confermare su più articoli.
-
-## Passa 2 — Qualità estrazione (≥5 articoli)
-
-_Incolla `extractionSample` per ciascun articolo._
-
-| Articolo | bodyChars | roleMainChars | metadataLeaks | note |
-| -------- | --------- | ------------- | ------------- | ---- |
-|          |           |               |               |      |
-
-**Conclusioni (→ `MAX_PAGE_CHARS`/`FOCUSED_PAGE_CHARS`, block selector/count, char-cap):** _..._
+_Raccolto da `recon-kb-verify.js` C2/C3._ Conclusioni (→ `MAX_PAGE_CHARS`/`FOCUSED_PAGE_CHARS`, oggi
+6.000/4.500): confermare che il delta rumore sia ≥15% e il testo focalizzato resti ≥900 char sui campioni.
 
 ## Passa 3 — Sorgenti dei "collegati"
 
-_Incolla `collegati` per ciascun articolo._
-
-| Articolo | # link articolo | # nel corpo | sezione "Correlati"? | container tipico |
-| -------- | --------------- | ----------- | -------------------- | ---------------- |
-|          |                 |             |                      |                  |
-
-**Conclusioni (→ `extractInternalLinks` max, pesi scoring, `MAX_FOLLOW`; serve la ricerca?) — PRELIMINARE:**
-I "collegati" NON sono cross-link nel corpo (0 in 2 articoli), ma un pannello **"Suggested Articles"**
-(colonna 4-of-12) con le raccomandazioni della KB. I suoi link non sono `<a href>` classici catturati
-dallo scan generico (sonda `suggestedArticles` in verifica). → due sorgenti reali di collegati:
-**Suggested Articles** + **ricerca KB**. Lo scoring per-keyword locale conta poco (query IT vs
-contenuto EN). Serve la ricerca (Passa 5) e/o leggere i Suggested.
+_Raccolto da `recon-kb-verify.js` C8. Reperto PRELIMINARE:_ i "collegati" NON sono cross-link nel corpo
+(0 in 2 articoli) ma un pannello **"Suggested Articles"** (colonna 4-of-12); i suoi link potrebbero non
+essere `<a href>` classici (C8 lo conferma). → sorgenti reali: Suggested + indice KB (E4). Lo scoring
+per-keyword locale conta poco (query IT vs contenuto EN, mitigato da E3).
 
 ## Passa 4 — Profilo navigazione SPA
 
-_Incolla `spaNav` da alcuni articoli (più campioni = distribuzione migliore)._
-
-| Articolo | render min/med/max (ms) | allBackOk | anyFullReload | bodyMargin prima→dopo |
-| -------- | ----------------------- | --------- | ------------- | --------------------- |
-|          |                         |           |               |                       |
-
-**Conclusioni (→ timing `waitForSpaRender`, robustezza driver/margine body):** _..._
+_Da compilare con `recon-kb-verify.js` C6/C7 (`RS_VERIFY_NAV=true`):_ tempi render min/med/max,
+`backRestored`, full-reload, e quale meccanismo intercetta la route (matrice C7). → tara
+`waitForSpaRender` + decide il meccanismo B2. Vuoto finché non arriva il probe dinamico.
 
 ## Passa 5 — Ricerca `/s/global-search`
 
-_Incolla l'output di `recon-kb-search.js`._
+**Scartata come modalità** (Passa 11 · GAP 3): la scoperta degli articoli passa dall'indice KB (E4),
+non dalla ricerca in-app. `recon-kb-search.js` resta utile solo per l'enumerazione (Passa 8).
 
-```json
-(incolla qui)
-```
+## Passa 6 — Tassonomia & vocabolario
 
-- URL risultati (pattern): _..._
-- Selettore item risultato / container lista: _..._
-- Forma URL dei risultati (article/detail): _..._
-- Ordine/ranking, snippet presenti?: _..._
-
-**Conclusioni (→ modalità search-driven, `linkIdentity` per URL-risultato):** _..._
-
-## Passa 6 — Tassonomia & vocabolario di dominio (per lo scoring)
-
-_Da compilare con input dell'utente (non da recon)._
-
-- **Topic/categorie principali della KB:** _..._
-- **Domande/intenti frequenti degli agenti** (esempi reali): _..._
-- **Termini/etichette ricorrenti** (per `INTENT_ALIASES`) e **parole generiche da penalizzare**
-  (per `GENERIC_LINK_WORDS`): _..._
-
-**Conclusioni (→ sostituire `INTENT_ALIASES`/`GENERIC_LINK_WORDS`, allineare `STOP_WORDS`):** _..._
+**Risolta in Passa 8:** i 135 topic della sitemap hanno già alimentato `INTENT_ALIASES` (E1). Resta
+solo un input **tuo** (testo libero), utile ma non bloccante: 10-15 domande/richieste reali degli
+agenti, per affinare scoring e `GENERIC_LINK_WORDS`.
 
 ## Passa 7 — Baseline token (per modalità)
 
