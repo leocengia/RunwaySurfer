@@ -29,7 +29,7 @@
  * è BLOCCATO se lo scrub trova ancora un match (`RS-SCRUB-FAIL`).
  */
 (async () => {
-  const PROBE_VERSION = '2026-07-20a';
+  const PROBE_VERSION = '2026-07-20b';
   const SCHEMA = 'rs-verify/1';
   const NAV = window.RS_VERIFY_NAV === true;
   const origin = location.origin;
@@ -407,57 +407,73 @@
     };
   });
 
-  // C12 — LDS via IndexedDB (ISOLATED-reachable)
+  // C12 — LDS via IndexedDB (ISOLATED-reachable). Scansiona TUTTI i DB record/LDS
+  // (non solo il primo match: `ldsCSRFToken` non è il record cache — quello è
+  // `recordGVP*` / `ldsDurableCache`), conta i ka0 in ogni object-store e riporta
+  // per-DB. Nessun valore LDS viene registrato, solo conteggi.
   await run('C12', 'either', async () => {
     if (!indexedDB.databases)
       return { status: 'unsupported', note: 'indexedDB.databases() non disponibile' };
-    const dbs = await indexedDB.databases();
-    const names = dbs.map((d) => d.name).filter(Boolean);
-    const auraDbName = names.find((n) => /aura|lds|salesforce/i.test(n)) || null;
-    let ka0KeyCount = null;
-    let valuesPlaintext = null;
-    if (auraDbName) {
-      await new Promise((resolve) => {
-        const req = indexedDB.open(auraDbName);
-        req.onerror = () => resolve();
-        req.onsuccess = () => {
+    const names = (await indexedDB.databases()).map((d) => d.name).filter(Boolean);
+    const candidates = names.filter(
+      (n) => /lds|record|gvp|aura/i.test(n) && !/csrf|token/i.test(n),
+    );
+    const scanDb = (name) =>
+      new Promise((resolve) => {
+        const out = { name, ka0: 0, plaintext: null, error: null };
+        let req;
+        try {
+          req = indexedDB.open(name);
+        } catch (e) {
+          return resolve({ ...out, error: String((e && e.message) || e) });
+        }
+        req.onerror = () => resolve({ ...out, error: 'open error' });
+        req.onsuccess = async () => {
+          const db = req.result;
           try {
-            const db = req.result;
-            const store = [...db.objectStoreNames][0];
-            if (!store) return resolve(db.close());
-            const tx = db.transaction(store, 'readonly');
-            const getKeys = tx.objectStore(store).getAllKeys();
-            getKeys.onsuccess = () => {
-              const keys = (getKeys.result || []).map(String);
-              ka0KeyCount = keys.filter((k) => /ka0/i.test(k)).length;
-              const sample = tx.objectStore(store).getAll();
-              sample.onsuccess = () => {
-                try {
-                  const first = (sample.result || [])[0];
-                  valuesPlaintext =
-                    typeof first === 'object' ||
-                    (typeof first === 'string' && first.trim().startsWith('{'));
-                } catch {
-                  valuesPlaintext = null;
-                }
-                db.close();
-                resolve();
-              };
-              sample.onerror = () => (db.close(), resolve());
-            };
-            getKeys.onerror = () => (db.close(), resolve());
-          } catch {
-            resolve();
+            for (const store of [...db.objectStoreNames]) {
+              await new Promise((res) => {
+                const tx = db.transaction(store, 'readonly');
+                const kq = tx.objectStore(store).getAllKeys();
+                kq.onsuccess = () => {
+                  const keys = (kq.result || []).map(String);
+                  out.ka0 += keys.filter((k) => /ka0[A-Za-z0-9]{6,}/i.test(k)).length;
+                  if (out.plaintext === null) {
+                    const vq = tx.objectStore(store).getAll();
+                    vq.onsuccess = () => {
+                      const first = (vq.result || [])[0];
+                      if (first !== undefined)
+                        out.plaintext =
+                          typeof first === 'object' ||
+                          (typeof first === 'string' && first.trim().startsWith('{'));
+                      res();
+                    };
+                    vq.onerror = () => res();
+                  } else res();
+                };
+                kq.onerror = () => res();
+              });
+            }
+          } catch (e) {
+            out.error = String((e && e.message) || e);
           }
+          db.close();
+          resolve(out);
         };
       });
-    }
+    const perDb = [];
+    for (const name of candidates) perDb.push(await scanDb(name));
+    const ka0KeyCount = perDb.reduce((n, d) => n + d.ka0, 0);
+    const withKa0 = perDb.filter((d) => d.ka0 > 0);
+    const plainSrc = withKa0[0] || perDb.find((d) => d.plaintext !== null);
     return {
       databases: names,
-      auraDbName,
+      candidatesScanned: candidates,
+      perDb,
       ka0KeyCount,
-      valuesPlaintext,
-      note: 'nessun valore LDS registrato (solo conteggi)',
+      dbsWithKa0: withKa0.map((d) => d.name),
+      valuesPlaintext: plainSrc ? plainSrc.plaintext : null,
+      note: 'nessun valore LDS registrato (solo conteggi ka0)',
     };
   });
 

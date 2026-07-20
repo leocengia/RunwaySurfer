@@ -32,6 +32,30 @@ rs-verify-<slug>.json`. Il probe copre le Passe 0-6 (selettori, rumore, collegat
 navigazione) e l'analizzatore stampa la tabella verdetto. La baseline token (Passa 7) esce dalla
 tabella `requests`. Incolla qui sotto l'output dell'analizzatore e scrivi le conclusioni.
 
+### Rilevazioni live — 2026-07-20 · articolo "Global-airline-schedule-change-policies" (statico, NAV off)
+
+`recon-kb-analyze.mjs` → **VERDICT 4/7 PASS (5 PENDING)**.
+
+- ✅ **origin** giusto (`traveler.my.site.com`, 0 redirect); ✅ **fetch = shell** (raw 501 kB, nessun
+  content-selector nel grezzo → follow-via-fetch **confermato MORTO**); ✅ **sessione** valida;
+  ✅ **collegati = veri `<a href>`** (110 article + 1 topic in `[role="main"]`).
+- ❌ **selettori SF assenti**: `.forceCommunityArticleLayout` e `.cuf-content` **non esistono** su
+  questa KB → vince `[role="main"]` (64,6k char). Azione: in `site-profile.ts` togliere i due
+  selettori morti, tenere `[role="main"]`.
+- ❌ **rumore inefficace**: togliere i `noiseSelectors` attuali riduce solo **~1%** di `[role="main"]`
+  — il grosso NON sono i metadati ma la **lista di ~110 link "correlati"** dentro role=main. Azione:
+  selettore che tolga quel blocco per il TESTO (i link restano per la scoperta) + affidarsi a E2.
+- ⚠️ **cap link**: 111 anchor in role=main > `extractInternalLinks max=40` → il cap può riempirsi di
+  link sbagliati; da curare (scoping corpo vs lista correlati, o alzare/ordinare il cap).
+- 🔎 **piattaforma (per B2/getRecord):** `$A` presente ma **fetch wrappato da Locker/LWS**
+  (`fetchNative:false`); `encodeForServer`/bootstrap-fwuid **non disponibili** (fwuid self-heal da
+  rivedere); IndexedDB reale = `recordGVP67.0` / `ldsDurableCache` (+ `ldsCSRFToken` → il POST
+  getRecord vorrà un **CSRF token**); **iframe consentito** (`frame-ancestors 'self'`, `SAMEORIGIN`)
+  → la via B2 **iframe** è la più promettente; `#auraLoadingBox` presente = segnale di readiness.
+- ⏳ **PENDING**: E2 (fixture offline), timing+navigazione (C6/C7, run dinamico), getRecord (C15),
+  baseline token. _Il `ka0=0` di riga 11 è un limite del probe (aveva scelto il DB sbagliato
+  `ldsCSRFToken`): corretto, sarà misurato nel run dinamico._
+
 ---
 
 ## Decisione lingua (emersa dal recon)
@@ -60,32 +84,41 @@ _Raccolto da `recon-kb-verify.js` C1. Riferimento tipi:_
 
 ## Passa 1 — Content-root & rumore
 
-_Raccolto da `recon-kb-verify.js` C2 (selettori) / C3 (rumore + delta). Reperto PRELIMINARE (1 articolo):_
+_Raccolto da `recon-kb-verify.js` C2 (selettori) / C3 (rumore). CONFERMATO 2026-07-20 (articolo A):_
 
-- **Corpo:** `[role="main"]` (`div.body.isPageWidthFixed-true`, ~27.8k char, tutto incluso); il corpo
-  vero è la colonna **8-of-12** (classi SLDS generiche → meglio tenere `[role="main"]` + togliere rumore).
-- **Rumore (→ `noiseSelectors`):** `.comm-content-header` (metadati), `.comm-content-footer`,
-  `header.forceHighlightsPanel` + `.forceCommunityRecordHeadline` + `.slds-page-header_record-home`,
-  e — per il TESTO — la colonna `.slds-medium-size--4-of-12` (Suggested Articles: utile come LINK, non
-  come testo). Da confermare su più articoli.
+- **Corpo:** `[role="main"]` vince (64,6k char). ⚠️ **`.forceCommunityArticleLayout` e `.cuf-content`
+  NON esistono** su questa KB → vanno tolti da `contentSelectors`, `[role="main"]` è la root reale.
+- **Rumore:** i `noiseSelectors` attuali (comm-content-header/footer, forceHighlightsPanel,
+  forceCommunityRecordHeadline, slds-page-header, breadcrumbs, footer) **sono presenti** ma tolgono
+  solo ~1% del testo di role=main. Il rumore vero (in termini di TESTO) è la **lista ~110 link
+  correlati** annidata in role=main → serve un selettore che la rimuova per l'estrazione testo (i
+  link restano utili per la scoperta). Conferma su più articoli col prossimo run.
 
 ## Passa 2 — Qualità estrazione
 
-_Raccolto da `recon-kb-verify.js` C2/C3._ Conclusioni (→ `MAX_PAGE_CHARS`/`FOCUSED_PAGE_CHARS`, oggi
-6.000/4.500): confermare che il delta rumore sia ≥15% e il testo focalizzato resti ≥900 char sui campioni.
+_Raccolto da `recon-kb-verify.js` C2/C3._ Articolo A: role=main 64,6k char, di cui gran parte è la
+lista correlati (il corpo vero è molto più piccolo). → l'estrazione grezza è enorme: la leva **E2
+per-heading** (`FOCUSED_PAGE_CHARS` 4.500) è essenziale, ma va **verificata offline** che
+`focusedByHeading` funzioni sul DOM reale (fixture) — non che ricada silenziosamente sul per-blocco.
 
 ## Passa 3 — Sorgenti dei "collegati"
 
-_Raccolto da `recon-kb-verify.js` C8. Reperto PRELIMINARE:_ i "collegati" NON sono cross-link nel corpo
-(0 in 2 articoli) ma un pannello **"Suggested Articles"** (colonna 4-of-12); i suoi link potrebbero non
-essere `<a href>` classici (C8 lo conferma). → sorgenti reali: Suggested + indice KB (E4). Lo scoring
-per-keyword locale conta poco (query IT vs contenuto EN, mitigato da E3).
+_Raccolto da `recon-kb-verify.js` C8. AGGIORNATO 2026-07-20 (articolo A):_ i "collegati" **SONO veri
+`<a href>`** — 110 article + 1 topic in `[role="main"]` (smentisce il timore che fossero solo componenti
+senza href). Ma NON stanno nel container `[class*="related"]` (0 lì): sono una lista ampia dentro
+role=main. → la scoperta link funziona, ma **il cap `MAX=40` è troppo basso** e va curato lo scoping
+(corpo vs lista correlati). Lo scoring per-keyword conta poco cross-lingua (mitigato da E3 + indice E4).
 
 ## Passa 4 — Profilo navigazione SPA
 
 _Da compilare con `recon-kb-verify.js` C6/C7 (`RS_VERIFY_NAV=true`):_ tempi render min/med/max,
 `backRestored`, full-reload, e quale meccanismo intercetta la route (matrice C7). → tara
 `waitForSpaRender` + decide il meccanismo B2. Vuoto finché non arriva il probe dinamico.
+
+_Indizi dal run statico (articolo A):_ `#auraLoadingBox` presente → possibile **gate di readiness**
+per `waitForSpaRender` (più robusto della sola stabilità del testo). Il **framing è consentito**
+(`frame-ancestors 'self'`) → se il click sintetico non intercetta, la via **iframe** (C9) è la
+candidata primaria per B2. `$A` è raggiungibile in MAIN world (per l'eventuale bridge).
 
 ## Passa 5 — Ricerca `/s/global-search`
 
