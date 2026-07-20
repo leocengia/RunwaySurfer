@@ -3,7 +3,27 @@
 > Documento di lavoro: qui raccogliamo i risultati dei recon per tarare, nella fase
 > successiva, `lib/site-profile.ts`, `lib/extract.ts`, `lib/crawl.ts`, `lib/spa-nav.ts` e i
 > settings backend. Compila incollando i JSON prodotti dagli script e scrivendo le
-> conclusioni. Piano di riferimento: il piano "Mappatura della KB Salesforce".
+> conclusioni. Piano di riferimento: il piano "Mappatura della KB Salesforce" e
+> `docs/PIANO-verifica-scansione-KB.md` (verifica/scansione con `recon-kb-verify.js`).
+
+## Sezione 0 — Autorizzazione e data-handling (compilare PRIMA di scansionare)
+
+Scansionare la KB aziendale autenticata (2.964 record, corpi via `getRecord`, export HAR verso chi
+non ha accesso alla KB) tocca policy legali e privacy. Compilare prima di qualunque Passa 8+ e prima
+di far uscire QUALSIASI fixture/HAR dal browser:
+
+- **Approvatore** (nome + ruolo): **\*\*\*\*\*\*\*\*** · **Data**: **\*\*\*\*\*\***
+- ☐ L'account SSO usato è **titolato** a vedere tutti gli articoli scansionati.
+- ☐ L'**export** di corpi articolo + HAR verso l'autore del tooling è **permesso** dalla policy/DPA.
+- ☐ Set **classificati** (PCI/PII/legal-hold) da **escludere**: **\*\*\*\*\*\*\*\*\*\***
+- ☐ Le passe pesanti girano su un **profilo/account dedicato di test**, non sulla sessione di un
+  agente in produzione (un eventuale lockout non deve mettere offline un agente vero).
+- **Do-NOT-capture** (bright-line): mai cookie di sessione, valori `aura.token`/`fwuid`, header
+  `Authorization`/Bearer, identità/username/email dell'agente, PII cliente, HAR non scrubbato,
+  `query_preview` con testo cliente. Lo scrub è imposto da `rsScrub`/`rsVerifyClean` nel prelude
+  degli script (blocca il download se resta un match).
+- **Minimizzazione**: enumerazione (Passa 8) = solo metadati URL, **zero corpi**; taratura selettori
+  su un **campione** (i ≥5 articoli di Passa 2), non sui 2.964 corpi, se non autorizzato qui sopra.
 
 ## Procedura passo-passo
 
@@ -377,8 +397,9 @@ solo come ricognizione (struttura dati, dimensioni reali). Le 4 leve, tutte con 
   `docs/build-kb-index.mjs` dalla sitemap): `pickCandidatesWithKbIndex` unisce i link del DOM con
   l'intero indice e li scora insieme → l'articolo giusto emerge anche se non linkato nella pagina,
   **costo-token zero**. Dedup per identità. Innestato in `App.run` (follow); il tour resta sui
-  link di pagina (deve cliccarli). _NB: l'asset è placeholder finché non lo si popola col
-  `rs-sitemap-inventory.json` reale._
+  link di pagina (deve cliccarli). _Asset popolato con i 2.964 articoli reali (sitemap 2026-07-17),
+  URL normalizzati a `?language=en_US` (lingua di retrieval). Rigenerabile da
+  `rs-sitemap-inventory.json` via `docs/build-kb-index.mjs`._
 
 **Manopole backend (E4-token) NON ancora ri-tarate:** `router.ts` (`SIMPLE_/MODERATE_*`, oggi
 tarate su Wikipedia), link-map in `provider/shared.ts`. Da fare dopo la **baseline token** reale
