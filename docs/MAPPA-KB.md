@@ -32,29 +32,34 @@ rs-verify-<slug>.json`. Il probe copre le Passe 0-6 (selettori, rumore, collegat
 navigazione) e l'analizzatore stampa la tabella verdetto. La baseline token (Passa 7) esce dalla
 tabella `requests`. Incolla qui sotto l'output dell'analizzatore e scrivi le conclusioni.
 
-### Rilevazioni live — 2026-07-20 · articolo "Global-airline-schedule-change-policies" (statico, NAV off)
+### Rilevazioni live — 2026-07-20/21 · 4 articoli + 1 topic (statico, NAV off)
 
-`recon-kb-analyze.mjs` → **VERDICT 4/7 PASS (5 PENDING)**.
+Confermato su **5 pagine** (articoli da 31k a 65k char + 1 topic); `recon-kb-analyze.mjs` → 4/7 PASS
+sugli articoli.
 
-- ✅ **origin** giusto (`traveler.my.site.com`, 0 redirect); ✅ **fetch = shell** (raw 501 kB, nessun
-  content-selector nel grezzo → follow-via-fetch **confermato MORTO**); ✅ **sessione** valida;
-  ✅ **collegati = veri `<a href>`** (110 article + 1 topic in `[role="main"]`).
-- ❌ **selettori SF assenti**: `.forceCommunityArticleLayout` e `.cuf-content` **non esistono** su
-  questa KB → vince `[role="main"]` (64,6k char). Azione: in `site-profile.ts` togliere i due
-  selettori morti, tenere `[role="main"]`.
-- ❌ **rumore inefficace**: togliere i `noiseSelectors` attuali riduce solo **~1%** di `[role="main"]`
-  — il grosso NON sono i metadati ma la **lista di ~110 link "correlati"** dentro role=main. Azione:
-  selettore che tolga quel blocco per il TESTO (i link restano per la scoperta) + affidarsi a E2.
-- ⚠️ **cap link**: 111 anchor in role=main > `extractInternalLinks max=40` → il cap può riempirsi di
-  link sbagliati; da curare (scoping corpo vs lista correlati, o alzare/ordinare il cap).
-- 🔎 **piattaforma (per B2/getRecord):** `$A` presente ma **fetch wrappato da Locker/LWS**
-  (`fetchNative:false`); `encodeForServer`/bootstrap-fwuid **non disponibili** (fwuid self-heal da
-  rivedere); IndexedDB reale = `recordGVP67.0` / `ldsDurableCache` (+ `ldsCSRFToken` → il POST
-  getRecord vorrà un **CSRF token**); **iframe consentito** (`frame-ancestors 'self'`, `SAMEORIGIN`)
-  → la via B2 **iframe** è la più promettente; `#auraLoadingBox` presente = segnale di readiness.
-- ⏳ **PENDING**: E2 (fixture offline), timing+navigazione (C6/C7, run dinamico), getRecord (C15),
-  baseline token. _Il `ka0=0` di riga 11 è un limite del probe (aveva scelto il DB sbagliato
-  `ldsCSRFToken`): corretto, sarà misurato nel run dinamico._
+- ✅ **origin** giusto (0 redirect) su tutte; ✅ **fetch = shell** su tutte (raw ~500 kB, 0
+  content-selector nel grezzo → follow-via-fetch **MORTO, definitivo**); ✅ **sessione** valida.
+- ✅ **`[role="main"]` vince SEMPRE**; **`.forceCommunityArticleLayout` e `.cuf-content` sempre a 0**
+  → vanno tolti da `contentSelectors` (evidenza solida su 5 pagine). Sul topic compare anche
+  `article`×10 (le tile-articolo), ma role=main vince lo stesso.
+- ✅ **collegati = veri `<a href>`** (non componenti senza href).
+- ❌ **rumore**: i `noiseSelectors` attuali tolgono **1–3%** sugli articoli (il grosso è la **lista
+  link** interna) ma **22%** sul topic (lì il rumore sono header/footer). → serve un selettore che
+  tolga il blocco-lista per il TESTO; da individuare su **fixture** (prossimo passo) + affidarsi a E2.
+- ⚠️ **cap link**: articoli con **39 / 77 / 110** anchor in `[role="main"]` → `extractInternalLinks
+max=40` è troppo basso su 3 pagine su 4. Da alzare + scoping corpo vs lista.
+- 🔎 **piattaforma** (tutte): `$A` presente ma **fetch wrappato da Locker/LWS** (`fetchNative:false`);
+  **iframe CONSENTITO** (`frame-ancestors 'self'`, `SAMEORIGIN`) → via B2 **iframe** confermata
+  candidata; `#auraLoadingBox` presente = readiness; **ka0 leggibili da IndexedDB** (`recordLayoutMap`,
+  8–19 chiavi, **plaintext**) → i recordId degli articoli **già visitati** sono leggibili anche
+  dall'ISOLATED (utile per getRecord v2); `encodeForServer` assente, bootstrap-fwuid intermittente.
+- 🐞 **Viewport/reflow (importante):** restringendo la finestra / aprendo F12, la pagina **topic**
+  re-renderizza e la sezione "feed" mostra _"Log in to post to this feed"_ (componente Chatter a
+  larghezza ridotta). Non è un bug del probe, ma **avvisa** che la sidebar, restringendo la pagina
+  (`body.marginRight`), può innescare re-render responsivi → verificare che sull'articolo non tagli
+  o nasconda il corpo (test in Sessione B con estensione).
+- ⏳ **PENDING**: E2 (fixture offline — prossimo), timing+navigazione B2 (run dinamico), getRecord
+  (C15), baseline token.
 
 ---
 
@@ -74,40 +79,41 @@ _Raccolto da `recon-kb-verify.js` C1. Riferimento tipi:_
 | Tipo    | Esempio pathname              | Contenuto o lista? | Param rilevanti |
 | ------- | ----------------------------- | ------------------ | --------------- |
 | article | `/Runway/s/article/<slug>`    | contenuto          | `language`      |
-| detail  | `/Runway/s/detail/<id>`       | contenuto          | `language`      |
-| topic   | `/Runway/s/topic/<id>/<slug>` | lista              |                 |
-| search  | `/Runway/s/global-search/<q>` | lista              | `language`      |
+| topic   | `/Runway/s/topic/<id>/<slug>` | lista              | `language`      |
 | home    | `/Runway/s/`                  | —                  |                 |
 
 **Conclusioni:** identità = origin+path (slug), unico param utile `language` (→ `linkIdentity`,
 `keepParams`). Da aggiungere a `rejectPathIncludes`: `/s/topic/`, `/s/global-search/`, `/s/category/`.
+`detail` **non esiste** su questa KB (né in sitemap né trovabile); i topic portano un `&tabset-…`
+extra (rumore → lo togliamo, `linkIdentity` già ignora i query param).
 
 ## Passa 1 — Content-root & rumore
 
-_Raccolto da `recon-kb-verify.js` C2 (selettori) / C3 (rumore). CONFERMATO 2026-07-20 (articolo A):_
+_Raccolto da `recon-kb-verify.js` C2 (selettori) / C3 (rumore). CONFERMATO su 5 pagine (4 art + topic):_
 
-- **Corpo:** `[role="main"]` vince (64,6k char). ⚠️ **`.forceCommunityArticleLayout` e `.cuf-content`
-  NON esistono** su questa KB → vanno tolti da `contentSelectors`, `[role="main"]` è la root reale.
-- **Rumore:** i `noiseSelectors` attuali (comm-content-header/footer, forceHighlightsPanel,
-  forceCommunityRecordHeadline, slds-page-header, breadcrumbs, footer) **sono presenti** ma tolgono
-  solo ~1% del testo di role=main. Il rumore vero (in termini di TESTO) è la **lista ~110 link
-  correlati** annidata in role=main → serve un selettore che la rimuova per l'estrazione testo (i
-  link restano utili per la scoperta). Conferma su più articoli col prossimo run.
+- **Corpo:** `[role="main"]` vince **sempre** (articoli 31k–65k char). ⚠️ **`.forceCommunityArticleLayout`
+  e `.cuf-content` sempre a 0** su tutte → vanno tolti da `contentSelectors`, `[role="main"]` è la root
+  reale. (Sul topic anche `article`×10 = le tile, ma role=main vince lo stesso.)
+- **Rumore:** i `noiseSelectors` attuali sono presenti ma tolgono solo **1–3%** del testo di role=main
+  sugli articoli (**22%** sul topic). Il rumore-testo vero sugli articoli è la **lista link** interna
+  (39–110 anchor) → serve un selettore che rimuova quel blocco per l'estrazione testo (i link restano
+  per la scoperta) + affidarsi a E2. Il container esatto va individuato su **fixture** (prossimo passo).
 
 ## Passa 2 — Qualità estrazione
 
-_Raccolto da `recon-kb-verify.js` C2/C3._ Articolo A: role=main 64,6k char, di cui gran parte è la
-lista correlati (il corpo vero è molto più piccolo). → l'estrazione grezza è enorme: la leva **E2
-per-heading** (`FOCUSED_PAGE_CHARS` 4.500) è essenziale, ma va **verificata offline** che
+_Raccolto da `recon-kb-verify.js` C2/C3._ role=main sugli articoli: **31k / 40k / 40k / 65k char**, di
+cui gran parte è la lista link (il corpo vero è molto più piccolo). → l'estrazione grezza è enorme: la
+leva **E2 per-heading** (`FOCUSED_PAGE_CHARS` 4.500) è essenziale, ma va **verificata offline** che
 `focusedByHeading` funzioni sul DOM reale (fixture) — non che ricada silenziosamente sul per-blocco.
 
 ## Passa 3 — Sorgenti dei "collegati"
 
-_Raccolto da `recon-kb-verify.js` C8. AGGIORNATO 2026-07-20 (articolo A):_ i "collegati" **SONO veri
-`<a href>`** — 110 article + 1 topic in `[role="main"]` (smentisce il timore che fossero solo componenti
-senza href). Ma NON stanno nel container `[class*="related"]` (0 lì): sono una lista ampia dentro
-role=main. → la scoperta link funziona, ma **il cap `MAX=40` è troppo basso** e va curato lo scoping
-(corpo vs lista correlati). Lo scoring per-keyword conta poco cross-lingua (mitigato da E3 + indice E4).
+_Raccolto da `recon-kb-verify.js` C8. CONFERMATO su 5 pagine:_ i "collegati" **SONO veri `<a href>`**
+(smentisce il timore che fossero componenti senza href): **39 / 77 / 110** anchor-articolo negli
+articoli, 21 sul topic. Ma NON stanno nel container `[class*="related"]` (0 lì): sono una lista ampia
+dentro role=main. → la scoperta link funziona, ma **il cap `MAX=40` è troppo basso** (superato su 3/4
+articoli) e va curato lo scoping (corpo vs lista). Scoring per-keyword debole cross-lingua (mitigato
+da E3 + indice E4).
 
 ## Passa 4 — Profilo navigazione SPA
 
