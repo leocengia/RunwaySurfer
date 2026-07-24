@@ -11,8 +11,10 @@
 // da verificare con docs/recon-kb-2.js prima di adattare follow/tour.
 
 export interface SiteProfile {
-  /** Candidati per il content-root, dal più specifico al più generico: vince il primo che matcha. */
+  /** Candidati per il content-root TESTO, dal più specifico al più generico: vince il primo che matcha. */
   contentSelectors: string[];
+  /** Root per la RACCOLTA LINK (più ampia del content-root testo): cattura anche la sidebar Suggested/Trending. */
+  linkRootSelectors: string[];
   /** Selettori (lista per querySelectorAll) dei nodi da rimuovere prima di leggere il testo. */
   noiseSelectors: string;
   /** Sottostringhe di pathname (minuscole) i cui link non vanno mai seguiti. */
@@ -22,17 +24,24 @@ export interface SiteProfile {
 }
 
 export const siteProfile: SiteProfile = {
+  // TESTO: sulla KB Aura il corpo pulito è `c-runway-article-viewer` (esclude
+  // header/metadati, sidebar Suggested/Trending, footer). Confermato su fixture
+  // reale 2026-07-21; `[role="main"]` (che include le 3 colonne) resta come
+  // fallback. `.forceCommunityArticleLayout`/`.cuf-content` rimossi: assenti su
+  // tutte le 5 pagine campionate.
   contentSelectors: [
-    // KB Salesforce Experience Cloud (community Aura): corpo dell'articolo.
-    '.forceCommunityArticleLayout',
-    '.cuf-content',
-    '[role="main"]', // confermato presente su questa KB dal recon
+    'c-runway-article-viewer',
+    '[data-region-name="content"]',
+    '[role="main"]',
     // Generico / MediaWiki (demo + test).
     'main',
     'article',
     '#mw-content-text',
     '#content',
   ],
+  // LINK: root più ampia del testo, così Suggested/Trending (colonna 4-of-12,
+  // fuori dal viewer) e i cross-link del corpo entrano tutti nella scoperta.
+  linkRootSelectors: ['[role="main"]', 'main', 'article', '#mw-content-text', '#content'],
   noiseSelectors: [
     'script',
     'style',
@@ -43,14 +52,24 @@ export const siteProfile: SiteProfile = {
     '.navbox',
     '.reference',
     '.mw-editsection',
-    // Chrome community Salesforce (dal recon).
+    // Chrome community Salesforce (dal recon + fixture): header, sidebar, footer,
+    // pill dei topic — rumore-testo quando il root ripiega su [role="main"].
     '.websterInnerHeader',
     '.forceCommunityBreadcrumbs',
     '.forceHighlightsPanel',
     '.forceCommunityRecordHeadline',
+    '.comm-content-header',
+    '.comm-content-footer',
+    '[data-region-name="sidebar"]',
+    '.topic-section',
     '.footer',
   ].join(', '),
   rejectPathIncludes: [
+    // KB Salesforce: pagine-lista, non articoli → non seguirle.
+    '/s/topic/',
+    '/s/global-search/',
+    '/s/categor',
+    // MediaWiki (demo).
     '/wiki/special:',
     '/wiki/help:',
     '/wiki/category:',
