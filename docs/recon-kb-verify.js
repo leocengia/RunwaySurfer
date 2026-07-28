@@ -29,7 +29,7 @@
  * è BLOCCATO se lo scrub trova ancora un match (`RS-SCRUB-FAIL`).
  */
 (async () => {
-  const PROBE_VERSION = '2026-07-20b';
+  const PROBE_VERSION = '2026-07-28a';
   const SCHEMA = 'rs-verify/1';
   const NAV = window.RS_VERIFY_NAV === true;
   const origin = location.origin;
@@ -51,9 +51,13 @@
   const lastSeg = (u) => decodeURIComponent(u.pathname).split('/').filter(Boolean).pop() || '';
   const mainText = () => norm(document.querySelector('[role="main"]')?.innerText || '');
 
+  // Allineati a lib/site-profile.ts contentSelectors (aggiornato dopo la
+  // fixture 2026-07-21: c-runway-article-viewer è il vero corpo, i due
+  // selettori Salesforce precedenti erano morti su 5/5 pagine e sono stati
+  // rimossi dal codice — restano qui SOLO per rilevare un eventuale ritorno).
   const CONTENT_SELECTORS = [
-    '.forceCommunityArticleLayout',
-    '.cuf-content',
+    'c-runway-article-viewer',
+    '[data-region-name="content"]',
     '[role="main"]',
     'main',
     'article',
@@ -255,7 +259,7 @@
       winner: winner ? winner.sel : null,
       winnerLen,
       winnerIsSalesforceSpecific: winner
-        ? ['.forceCommunityArticleLayout', '.cuf-content'].includes(winner.sel)
+        ? ['c-runway-article-viewer', '[data-region-name="content"]'].includes(winner.sel)
         : false,
     };
   });

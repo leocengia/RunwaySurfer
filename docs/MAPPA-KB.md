@@ -115,6 +115,12 @@ dentro role=main. → la scoperta link funziona, ma **il cap `MAX=40` è troppo 
 articoli) e va curato lo scoping (corpo vs lista). Scoring per-keyword debole cross-lingua (mitigato
 da E3 + indice E4).
 
+**Pannello "Suggested Articles" — ASINCRONO, lento (2026-07-28, run dinamico):** `suggestedAnchorCount`
+resta **0** anche dopo un run completo con attese (C16 ~2.3s) **e** dopo scroll+1.2s (C18,
+`virtualized:false`) — il pannello semplicemente non è ancora popolato in quella finestra di tempo.
+Conferma: **non affidarsi al pannello Suggested per la scoperta link "al volo"** — l'indice KB (E4,
+`lib/kb-index.json`) resta la fonte primaria, indipendente dal timing di rendering della pagina.
+
 ## Passa 4 — Profilo navigazione SPA
 
 _Da compilare con `recon-kb-verify.js` C6/C7 (`RS_VERIFY_NAV=true`):_ tempi render min/med/max,
