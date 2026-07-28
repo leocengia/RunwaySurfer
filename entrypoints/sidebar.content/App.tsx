@@ -6,7 +6,7 @@ import {
   useState,
 } from 'react';
 import { browser } from 'wxt/browser';
-import { extractCurrentPage, extractInternalLinks } from '../../lib/extract';
+import { detectUnreadablePage, extractCurrentPage, extractInternalLinks } from '../../lib/extract';
 import { MAX_FOLLOW, pickCandidatesWithKbIndex, shallowFollow } from '../../lib/crawl';
 import { readIndexOnlyArticles } from '../../lib/nav';
 import { linkIdentity } from '../../lib/site-profile';
@@ -310,6 +310,20 @@ export default function App() {
 
   const run = useCallback(async () => {
     if (!query.trim() || status === 'reading' || status === 'streaming') return;
+
+    // Guardia sessione: se la pagina corrente è la login KB (SSO scaduto) o un
+    // "record non trovato", non ha senso leggerla né mandarla all'AI. Vale per
+    // tutte le modalità → prima dello split.
+    const unreadable = detectUnreadablePage();
+    if (unreadable) {
+      setError(
+        unreadable === 'login'
+          ? 'Sembra la pagina di login della KB (sessione scaduta): apri un articolo da loggato e riprova.'
+          : 'Questa pagina non sembra un articolo leggibile (contenuto non trovato).',
+      );
+      setStatus('error');
+      return;
+    }
 
     if (mode === 'visual') {
       teardownFx();

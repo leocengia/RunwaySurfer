@@ -251,6 +251,29 @@ export function hasRenderedContent(doc: Document): boolean {
   return siteProfile.contentSelectors.some((sel) => doc.querySelector(sel));
 }
 
+/**
+ * Rileva quando il DOM NON è un articolo leggibile ma la pagina di **login**
+ * (sessione SSO scaduta) o **"record non trovato"**. Serve alla sidebar per NON
+ * mandare all'AI il contenuto della login come se fosse un articolo. Conservativo:
+ * richiede sia un segnale (campo password / marker) SIA un content-root corto,
+ * così NON blocca articoli veri (il cui corpo è ampio). Euristica allineata al
+ * probe recon C4. Ritorna null quando la pagina è un normale articolo.
+ */
+export function detectUnreadablePage(doc: Document = document): 'login' | 'notfound' | null {
+  const root = pickContentRoot(doc);
+  const rootLen = normalizeText((root as HTMLElement).innerText ?? root.textContent ?? '').length;
+  const head = normalizeText(doc.body?.textContent ?? '', 800).toLowerCase();
+  const hasPassword = !!doc.querySelector('input[type="password"]');
+  const loginMarker = /\b(log ?in|sign ?in|accedi|forgot password|password dimenticata)\b/.test(
+    head,
+  );
+  const notFoundMarker =
+    /\b(not found|no longer available|record non trovato|articolo non trovato)\b/.test(head);
+  if ((hasPassword || loginMarker) && rootLen < 500) return 'login';
+  if (notFoundMarker && rootLen < 1200) return 'notfound';
+  return null;
+}
+
 /** Extract the readable text of the current page. */
 export function extractPageText(doc: Document = document, query = ''): string {
   const root = pickContentRoot(doc);

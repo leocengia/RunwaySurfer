@@ -1,7 +1,12 @@
 // Test di estrazione DOM: girano in happy-dom con URL
 // https://kb.example.com/wiki/Pagina_iniziale (vedi vitest.config.ts).
 import { beforeEach, describe, expect, it } from 'vitest';
-import { extractCurrentPage, extractInternalLinks, extractPageText } from '../lib/extract';
+import {
+  detectUnreadablePage,
+  extractCurrentPage,
+  extractInternalLinks,
+  extractPageText,
+} from '../lib/extract';
 
 beforeEach(() => {
   document.body.innerHTML = '';
@@ -152,5 +157,30 @@ describe('extractCurrentPage', () => {
     expect(page.url).toBe('https://kb.example.com/wiki/Pagina_iniziale');
     expect(page.title).toBe('Pagina iniziale');
     expect(page.text).toContain('Contenuto della pagina iniziale.');
+  });
+});
+
+describe('detectUnreadablePage', () => {
+  it('null su un articolo vero (corpo ampio)', () => {
+    document.body.innerHTML = `<main>${'Procedura di rimborso passo dopo passo. '.repeat(30)}</main>`;
+    expect(detectUnreadablePage(document)).toBeNull();
+  });
+
+  it("'login' su una pagina di login (campo password + corpo corto)", () => {
+    document.body.innerHTML =
+      '<div><h1>Sign in</h1><form><input type="password" /></form><p>Please log in to continue.</p></div>';
+    expect(detectUnreadablePage(document)).toBe('login');
+  });
+
+  it("'notfound' sul marker record-non-trovato con corpo corto", () => {
+    document.body.innerHTML = '<main><p>The requested record is not found.</p></main>';
+    expect(detectUnreadablePage(document)).toBe('notfound');
+  });
+
+  it('NON confonde un articolo lungo che cita la parola "login"', () => {
+    document.body.innerHTML = `<main><h2>Come accedere</h2><p>${'Istruzioni dettagliate per il login del cliente al portale. '.repeat(
+      30,
+    )}</p></main>`;
+    expect(detectUnreadablePage(document)).toBeNull();
   });
 });
