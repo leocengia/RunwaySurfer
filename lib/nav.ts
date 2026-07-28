@@ -1,24 +1,27 @@
-// Navigazione SPA verso un articolo "solo-indice" (estensione della Fase E4 → B2).
+// Lettura di un articolo "solo-indice" (estensione della Fase E4 → B2).
 //
 // PERCHÉ ESISTE: `extractInternalLinks` vede solo i link presenti nel DOM della
 // pagina; l'indice KB (`kb-index`) propone anche articoli NON linkati qui. Sulla
 // KB Salesforce (Aura, client-rendered) il fetch di quegli articoli riceve solo
 // lo shell (`hasRenderedContent` → false), quindi `shallowFollow` non li legge:
-// un articolo solo-indice può oggi arrivare all'AI solo come suggerimento senza
-// corpo, mai come pagina letta.
+// un articolo solo-indice arriverebbe all'AI solo come suggerimento senza corpo.
 //
-// `openAndReadArticle` colma il gap: naviga client-side all'articolo SENZA
-// dipendere da un anchor in pagina, attende il render, legge il DOM già
-// renderizzato (dove sta il testo vero) e torna all'hub. Riusa i mattoni già
-// testati — `waitForSpaRender` + `extractCurrentPage` — e degrada in silenzio a
-// null se il render non arriva (l'articolo resta un suggerimento, come oggi:
-// NON è un errore). Non fa mai un full reload: quello resterebbe al tour, che ha
-// la rehydration (saveTourResult/loadTourResult); qui un reload perderebbe la
-// sessione della sidebar.
+// MECCANISMO = IFRAME NASCOSTO (deciso su dati reali, probe recon-kb-verify.js
+// 2026-07-28, check C7/C9):
+//   - il click su un anchor sintetico NON è intercettato dal router Aura di
+//     questa KB → nell'estensione causerebbe un FULL RELOAD del tab (uccide il
+//     content-script). Scartato.
+//   - un `<iframe>` nascosto same-origin invece CARICA e RENDERIZZA l'articolo
+//     (`rendered:true`, ~1,3s) e il CSP lo consente (`frame-ancestors 'self'`).
+//     Il tab dell'agente NON naviga mai: leggiamo dal `contentDocument` e
+//     rimuoviamo l'iframe. Niente reload, niente race sul ritorno all'hub,
+//     niente rischio per la sessione della sidebar.
+// Degrada in silenzio a null se il render non arriva entro il timeout
+// (l'articolo resta un suggerimento — NON è un errore).
 import type { KbLink, KbPage } from './outcome';
 import { extractCurrentPage } from './extract';
-import { waitForSpaRender, type WaitForSpaRenderOptions } from './spa-nav';
-import { linkIdentity } from './site-profile';
+import { waitForSpaRender, type SpaRenderProbe, type WaitForSpaRenderOptions } from './spa-nav';
+import { linkIdentity, withRetrievalLanguage } from './site-profile';
 
 function idOf(url: string): string | null {
   try {
@@ -28,65 +31,21 @@ function idOf(url: string): string | null {
   }
 }
 
-/**
- * Naviga client-side a `url` creando un <a> sintetico fuori schermo e
- * cliccandolo: fa scattare il router SPA (Aura) restando client-side (niente
- * reload → il content-script sopravvive), senza bisogno di un anchor già in
- * pagina. È il meccanismo preferito perché imita il click reale che il router
- * intercetta.
- */
-function clickSyntheticAnchor(url: string): void {
-  const a = document.createElement('a');
-  a.href = url;
-  a.style.position = 'absolute';
-  a.style.left = '-9999px';
-  a.style.width = '1px';
-  a.style.height = '1px';
-  a.setAttribute('aria-hidden', 'true');
-  document.body.appendChild(a);
-  try {
-    a.click();
-  } finally {
-    a.remove();
-  }
-}
-
-/**
- * Fallback: pushState + evento popstate, per i router SPA che ascoltano la
- * history API invece del click. Non ricarica la pagina.
- */
-function pushStateNavigate(url: string): void {
-  try {
-    history.pushState(null, '', url);
-    window.dispatchEvent(new PopStateEvent('popstate'));
-  } catch {
-    /* best-effort: se pushState fallisce si resta sull'hub */
-  }
-}
-
 export interface OpenAndReadOptions {
-  /** Interrompe attese/navigazione (es. reset sessione). */
+  /** Interrompe attese/lettura (es. reset sessione). */
   shouldAbort?: () => boolean;
-  /** Opzioni inoltrate a waitForSpaRender (timeout, probe iniettabile per i test). */
+  /** Opzioni inoltrate a waitForSpaRender (timeout, ecc.); il probe è iniettato qui. */
   waitOptions?: WaitForSpaRenderOptions;
 }
 
-/** Torna all'hub via history.back() se ci siamo mossi, attendendone il render. */
-async function returnToHub(
-  hubId: string | null,
-  shouldAbort: () => boolean,
-  waitOptions?: WaitForSpaRenderOptions,
-): Promise<void> {
-  if (!hubId || idOf(location.href) === hubId) return;
-  history.back();
-  await waitForSpaRender(hubId, shouldAbort, waitOptions);
-}
+/** Boot Aura + render dell'articolo nell'iframe: default generoso, override via waitOptions. */
+const IFRAME_RENDER_TIMEOUT_MS = 12_000;
 
 /**
- * Apre un articolo dell'indice (anche NON linkato in pagina) via navigazione
- * SPA, ne legge il DOM renderizzato e torna all'hub. Ritorna il KbPage letto,
- * oppure null se il render non arriva entro il timeout (degrada a suggerimento,
- * come oggi — NON è un errore).
+ * Apre un articolo dell'indice (anche NON linkato in pagina) in un **iframe
+ * nascosto same-origin**, ne legge il DOM renderizzato e rimuove l'iframe.
+ * Il tab dell'agente non naviga. Ritorna il KbPage letto, oppure null se il
+ * render non arriva entro il timeout (degrada a suggerimento — NON è un errore).
  */
 export async function openAndReadArticle(
   url: string,
@@ -95,51 +54,80 @@ export async function openAndReadArticle(
 ): Promise<KbPage | null> {
   const { shouldAbort = () => false, waitOptions } = options;
   const targetId = idOf(url);
-  const hubId = idOf(location.href);
   if (!targetId || shouldAbort()) return null;
 
-  // Già sulla pagina target: leggila e basta, nessuna navigazione.
-  if (targetId === hubId) {
+  // Già sulla pagina target: leggila dal DOM corrente, nessun iframe.
+  if (targetId === idOf(location.href)) {
     return { ...extractCurrentPage(query), origin: 'followed' };
   }
 
-  // La navigazione SPA è **solo same-origin**: un URL di altra origin non è una
-  // route client-side e un click ci porterebbe FUORI dalla pagina corrente
-  // (es. dal demo Wikipedia verso la KB). In quel caso si degrada a suggerimento.
-  let targetOrigin: string | null = null;
+  // L'iframe è **solo same-origin** (il CSP `frame-ancestors 'self'` lo impone e
+  // il contentDocument è leggibile solo same-origin). Un URL di altra origin
+  // (es. dal demo Wikipedia) degrada a suggerimento.
+  let target: URL;
   try {
-    targetOrigin = new URL(url, location.href).origin;
+    target = new URL(url, location.href);
   } catch {
     return null;
   }
-  if (targetOrigin !== location.origin) return null;
+  if (target.origin !== location.origin) return null;
 
-  // Tentativo 1: anchor sintetico (click → router Aura, client-side).
-  clickSyntheticAnchor(url);
-  let rendered = await waitForSpaRender(targetId, shouldAbort, waitOptions);
+  let frame: HTMLIFrameElement | null = null;
+  try {
+    frame = document.createElement('iframe');
+    frame.setAttribute('aria-hidden', 'true');
+    frame.style.cssText =
+      'position:absolute;left:-9999px;top:0;width:1024px;height:768px;border:0;opacity:0;';
 
-  // Tentativo 2: pushState + popstate, se il click non ha innescato la route.
-  if (!rendered && !shouldAbort()) {
-    pushStateNavigate(url);
-    rendered = await waitForSpaRender(targetId, shouldAbort, waitOptions);
-  }
+    // Probe iniettato: waitForSpaRender aspetta che l'iframe sia arrivato alla
+    // route target e il testo sia stabile (non un tempo fisso → niente letture
+    // parziali). Ogni accesso al contentDocument è guardato (about:blank iniziale).
+    const contentEl = () => {
+      const doc = frame?.contentDocument ?? null;
+      return (doc?.querySelector('[role="main"]') ?? doc?.body ?? null) as HTMLElement | null;
+    };
+    const probe: SpaRenderProbe = {
+      identity: () => {
+        const href = frame?.contentDocument?.location?.href;
+        if (!href) return '';
+        try {
+          return linkIdentity(new URL(href));
+        } catch {
+          return '';
+        }
+      },
+      text: () => {
+        const el = contentEl();
+        return ((el?.innerText ?? el?.textContent ?? '') || '').replace(/\s+/g, ' ').trim();
+      },
+    };
 
-  if (!rendered) {
-    // Render non arrivato: torna all'hub (se ci siamo mossi) e degrada a null.
-    await returnToHub(hubId, shouldAbort, waitOptions);
+    document.body.appendChild(frame);
+    frame.src = withRetrievalLanguage(target.href);
+
+    const rendered = await waitForSpaRender(targetId, shouldAbort, {
+      timeoutMs: IFRAME_RENDER_TIMEOUT_MS,
+      ...waitOptions,
+      probe,
+    });
+    if (!rendered || shouldAbort()) return null;
+
+    const doc = frame.contentDocument;
+    if (!doc) return null;
+    // Legge il DOM ORA renderizzato nell'iframe (stesso estrattore della pagina
+    // corrente: content-root = c-runway-article-viewer, retrieval per-heading).
+    return { ...extractCurrentPage(query, doc), origin: 'followed' };
+  } catch {
     return null;
+  } finally {
+    frame?.remove();
   }
-
-  // Legge il DOM ORA renderizzato: qui c'è il testo vero dell'articolo.
-  const page: KbPage = { ...extractCurrentPage(query), origin: 'followed' };
-  await returnToHub(hubId, shouldAbort, waitOptions);
-  return page;
 }
 
 /**
- * Legge in sequenza (una navigazione per volta) i candidati solo-indice via SPA,
- * fino a `max` pagine. Salta i target che non renderizzano. Sequenziale perché
- * la navigazione è single-threaded: non si può stare su due pagine insieme.
+ * Legge in sequenza i candidati solo-indice via iframe, fino a `max` pagine.
+ * Salta i target che non renderizzano. Sequenziale per non tenere più iframe/boot
+ * Aura aperti insieme (costo memoria).
  */
 export async function readIndexOnlyArticles(
   candidates: KbLink[],

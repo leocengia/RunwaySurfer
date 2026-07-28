@@ -123,14 +123,19 @@ Conferma: **non affidarsi al pannello Suggested per la scoperta link "al volo"**
 
 ## Passa 4 — Profilo navigazione SPA
 
-_Da compilare con `recon-kb-verify.js` C6/C7 (`RS_VERIFY_NAV=true`):_ tempi render min/med/max,
-`backRestored`, full-reload, e quale meccanismo intercetta la route (matrice C7). → tara
-`waitForSpaRender` + decide il meccanismo B2. Vuoto finché non arriva il probe dinamico.
+**RISOLTA — run dinamico 2026-07-28 (`RS_VERIFY_TARGET_URL` esplicito), matrice C7 + iframe C9:**
 
-_Indizi dal run statico (articolo A):_ `#auraLoadingBox` presente → possibile **gate di readiness**
-per `waitForSpaRender` (più robusto della sola stabilità del testo). Il **framing è consentito**
-(`frame-ancestors 'self'`) → se il click sintetico non intercetta, la via **iframe** (C9) è la
-candidata primaria per B2. `$A` è raggiungibile in MAIN world (per l'eventuale bridge).
+- **Click su anchor sintetico → NON intercettato** dal router Aura (anchor@body/@root/MouseEvent
+  tutti falliti). ⇒ nell'estensione (senza la guardia `preventDefault` del probe) causerebbe un
+  **full reload** del tab. **Da NON usare.**
+- **`pushState`+popstate → `intercepted-spa`** (contenuto cambiato davvero): funziona, ma **naviga
+  il tab** (+ rischio stale-text, + mutazione history). Non ideale per una lettura in background.
+- **iframe nascosto (C9) → `rendered:true`, boot ~1,3s** e CSP `frame-ancestors 'self'` lo consente.
+  Il tab **non naviga**: si legge dal `contentDocument`. **← meccanismo B2 scelto.**
+
+**Decisione:** `openAndReadArticle` reimplementata su **iframe** (`lib/nav.ts`) — vedi Passa 11.
+`#auraLoadingBox` presente resta un possibile gate di readiness aggiuntivo; per l'iframe usiamo la
+stabilità del testo del content-root (via `waitForSpaRender` con probe sull'iframe).
 
 ## Passa 5 — Ricerca `/s/global-search`
 
@@ -338,25 +343,25 @@ renderizzata** — e da questa passa il caso "solo-indice" è parzialmente sbloc
 
 ### Matrice WHAT / LIMITS / GAPS
 
-| Capacità                               | WHAT (cosa fa)                                                                                                         | LIMITS (dove si ferma)                                                                                                      | file:riga                                                         |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Lettura pagina corrente                | Legge il DOM **renderizzato** del content-root, retrieval per-heading focalizzato sulla query.                         | Solo la pagina in cui la sidebar è montata; nessuna navigazione.                                                            | `extract.ts:233`, `extract.ts:276`, `App.tsx:334`                 |
-| Fetch `follow`                         | `fetch(url, credentials:'include')` same-origin, estrae il testo dei link scelti.                                      | **Morto sulla KB Aura**: `hasRenderedContent`→false sullo shell → pagina scartata. Vivo solo su siti server-rendered.       | `crawl.ts:186`, `crawl.ts:195`, `extract.ts:228`                  |
-| Tour SPA `visual`                      | Hub-and-spoke: clicca l'anchor → `waitForSpaRender` → legge il DOM → `history.back()` all'hub.                         | **Richiede un anchor vivo in pagina**; se il link non c'è (o rect 0×0) il target è **saltato**.                             | `useTourDriver.ts:107`, `highlight.ts:15`, `useTourDriver.ts:122` |
-| Link discovery (DOM)                   | `extractInternalLinks` raccoglie i link same-origin del content-root, dedup per identità.                              | Vede **solo** i link presenti nel DOM della pagina corrente.                                                                | `extract.ts:247`                                                  |
-| Candidati KB-wide (E4)                 | `pickCandidatesWithKbIndex` unisce i link del DOM con l'intero indice KB e li scora insieme, costo-token 0.            | Propone l'URL giusto ma **non ne legge il corpo** se non è fetchabile/navigabile.                                           | `crawl.ts:162`, `kb-index.ts:40`                                  |
-| Attesa render (SPA)                    | `waitForSpaRender`: attende route arrivata + testo stabile (non tempo fisso), timeout 9s.                              | Se il render non arriva entro 9s → false (degrada).                                                                         | `spa-nav.ts:46`                                                   |
-| Navigazione finale (tour)              | Click sull'anchor se sull'hub (client-side); altrimenti `location.href` + rehydration.                                 | Solo verso la fonte scelta a fine tour; non è navigazione libera.                                                           | `useTourDriver.ts:201`, `tour.ts:152`                             |
-| **Apertura articolo solo-indice (B2)** | `openAndReadArticle`: naviga client-side **senza anchor** (anchor sintetico → pushState), legge il DOM, torna all'hub. | Additivo alla modalità **follow**; degrada a suggerimento se il render non arriva. No full-reload (perderebbe la sessione). | `nav.ts:91`, `nav.ts:38`, `App.tsx:343`                           |
+| Capacità                               | WHAT (cosa fa)                                                                                                                                                                                        | LIMITS (dove si ferma)                                                                                                                                                                                      | file:riga                                                         |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Lettura pagina corrente                | Legge il DOM **renderizzato** del content-root, retrieval per-heading focalizzato sulla query.                                                                                                        | Solo la pagina in cui la sidebar è montata; nessuna navigazione.                                                                                                                                            | `extract.ts:233`, `extract.ts:276`, `App.tsx:334`                 |
+| Fetch `follow`                         | `fetch(url, credentials:'include')` same-origin, estrae il testo dei link scelti.                                                                                                                     | **Morto sulla KB Aura**: `hasRenderedContent`→false sullo shell → pagina scartata. Vivo solo su siti server-rendered.                                                                                       | `crawl.ts:186`, `crawl.ts:195`, `extract.ts:228`                  |
+| Tour SPA `visual`                      | Hub-and-spoke: clicca l'anchor → `waitForSpaRender` → legge il DOM → `history.back()` all'hub.                                                                                                        | **Richiede un anchor vivo in pagina**; se il link non c'è (o rect 0×0) il target è **saltato**.                                                                                                             | `useTourDriver.ts:107`, `highlight.ts:15`, `useTourDriver.ts:122` |
+| Link discovery (DOM)                   | `extractInternalLinks` raccoglie i link same-origin del content-root, dedup per identità.                                                                                                             | Vede **solo** i link presenti nel DOM della pagina corrente.                                                                                                                                                | `extract.ts:247`                                                  |
+| Candidati KB-wide (E4)                 | `pickCandidatesWithKbIndex` unisce i link del DOM con l'intero indice KB e li scora insieme, costo-token 0.                                                                                           | Propone l'URL giusto ma **non ne legge il corpo** se non è fetchabile/navigabile.                                                                                                                           | `crawl.ts:162`, `kb-index.ts:40`                                  |
+| Attesa render (SPA)                    | `waitForSpaRender`: attende route arrivata + testo stabile (non tempo fisso), timeout 9s.                                                                                                             | Se il render non arriva entro 9s → false (degrada).                                                                                                                                                         | `spa-nav.ts:46`                                                   |
+| Navigazione finale (tour)              | Click sull'anchor se sull'hub (client-side); altrimenti `location.href` + rehydration.                                                                                                                | Solo verso la fonte scelta a fine tour; non è navigazione libera.                                                                                                                                           | `useTourDriver.ts:201`, `tour.ts:152`                             |
+| **Apertura articolo solo-indice (B2)** | `openAndReadArticle`: apre l'articolo in un **iframe nascosto same-origin**, attende il render (probe su `contentDocument`) e legge — il tab NON naviga. Verificato live (C9 `rendered:true`, ~1,3s). | Additivo alla modalità **follow**; solo same-origin (CSP `frame-ancestors 'self'`); degrada a suggerimento se non renderizza. Il click su anchor sintetico è **scartato** (non intercettato → full-reload). | `nav.ts:44`, `App.tsx:343`, `spa-nav.ts:46`                       |
 
 ### GAP trasversali (stato dopo B2)
 
 1. **Articolo non-anchor** — prima: non leggibile se non anchor vivo in pagina. **Ora (B2):** i
-   candidati **solo-indice** in modalità `follow` sono aperti via SPA e letti (`openAndReadArticle`).
-   Resta scoperto: un candidato che è anchor in pagina ma non renderizza via fetch nel `follow`
-   (lo copre il tour `visual`, che lo clicca).
-2. **`fetch`/`follow` morto** sulla KB client-rendered → `single`/`visual`/`follow+SPA` sono le
-   uniche letture reali del corpo.
+   candidati **solo-indice** in modalità `follow` sono aperti in **iframe** e letti
+   (`openAndReadArticle`, verificato live). Resta scoperto: un candidato che è anchor in pagina ma
+   non renderizza via fetch nel `follow` (lo copre il tour `visual`, che lo clicca).
+2. **`fetch`/`follow` morto** sulla KB client-rendered → `single` / `visual` / `follow+iframe` sono
+   le uniche letture reali del corpo.
 3. **Niente pilotaggio della barra di ricerca KB** (opzione scartata a monte): la scoperta degli
    articoli passa dall'indice E4, non dalla ricerca in-app.
 4. **Niente multi-hop / crawl ricorsivo**: si legge un livello di candidati, non i loro link.

@@ -6,10 +6,10 @@ import type { KbLink } from '../lib/outcome';
 // (vedi vitest.config.ts): la usiamo come "hub" per il caso già-sulla-pagina.
 const HUB_URL = 'https://kb.example.com/wiki/Pagina_iniziale';
 
-// happy-dom aggiorna location.href su history.pushState (non c'è un router SPA
-// reale): per i casi di "render mancato" serve quindi un content-root VUOTO
-// (testo < minChars) così waitForSpaRender non si stabilizza mai. Ogni test
-// riparte dall'hub con body vuoto.
+// openAndReadArticle ora legge l'articolo in un IFRAME nascosto. In happy-dom
+// l'iframe non renderizza contenuto reale (niente rete/boot Aura): il suo
+// content-root resta vuoto (testo < minChars) → waitForSpaRender non si
+// stabilizza mai → degrado a null. Ogni test riparte dall'hub con body vuoto.
 beforeEach(() => {
   history.pushState(null, '', HUB_URL);
   document.body.innerHTML = '<main></main>';
