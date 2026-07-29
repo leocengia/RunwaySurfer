@@ -65,6 +65,8 @@ export interface RequestHistoryRecord {
   error: string | null;
   selected_links_json: string;
   sources_json: string;
+  // 'ask' = sintesi risposta; 'rank' = rerank/selezione candidati (Fase reranker).
+  kind: string;
 }
 
 export interface RequestHistoryInput {
@@ -88,6 +90,8 @@ export interface RequestHistoryInput {
   error?: string;
   selectedLinks: unknown[];
   sources: unknown[];
+  /** 'ask' (sintesi, default) o 'rank' (rerank candidati). */
+  kind?: 'ask' | 'rank';
 }
 
 export interface SettingsRecord {
@@ -186,7 +190,8 @@ export function initDb(): void {
       status TEXT NOT NULL,
       error TEXT,
       selected_links_json TEXT NOT NULL,
-      sources_json TEXT NOT NULL
+      sources_json TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'ask'
     );
 
     CREATE TABLE IF NOT EXISTS settings (
@@ -217,8 +222,10 @@ export function initDb(): void {
 
 // Schema versioning via PRAGMA user_version. Version 1 adds the auth columns to
 // `users` for databases created before the login feature; version 2 adds the
-// real-token columns to `requests`. Il guard su table_info tiene le ALTER
-// idempotenti (i DB freschi hanno già le colonne dalla CREATE TABLE).
+// real-token columns to `requests`; version 3 adds `kind` ('ask'|'rank') to
+// `requests` per attribuire il costo del reranker separatamente. Il guard su
+// table_info tiene le ALTER idempotenti (i DB freschi hanno già le colonne dalla
+// CREATE TABLE).
 function migrate(): void {
   const version = db.pragma('user_version', { simple: true }) as number;
   if (version < 1) {
@@ -248,6 +255,20 @@ function migrate(): void {
         db.exec('ALTER TABLE requests ADD COLUMN actual_output_tokens INTEGER');
       }
       db.pragma('user_version = 2');
+    })();
+  }
+  if (version < 3) {
+    db.transaction(() => {
+      const columns = (db.pragma('table_info(requests)') as Array<{ name: string }>).map(
+        (c) => c.name,
+      );
+      // `kind` distingue la chiamata di sintesi ('ask') da quella di rerank
+      // ('rank'), per attribuire il costo separatamente. Default 'ask' → le righe
+      // storiche restano corrette senza backfill.
+      if (!columns.includes('kind')) {
+        db.exec("ALTER TABLE requests ADD COLUMN kind TEXT NOT NULL DEFAULT 'ask'");
+      }
+      db.pragma('user_version = 3');
     })();
   }
 }
@@ -490,8 +511,8 @@ export function insertRequestHistory(input: RequestHistoryInput): void {
       provider, model, pages_count, links_count, estimated_input_tokens,
       estimated_output_tokens, estimated_cost_usd, actual_input_tokens,
       actual_output_tokens, duration_ms, status, error,
-      selected_links_json, sources_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      selected_links_json, sources_json, kind
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     input.id,
     now(),
@@ -514,6 +535,7 @@ export function insertRequestHistory(input: RequestHistoryInput): void {
     input.error ?? null,
     json(input.selectedLinks),
     json(input.sources),
+    input.kind ?? 'ask',
   );
 }
 
