@@ -36,6 +36,24 @@ export interface OpenAndReadOptions {
   shouldAbort?: () => boolean;
   /** Opzioni inoltrate a waitForSpaRender (timeout, ecc.); il probe è iniettato qui. */
   waitOptions?: WaitForSpaRenderOptions;
+  /** Titolo di ripiego (es. label dell'indice KB) se il `document.title` dell'iframe
+   *  non è ancora risolto (Aura mostra il merge-field `{!Record._Title}`). */
+  fallbackTitle?: string;
+}
+
+/** Titolo dell'articolo nell'iframe: `document.title` se risolto, altrimenti
+ *  l'headline della pagina, poi il ripiego passato dal chiamante. Su Aura il
+ *  `document.title` dell'iframe può essere ancora `{!Record._Title}` al momento
+ *  della lettura (si risolve dopo il corpo). */
+function resolveTitle(doc: Document, fallback?: string): string {
+  const raw = (doc.title || '').trim();
+  if (raw && !raw.includes('{!')) return raw;
+  const headline = (
+    doc.querySelector('.slds-page-header__title, h1') as HTMLElement | null
+  )?.innerText
+    ?.replace(/\s+/g, ' ')
+    .trim();
+  return headline || fallback || raw || 'Articolo';
 }
 
 /** Boot Aura + render dell'articolo nell'iframe: default generoso, override via waitOptions. */
@@ -116,7 +134,13 @@ export async function openAndReadArticle(
     if (!doc) return null;
     // Legge il DOM ORA renderizzato nell'iframe (stesso estrattore della pagina
     // corrente: content-root = c-runway-article-viewer, retrieval per-heading).
-    return { ...extractCurrentPage(query, doc), origin: 'followed' };
+    // Il titolo va risolto a parte: nell'iframe `document.title` può essere ancora
+    // il merge-field non risolto (`{!Record._Title}`).
+    return {
+      ...extractCurrentPage(query, doc),
+      title: resolveTitle(doc, options.fallbackTitle),
+      origin: 'followed',
+    };
   } catch {
     return null;
   } finally {
@@ -139,7 +163,12 @@ export async function readIndexOnlyArticles(
   for (const candidate of candidates) {
     if (out.length >= max) break;
     if (options.shouldAbort?.()) break;
-    const page = await openAndReadArticle(candidate.url, query, options);
+    // La label del candidato (dall'indice KB) è il ripiego per il titolo se
+    // l'iframe non ha ancora risolto `document.title`.
+    const page = await openAndReadArticle(candidate.url, query, {
+      ...options,
+      fallbackTitle: candidate.text,
+    });
     if (page) out.push(page);
   }
   return out;

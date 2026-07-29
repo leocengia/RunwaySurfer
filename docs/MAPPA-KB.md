@@ -61,6 +61,31 @@ max=40` è troppo basso su 3 pagine su 4. Da alzare + scoping corpo vs lista.
 - ⏳ **PENDING**: E2 (fixture offline — prossimo), timing+navigazione B2 (run dinamico), getRecord
   (C15), baseline token.
 
+### Sessione B — validazione con estensione caricata (2026-07-29)
+
+Estensione buildata e caricata sulla KB reale (profilo loggato), backend mock. Esiti:
+
+- ✅ **B2-iframe FUNZIONA dall'ISOLATED world** (il test che mancava): in `follow`, "pagine lette" = 2
+  (current + un articolo **non linkato** aperto via iframe). Nessuna sidebar duplicata nell'iframe,
+  il tab non naviga. Il rischio #1 di B2 è **chiuso**.
+- ✅ **E2 confermata live**: articolo Lufthansa (~31k char) → **~1126 token di contesto** → router →
+  `haiku` (economico). La leva token funziona sul contenuto reale.
+- ✅ router: `single`→haiku (~1126 tok), `follow`/2-pagine→sonnet (~1.1–2.3k tok). Già instrada su
+  modelli economici (le soglie Wikipedia reggono; ritaratura fine rimandata alla baseline).
+- ✅ `single` estrae il corpo pulito; viewport/reflow OK anche col topic.
+- 🐞 **Titolo pagina-followed = `{!Record._Title}`** (merge-field non risolto): nell'iframe
+  `document.title` non è ancora risolto quando leggiamo. **Corretto** (`resolveTitle`: headline della
+  pagina → label indice → fallback).
+- 🐞 **Tour visivo instabile al primo giro**: ha aperto un link tangenziale e perso lo stato sidebar
+  (secondo giro liscio). Il click su anchor **reale** a volte fa full-reload → il tour resta fragile.
+  B2-`follow`+iframe è il percorso robusto; il tour è secondario (fix/de-enfasi in futuro).
+- 🔎 **Selezione articolo = solo scoring locale (a monte dell'AI):** quale articolo aprire lo decide
+  il keyword-scoring (`pickCandidatesWithKbIndex`/`pickRelevantLinks`), NON l'AI. Query IT vs
+  contenuto EN → selezione a volte tangenziale. **Collegare l'API reale migliora la RISPOSTA, non la
+  SELEZIONE**: per rendere "intelligente" la scelta serve un passo di retrieval AI (dare a Claude
+  l'elenco candidati dall'indice KB e farglieli scegliere) o ricerca semantica/embedding. Vedi la
+  proposta "retrieval AI" come prossimo upgrade architetturale.
+
 ---
 
 ## Decisione lingua (emersa dal recon)
