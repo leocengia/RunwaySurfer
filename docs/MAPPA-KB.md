@@ -70,8 +70,9 @@ Estensione buildata e caricata sulla KB reale (profilo loggato), backend mock. E
   il tab non naviga. Il rischio #1 di B2 è **chiuso**.
 - ✅ **E2 confermata live**: articolo Lufthansa (~31k char) → **~1126 token di contesto** → router →
   `haiku` (economico). La leva token funziona sul contenuto reale.
-- ✅ router: `single`→haiku (~1126 tok), `follow`/2-pagine→sonnet (~1.1–2.3k tok). Già instrada su
-  modelli economici (le soglie Wikipedia reggono; ritaratura fine rimandata alla baseline).
+- ✅ router: `single`→haiku (~1126 tok), `follow`/2-pagine→sonnet (~1.1–2.3k tok). **Ritarato sulla
+  baseline reale (Passa 7): decide per dimensione contesto, non n. pagine** — i follow ≥3 pagine
+  piccoli non finiscono più su `opus`.
 - ✅ `single` estrae il corpo pulito; viewport/reflow OK anche col topic.
 - 🐞 **Titolo pagina-followed = `{!Record._Title}`** (merge-field non risolto): nell'iframe
   `document.title` non è ancora risolto quando leggiamo. **Corretto** (`resolveTitle`: headline della
@@ -208,24 +209,46 @@ l'estensione). Il metodo di stima è **costante** (`Math.ceil(len/4)`, `router.t
 > accanto alle stime (il mock li lascia `NULL`): con `AI_PROVIDER=anthropic` la tabella sotto
 > si compila con i **token esatti**, altrimenti con le sole stime.
 
-### Tabella before/after
+### Baseline reale — 16 `/ask`, tabella `requests` (2026-07-29, provider mock)
 
-_Da compilare con l'export di `GET /requests` dell'ambiente autenticato dell'utente. "Before" =
-prima delle leve E; "After" = dopo. Un blocco per query, filtrando per finestra temporale._
+Catturata dalla dashboard "Recent requests" (estensione caricata sulla KB, tutte `status: ok`).
+Raggruppata per modello scelto dal router:
 
-| Query | Fase   | Modalità | # pagine | # link | tok in (stima) | tok in (reale) | tok out | modello | costo $ | durata ms |
-| ----- | ------ | -------- | -------- | ------ | -------------- | -------------- | ------- | ------- | ------- | --------- |
-|       | before | single   |          |        |                |                |         |         |         |           |
-|       | after  | single   |          |        |                |                |         |         |         |           |
-|       | after  | follow   |          |        |                |                |         |         |         |           |
+| Modello (pre-taratura) | n. righe | # pagine | tok in (stima) | costo $ |
+| ---------------------- | -------- | -------- | -------------- | ------- |
+| `haiku`  | 8 | 1     | 317 – 1 842   | 0,0028 – 0,0043 |
+| `sonnet` | 4 | 1 – 2 | 702 – 2 601   | 0,0096 – 0,0153 |
+| `opus`   | 4 | **3 – 4** | **2 441 – 3 014** | **0,0247 – 0,0276** |
 
-**Delta atteso** (ipotesi da verificare coi numeri veri): da **~16-31k token/articolo** (corpo
-intero, cfr. Passa 9) verso **~4,5k** (retrieval per-heading, Passa 10 · E2), con **routing
-verso modelli più economici** (meno contesto → più `haiku`/`sonnet` invece di `opus`).
+**Mediana `estimated_input_tokens` ≈ 1,5k** → contro il corpo intero pre-E2 (**~16-31k**, cfr.
+Passa 9) è un **−95%** di contesto per `/ask`. La leva E2 (Passa 10) è confermata efficace sui
+numeri reali.
 
-**Conclusioni (→ soglie router `SIMPLE_/MODERATE_*`, `max_request_*`, trimming link-map):** _...
-(da scrivere quando la tabella è piena: quale modello viene scelto in pratica, dove tagliare le
-soglie `SIMPLE_MAX_CONTEXT_CHARS` / `MODERATE_MAX_CONTEXT_CHARS`, se ridurre `max_request_links`.)_
+**Problema individuato (mis-routing):** le 4 chiamate `opus` portano solo **~2,4-3k token**
+(~8-12k char) di contesto — più piccole di tante `sonnet`. Sono finite su `opus` **solo perché
+`pages ≥ 3`** (`MODERATE_MAX_PAGES = 2`), non perché il task fosse grande. Dopo E2 il numero di
+pagine NON è più un indicatore di dimensione: un follow di 3-4 pagine focalizzate resta minuscolo.
+Si pagava ~$0,026 per lavoro che `sonnet` fa a ~$0,015.
+
+### Ri-taratura router applicata (`server/src/router.ts`)
+
+| Soglia | Prima (Wikipedia) | Dopo (KB reale) | Perché |
+| ------ | ----------------- | --------------- | ------ |
+| `SIMPLE_MAX_CONTEXT_CHARS`   | 6 000  | **8 000**  | una pagina piena è ≤ `MAX_PAGE_CHARS` (6 000); a 6 000 il `< 6 000` la escludeva da `haiku`. |
+| `MODERATE_MAX_PAGES`         | 2      | **6**      | il conteggio pagine non implica più dimensione: non deve da solo forzare `opus`. |
+| `MODERATE_MAX_CONTEXT_CHARS` | 16 000 | **18 000** | copre ~4 pagine focalizzate (~4,5k char l'una) come "medio" → `sonnet`. |
+
+Ora **decide la dimensione del contesto in caratteri**, non il numero di pagine. `opus` scatta
+solo per sintesi davvero grande (≥18k char) o >6 pagine. Lock-in in `server/tests/router.test.ts`
+(follow multi-pagina piccolo → `sonnet`; pagina singola piena → `haiku`).
+
+**Effetto proiettato su queste 16 righe:** le 4 `opus` → `sonnet`, e la `sonnet` a 1 pagina
+(1 757 tok) → `haiku`. Nessuna chiamata `opus` su questo carico reale. Costo del batch da
+**~$0,184 → ~$0,133 (≈ −28%)**, a parità di qualità (sonnet regge ampiamente ~2,5k token di
+sintesi). Da riconfermare rilanciando lo stesso set dopo il rebuild.
+
+**Aperto:** `max_request_links` / trimming link-map (`provider/shared.ts`) non toccati — i
+contesti reali sono già piccoli, nessuna evidenza che serva tagliarli ora.
 
 ---
 
@@ -355,9 +378,10 @@ solo come ricognizione (struttura dati, dimensioni reali). Le 4 leve, tutte con 
   URL normalizzati a `?language=en_US` (lingua di retrieval). Rigenerabile da
   `rs-sitemap-inventory.json` via `docs/build-kb-index.mjs`._
 
-**Manopole backend (E4-token) NON ancora ri-tarate:** `router.ts` (`SIMPLE_/MODERATE_*`, oggi
-tarate su Wikipedia), link-map in `provider/shared.ts`. Da fare dopo la **baseline token** reale
-(Passa 7) per un before/after quantificato.
+**Manopole backend (E4-token):** `router.ts` (`SIMPLE_/MODERATE_*`) **ri-tarato sulla baseline
+reale (Passa 7, 2026-07-29)** — ora instrada per dimensione contesto e non per numero di pagine.
+Resta invariato il link-map in `provider/shared.ts` (i contesti reali sono già piccoli, nessuna
+evidenza che serva tagliarlo).
 
 ## Passa 11 — Capacità di navigazione (cosa la sidebar sa muoversi/leggere)
 

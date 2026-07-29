@@ -28,14 +28,23 @@ export interface RoutingDecision {
   reason: string;
 }
 
-// Soglie euristiche del router. Tarate sulla demo (pagine Wikipedia da
-// ~2-6k caratteri): un task è "semplice" se sta in una pagina corta con una
-// query breve, "medio" fino a due pagine di contesto contenuto, altrimenti
-// richiede sintesi multi-pagina.
-const SIMPLE_MAX_CONTEXT_CHARS = 6_000;
+// Soglie euristiche del router. RITARATE sul profilo reale della KB Runway
+// (baseline Passa 7, 2026-07-29) dopo la leva E2: l'estrazione per-heading tiene
+// ogni pagina entro ~4.500 char (cap 6.000 = MAX_PAGE_CHARS), quindi anche un
+// follow di 3-4 pagine porta solo ~8-12k char (~2-3k token) di contesto.
+//
+// La difficoltà va misurata sulla DIMENSIONE del contesto, NON sul numero di
+// pagine: prima `MODERATE_MAX_PAGES = 2` spingeva OGNI follow ≥3 pagine su opus
+// anche con contesti minuscoli (rilevato in baseline: 4 chiamate opus con soli
+// 2.4-3k token → sprecato ~$0.026 vs ~$0.015 sonnet). Ora il conteggio pagine è
+// un tetto largo e a decidere è quasi sempre la soglia in caratteri.
+//   - semplice  : 1 pagina (≤ MAX_PAGE_CHARS) + query breve            → haiku
+//   - medio     : fino a 6 pagine focalizzate, contesto < ~18k char    → sonnet
+//   - difficile : contesto grande (≥18k char) o >6 pagine di sintesi   → opus
+const SIMPLE_MAX_CONTEXT_CHARS = 8_000;
 const SIMPLE_MAX_QUERY_TOKENS = 40;
-const MODERATE_MAX_PAGES = 2;
-const MODERATE_MAX_CONTEXT_CHARS = 16_000;
+const MODERATE_MAX_PAGES = 6;
+const MODERATE_MAX_CONTEXT_CHARS = 18_000;
 
 /** ~4 characters per token, good enough for routing and cost estimates. */
 export function estimateTokens(text: string): number {
