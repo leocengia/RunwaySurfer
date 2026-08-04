@@ -11,8 +11,10 @@
 // da verificare con docs/recon-kb-2.js prima di adattare follow/tour.
 
 export interface SiteProfile {
-  /** Candidati per il content-root, dal più specifico al più generico: vince il primo che matcha. */
+  /** Candidati per il content-root TESTO, dal più specifico al più generico: vince il primo che matcha. */
   contentSelectors: string[];
+  /** Root per la RACCOLTA LINK (più ampia del content-root testo): cattura anche la sidebar Suggested/Trending. */
+  linkRootSelectors: string[];
   /** Selettori (lista per querySelectorAll) dei nodi da rimuovere prima di leggere il testo. */
   noiseSelectors: string;
   /** Sottostringhe di pathname (minuscole) i cui link non vanno mai seguiti. */
@@ -22,17 +24,24 @@ export interface SiteProfile {
 }
 
 export const siteProfile: SiteProfile = {
+  // TESTO: sulla KB Aura il corpo pulito è `c-runway-article-viewer` (esclude
+  // header/metadati, sidebar Suggested/Trending, footer). Confermato su fixture
+  // reale 2026-07-21; `[role="main"]` (che include le 3 colonne) resta come
+  // fallback. `.forceCommunityArticleLayout`/`.cuf-content` rimossi: assenti su
+  // tutte le 5 pagine campionate.
   contentSelectors: [
-    // KB Salesforce Experience Cloud (community Aura): corpo dell'articolo.
-    '.forceCommunityArticleLayout',
-    '.cuf-content',
-    '[role="main"]', // confermato presente su questa KB dal recon
+    'c-runway-article-viewer',
+    '[data-region-name="content"]',
+    '[role="main"]',
     // Generico / MediaWiki (demo + test).
     'main',
     'article',
     '#mw-content-text',
     '#content',
   ],
+  // LINK: root più ampia del testo, così Suggested/Trending (colonna 4-of-12,
+  // fuori dal viewer) e i cross-link del corpo entrano tutti nella scoperta.
+  linkRootSelectors: ['[role="main"]', 'main', 'article', '#mw-content-text', '#content'],
   noiseSelectors: [
     'script',
     'style',
@@ -43,14 +52,24 @@ export const siteProfile: SiteProfile = {
     '.navbox',
     '.reference',
     '.mw-editsection',
-    // Chrome community Salesforce (dal recon).
+    // Chrome community Salesforce (dal recon + fixture): header, sidebar, footer,
+    // pill dei topic — rumore-testo quando il root ripiega su [role="main"].
     '.websterInnerHeader',
     '.forceCommunityBreadcrumbs',
     '.forceHighlightsPanel',
     '.forceCommunityRecordHeadline',
+    '.comm-content-header',
+    '.comm-content-footer',
+    '[data-region-name="sidebar"]',
+    '.topic-section',
     '.footer',
   ].join(', '),
   rejectPathIncludes: [
+    // KB Salesforce: pagine-lista, non articoli → non seguirle.
+    '/s/topic/',
+    '/s/global-search/',
+    '/s/categor',
+    // MediaWiki (demo).
     '/wiki/special:',
     '/wiki/help:',
     '/wiki/category:',
@@ -89,4 +108,29 @@ export function normalizeLinkUrl(url: URL, profile: SiteProfile = siteProfile): 
 export function linkIdentity(url: URL): string {
   const path = decodeURIComponent(url.pathname).replace(/\/+$/, '');
   return url.origin + path;
+}
+
+/**
+ * Lingua di **retrieval**: gli articoli si leggono in **inglese**, dove il
+ * contenuto è popolato e la ricerca della KB funziona (la ricerca in italiano
+ * no). La risposta all'agente resta comunque in italiano: la genera il backend.
+ * La sitemap indicizza gli articoli in lingue miste (~1 su 5 non è `en_US`):
+ * senza questa normalizzazione la navigazione B2 aprirebbe la variante tedesca/
+ * coreana/… di quegli articoli.
+ */
+export const RETRIEVAL_LANGUAGE = 'en_US';
+
+/**
+ * Forza `?language=en_US` su un URL KB (assoluto), preservando path e resto
+ * dei param. Su URL non parsabili ritorna l'input invariato. `linkIdentity`
+ * ignora comunque il param, quindi la deduplica non cambia.
+ */
+export function withRetrievalLanguage(rawUrl: string, language = RETRIEVAL_LANGUAGE): string {
+  try {
+    const url = new URL(rawUrl);
+    url.searchParams.set('language', language);
+    return url.href;
+  } catch {
+    return rawUrl;
+  }
 }

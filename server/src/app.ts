@@ -8,6 +8,7 @@ import { getProvider } from './provider/index.js';
 import { authRoutes } from './routes/auth-routes.js';
 import { adminRoutes } from './routes/admin.js';
 import { askRoutes } from './routes/ask.js';
+import { rankRoutes } from './routes/rank.js';
 import { pageRoutes } from './routes/pages.js';
 
 export function createApp(): express.Express {
@@ -40,6 +41,7 @@ export function createApp(): express.Express {
 
   app.use(authRoutes);
   app.use(askRoutes);
+  app.use(rankRoutes);
   app.use(adminRoutes);
   app.use(pageRoutes);
 

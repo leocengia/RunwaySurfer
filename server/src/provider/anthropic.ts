@@ -7,7 +7,14 @@
 //  - prompt caching on the stable system prefix (cheap, fast follow-ups);
 //  - thinking omitted (= disattivato sui modelli usati) + effort low dove supportato.
 import Anthropic from '@anthropic-ai/sdk';
-import type { AiProvider, GenerateInput, StreamResult, TokenUsage } from './shared.js';
+import type {
+  AiProvider,
+  GenerateInput,
+  StreamResult,
+  TokenUsage,
+  RankInput,
+  RankResult,
+} from './shared.js';
 import { buildSystemPrompt, buildUserContent } from './shared.js';
 
 // Models that accept the `effort` parameter (Haiku 4.5 does not).
@@ -66,5 +73,15 @@ export class AnthropicProvider implements AiProvider {
     // espone, usageFromMessage ritorna undefined e si tengono le stime.
     const finalMessage = await stream.finalMessage();
     return { usage: usageFromMessage(finalMessage) };
+  }
+
+  /**
+   * Rerank guidato dall'AI. STUB (Fase 6): l'implementazione reale via tool_use
+   * forzato (`select_articles`) è progettata ma non ancora attivata. Finché non
+   * lo è, ritorna una selezione vuota → l'endpoint /rank risponde `{selectedUrls:[]}`
+   * e il client ricade sullo scoring locale (mai peggio di oggi).
+   */
+  async rankCandidates(_input: RankInput, _signal?: AbortSignal): Promise<RankResult> {
+    return { selectedUrls: [] };
   }
 }

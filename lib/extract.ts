@@ -20,6 +20,20 @@ function pickContentRoot(doc: Document): Element {
 }
 
 /**
+ * Root per la raccolta LINK: volutamente più ampia del content-root testo. Sulla
+ * KB Aura i link "collegati" utili (pannello Suggested/Trending) stanno nella
+ * colonna 4-of-12, FUORI da `c-runway-article-viewer` che è il root del testo.
+ * Usando `[role="main"]` per i link, li catturiamo insieme ai cross-link del corpo.
+ */
+function pickLinkRoot(doc: Document): Element {
+  for (const sel of siteProfile.linkRootSelectors) {
+    const el = doc.querySelector(sel);
+    if (el) return el;
+  }
+  return doc.body;
+}
+
+/**
  * Keyword della query per il retrieval. Non deduplica (una keyword ripetuta \u00e8
  * un segnale). In coda aggiunge l'espansione cross-lingua (E3): i termini EN
  * del concetto di dominio colpito dalla query, cos\u00ec il retrieval trova la
@@ -108,25 +122,33 @@ type Section = { heading: string; nodes: Element[]; order: number };
  * pertinente alla query si passa da ~31k token a ~4,5k senza perdere coesione
  * (a differenza del retrieval per-blocco, che pescava frasi sparse).
  *
- * Percorre i figli DIRETTI del root in ordine di documento: ogni h1-h6 apre una
- * nuova sezione; il testo prima del primo heading diventa la sezione "intro"
- * (heading vuoto). Ritorna [] se il root non ha heading di primo livello (es.
- * pagine a struttura piatta) → il chiamante ricade sul retrieval per-blocco.
+ * Percorre gli elementi in ordine di documento a QUALSIASI profondità (non solo i
+ * figli diretti): sulla KB Aura le `<h2 class="section-title">` sono annidate in
+ * `.article-section`, quindi la vecchia scansione dei soli figli diretti non
+ * segmentava e l'intera leva E2 restava spenta. Segmenta al livello di heading
+ * più alto presente (es. h2), trattando gli heading più profondi (h3/h4) come
+ * contenuto di sezione. Salta i blocchi annidati in un blocco già incluso
+ * (niente doppio conteggio di `<p>` dentro `<td>`). Ritorna [] con < 2 heading
+ * (pagina piatta) → il chiamante ricade sul retrieval per-blocco.
  */
 function sectionsByHeading(root: Element): Section[] {
+  const els = Array.from(root.querySelectorAll('h1, h2, h3, h4, h5, h6, p, li, td'));
+  const isHeading = (el: Element) => HEADING_RE.test(el.tagName);
+  const named = (el: Element) => (el.textContent ?? '').replace(/\s+/g, ' ').trim().length > 0;
+  const headings = els.filter((el) => isHeading(el) && named(el));
+  if (headings.length < 2) return [];
+  const minRank = Math.min(...headings.map((h) => Number(h.tagName[1])));
+
   const sections: Section[] = [];
   let current: Section | null = null;
   let order = 0;
-  for (const child of Array.from(root.children)) {
-    if (HEADING_RE.test(child.tagName)) {
-      current = { heading: normalizeText(child.textContent ?? '', 220), nodes: [], order: order++ };
+  for (const el of els) {
+    if (isHeading(el) && Number(el.tagName[1]) === minRank && named(el)) {
+      current = { heading: normalizeText(el.textContent ?? '', 220), nodes: [], order: order++ };
       sections.push(current);
-    } else {
-      if (!current) {
-        current = { heading: '', nodes: [], order: order++ };
-        sections.push(current);
-      }
-      current.nodes.push(child);
+    } else if (current) {
+      if (current.nodes.some((n) => n.contains(el))) continue; // già coperto da un blocco outer
+      current.nodes.push(el);
     }
   }
   return sections.filter((s) => s.heading || s.nodes.length);
@@ -229,6 +251,29 @@ export function hasRenderedContent(doc: Document): boolean {
   return siteProfile.contentSelectors.some((sel) => doc.querySelector(sel));
 }
 
+/**
+ * Rileva quando il DOM NON è un articolo leggibile ma la pagina di **login**
+ * (sessione SSO scaduta) o **"record non trovato"**. Serve alla sidebar per NON
+ * mandare all'AI il contenuto della login come se fosse un articolo. Conservativo:
+ * richiede sia un segnale (campo password / marker) SIA un content-root corto,
+ * così NON blocca articoli veri (il cui corpo è ampio). Euristica allineata al
+ * probe recon C4. Ritorna null quando la pagina è un normale articolo.
+ */
+export function detectUnreadablePage(doc: Document = document): 'login' | 'notfound' | null {
+  const root = pickContentRoot(doc);
+  const rootLen = normalizeText((root as HTMLElement).innerText ?? root.textContent ?? '').length;
+  const head = normalizeText(doc.body?.textContent ?? '', 800).toLowerCase();
+  const hasPassword = !!doc.querySelector('input[type="password"]');
+  const loginMarker = /\b(log ?in|sign ?in|accedi|forgot password|password dimenticata)\b/.test(
+    head,
+  );
+  const notFoundMarker =
+    /\b(not found|no longer available|record non trovato|articolo non trovato)\b/.test(head);
+  if ((hasPassword || loginMarker) && rootLen < 500) return 'login';
+  if (notFoundMarker && rootLen < 1200) return 'notfound';
+  return null;
+}
+
 /** Extract the readable text of the current page. */
 export function extractPageText(doc: Document = document, query = ''): string {
   const root = pickContentRoot(doc);
@@ -244,10 +289,10 @@ export function extractPageText(doc: Document = document, query = ''): string {
  * Collect internal (same-origin) links from the content area: the nested
  * structure of the KB. Deduplicated, capped, and stripped of fragments.
  */
-export function extractInternalLinks(doc: Document = document, max = 40): KbLink[] {
+export function extractInternalLinks(doc: Document = document, max = 80): KbLink[] {
   const here = new URL(doc.location.href);
   const hereId = linkIdentity(here);
-  const root = pickContentRoot(doc);
+  const root = pickLinkRoot(doc);
   const seen = new Set<string>();
   const links: KbLink[] = [];
 

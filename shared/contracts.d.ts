@@ -39,6 +39,29 @@ export interface AskRequest {
 }
 
 /**
+ * Payload the sidebar sends to `POST /rank`: a wide shortlist of candidate
+ * articles (metadata only — title/slug/context, NOT bodies) for the reranker to
+ * order by relevance to `query`, before the client reads the winners.
+ */
+export interface RankRequest {
+  query: string;
+  candidates: KbLink[];
+}
+
+/**
+ * Backend response for `POST /rank`: the article URLs the reranker chose, ordered
+ * best-first (a subset of the request's candidate URLs). An EMPTY list means "no
+ * usable selection" — the client falls back to local scoring, so a failed/mocked
+ * rank is never worse than today.
+ */
+export interface RankResponse {
+  selectedUrls: string[];
+  reason?: string;
+  model?: string;
+  provider?: 'mock' | 'anthropic';
+}
+
+/**
  * "Would-be AI request" — surfaced so the CED can see exactly what the backend
  * would send to the AI provider, even while the call is mocked. Makes the
  * cost model and the network egress explicit.

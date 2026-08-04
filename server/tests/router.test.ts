@@ -41,6 +41,20 @@ describe('chooseModel', () => {
     expect(spec.id).toBe(MODELS.opus.id);
   });
 
+  it('un follow di più pagine ma con contesto piccolo NON va su opus (profilo KB post-E2)', () => {
+    // Baseline reale Passa 7: dopo E2 anche un follow di 3-4 pagine porta solo
+    // ~8-12k char (~2-3k token). Non è "sintesi grande" → resta sonnet, non opus.
+    const { spec } = chooseModel(req([{ chars: 3000 }, { chars: 3000 }, { chars: 3000 }, { chars: 3000 }]));
+    expect(spec.id).toBe(MODELS.sonnet.id);
+  });
+
+  it('una pagina singola piena (fino al cap ~6k char) resta sul modello economico', () => {
+    // MAX_PAGE_CHARS = 6.000: una pagina piena non deve scattare su sonnet solo
+    // perché sfiora il vecchio limite di 6.000.
+    const { spec } = chooseModel(req([{ chars: 6000 }]));
+    expect(spec.id).toBe(MODELS.haiku.id);
+  });
+
   it('una query lunga esclude il modello economico anche su pagina singola', () => {
     const longQuery = 'parola '.repeat(40); // > 40 token stimati
     const { spec } = chooseModel(req([{ chars: 1000 }], longQuery));

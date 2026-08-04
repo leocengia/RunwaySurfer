@@ -1,0 +1,44 @@
+{
+  "schema": "rs-verify/1",
+  "probeVersion": "sample-1",
+  "meta": { "pageType": "article", "language": "en_US", "nav": false },
+  "preflight": {
+    "pass": true,
+    "originOk": true,
+    "onArticle": true,
+    "sessionOk": true,
+    "apisOk": true
+  },
+  "checks": {
+    "C1": {
+      "world": "either",
+      "origin": "https://traveler.my.site.com",
+      "match": true,
+      "redirectCount": 0
+    },
+    "C2": {
+      "world": "either",
+      "winner": "[role=\"main\"]",
+      "winnerLen": 5200,
+      "winnerIsSalesforceSpecific": false
+    },
+    "C3": { "world": "either", "deltaPct": 22, "lenBefore": 6000, "lenAfter": 4680 },
+    "C4": { "world": "either", "verdict": "ok", "mainLen": 5200 },
+    "C5": {
+      "world": "either",
+      "status": 200,
+      "redirected": false,
+      "textualMatchedInShell": [],
+      "followDeadConfirmed": true
+    },
+    "C8": {
+      "world": "either",
+      "anchorCountInMain": 6,
+      "suggestedAnchorCount": 3,
+      "nonAnchorClickable": 0
+    },
+    "C10": { "world": "main", "status": "present", "storageService": true },
+    "C12": { "world": "either", "ka0KeyCount": 12, "valuesPlaintext": true }
+  },
+  "timingsMs": { "C1": 1, "C5": 240, "C12": 30 }
+}

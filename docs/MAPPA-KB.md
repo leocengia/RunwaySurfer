@@ -1,96 +1,91 @@
 # MAPPA-KB — Rilevazioni sulla KB Salesforce
 
-> Documento di lavoro: qui raccogliamo i risultati dei recon per tarare, nella fase
-> successiva, `lib/site-profile.ts`, `lib/extract.ts`, `lib/crawl.ts`, `lib/spa-nav.ts` e i
-> settings backend. Compila incollando i JSON prodotti dagli script e scrivendo le
-> conclusioni. Piano di riferimento: il piano "Mappatura della KB Salesforce".
+> Rilevazioni + conclusioni sulla KB, usate per tarare `lib/site-profile.ts`, `lib/extract.ts`,
+> `lib/crawl.ts`, `lib/spa-nav.ts` e i settings backend.
+>
+> **Non si compila più a mano.** La raccolta dati è automatizzata: esegui il probe
+> `docs/recon-kb-verify.js` (procedura in `docs/PIANO-verifica-scansione-KB.md`) e passa il JSON a
+> `docs/recon-kb-analyze.mjs`, che stampa la tabella verdetto (assunzione → check → PASS/FAIL →
+> azione). Qui incolli quell'output e scrivi le **conclusioni**; le sezioni "Passa" tengono solo i
+> **reperti già verificati** e le decisioni. Le passe 8-11 sono chiuse (verificate/implementate).
 
-## Procedura passo-passo
+## Sezione 0 — Autorizzazione (compilare PRIMA di scansionare)
 
-### Prerequisiti (una volta sola)
+Scansionare la KB autenticata e far uscire fixture/HAR dal browser tocca policy legali/privacy.
 
-1. Apri Chrome con il **profilo loggato alla KB** (quello che ha accesso a
-   `traveler.my.site.com`). Verifica di vedere gli articoli senza schermata di login.
-2. Apri gli script che ti servono dal repo: `docs/recon-kb-map.js` e
-   `docs/recon-kb-search.js`. Servono i **contenuti** dei file (li incollerai in console).
-3. Su un articolo, apri **DevTools**: `F12` (o `Ctrl+Shift+I`) → scheda **Console**.
-4. La prima volta, se compare l'avviso _"Don't paste code you don't understand"_, digita
-   `allow pasting` e premi Invio (poi non lo richiede più per quella sessione).
-5. Lavora in italiano: assicurati che l'URL abbia `?language=it`. Se noti differenze di
-   contenuto con `en_US`, annotalo nelle conclusioni.
+- **Approvatore:** Leonardo Cengia · **Data:** 20/07/2026
+- ☑ Account SSO titolato a vedere tutti gli articoli · ☑ Export corpi/HAR permesso da policy/DPA
+- ☐ Set classificati (PCI/PII/legal-hold) da escludere: **\_\_\_\_** · ☐ Uso un **profilo/account
+  dedicato di test** (non la sessione di un agente in produzione)
 
-### Step 1 — Passe 0-4 su un articolo (recon-map)
+**Regole (già imposte dagli script):** _do-not-capture_ — mai cookie/`aura.token`/`fwuid`/Bearer/
+identità agente/PII: lo scrub `rsScrub`/`rsVerifyClean` **blocca il download** se resta un match.
+_Minimizzazione_ — enumerazione = solo metadati URL; taratura su un campione (≥5 articoli), non sui
+2.964 corpi.
 
-1. Vai su una **pagina-articolo** rappresentativa (URL tipo `/Runway/s/article/...` o
-   `/Runway/s/detail/...`). Meglio se ha **link ad altri articoli nel corpo** (per la Passa 4).
-2. Nella Console: incolla **tutto** il contenuto di `docs/recon-kb-map.js` e premi Invio.
-3. ⚠️ Lo script è **asincrono e NAVIGA**: per la Passa 4 clicca ~3 link e torna indietro da
-   solo (~10-15s). **Non toccare la pagina** finché non stampa il blocco verde `RS-MAP`.
-4. Se preferisci NON far navigare la pagina, prima di incollare digita in console:
-   `window.RS_MAP_SPA = false` (poi incolla lo script). Perdi la Passa 4 ma non naviga.
-5. A fine esecuzione l'output è stampato **e copiato in clipboard**. Incollamelo in chat
-   (o nel file `recon-results.md` che hai aperto). Dimmi anche di che tipo era la pagina.
-6. Se la copia in clipboard non è disponibile, seleziona il JSON sotto `RS-MAP` e copialo a
-   mano.
+## Raccolta dati (automatizzata)
 
-### Step 2 — Ripeti su più pagine (campionamento ampio)
+La procedura completa è in **`docs/PIANO-verifica-scansione-KB.md`**. In sintesi: su un articolo
+autenticato, Console DevTools → incolla `docs/recon-kb-verify.js` (per i test dinamici prima
+`window.RS_VERIFY_NAV = true`) → scarica `rs-verify-<slug>.json` → `node docs/recon-kb-analyze.mjs
+rs-verify-<slug>.json`. Il probe copre le Passe 0-6 (selettori, rumore, collegati, timing SPA,
+navigazione) e l'analizzatore stampa la tabella verdetto. La baseline token (Passa 7) esce dalla
+tabella `requests`. Incolla qui sotto l'output dell'analizzatore e scrivi le conclusioni.
 
-Ri-esegui lo Step 1 (stesso script) su:
+### Rilevazioni live — 2026-07-20/21 · 4 articoli + 1 topic (statico, NAV off)
 
-- **≥5 articoli di tipo diverso** (procedura, policy, FAQ, refund/billing, lodging… quelli
-  che gli agenti aprono davvero);
-- **1 pagina topic** (`/Runway/s/topic/...`);
-- **1 pagina categoria** (se esiste).
+Confermato su **5 pagine** (articoli da 31k a 65k char + 1 topic); `recon-kb-analyze.mjs` → 4/7 PASS
+sugli articoli.
 
-Mandami i JSON separati (basta indicare a quale pagina si riferisce ciascuno). Su topic e
-categoria la Passa 4 si salta da sola (non sono articoli navigabili): è normale.
+- ✅ **origin** giusto (0 redirect) su tutte; ✅ **fetch = shell** su tutte (raw ~500 kB, 0
+  content-selector nel grezzo → follow-via-fetch **MORTO, definitivo**); ✅ **sessione** valida.
+- ✅ **`[role="main"]` vince SEMPRE**; **`.forceCommunityArticleLayout` e `.cuf-content` sempre a 0**
+  → vanno tolti da `contentSelectors` (evidenza solida su 5 pagine). Sul topic compare anche
+  `article`×10 (le tile-articolo), ma role=main vince lo stesso.
+- ✅ **collegati = veri `<a href>`** (non componenti senza href).
+- ❌ **rumore**: i `noiseSelectors` attuali tolgono **1–3%** sugli articoli (il grosso è la **lista
+  link** interna) ma **22%** sul topic (lì il rumore sono header/footer). → serve un selettore che
+  tolga il blocco-lista per il TESTO; da individuare su **fixture** (prossimo passo) + affidarsi a E2.
+- ⚠️ **cap link**: articoli con **39 / 77 / 110** anchor in `[role="main"]` → `extractInternalLinks
+max=40` è troppo basso su 3 pagine su 4. Da alzare + scoping corpo vs lista.
+- 🔎 **piattaforma** (tutte): `$A` presente ma **fetch wrappato da Locker/LWS** (`fetchNative:false`);
+  **iframe CONSENTITO** (`frame-ancestors 'self'`, `SAMEORIGIN`) → via B2 **iframe** confermata
+  candidata; `#auraLoadingBox` presente = readiness; **ka0 leggibili da IndexedDB** (`recordLayoutMap`,
+  8–19 chiavi, **plaintext**) → i recordId degli articoli **già visitati** sono leggibili anche
+  dall'ISOLATED (utile per getRecord v2); `encodeForServer` assente, bootstrap-fwuid intermittente.
+- 🐞 **Viewport/reflow (importante):** restringendo la finestra / aprendo F12, la pagina **topic**
+  re-renderizza e la sezione "feed" mostra _"Log in to post to this feed"_ (componente Chatter a
+  larghezza ridotta). Non è un bug del probe, ma **avvisa** che la sidebar, restringendo la pagina
+  (`body.marginRight`), può innescare re-render responsivi → verificare che sull'articolo non tagli
+  o nasconda il corpo (test in Sessione B con estensione).
+- ⏳ **PENDING**: E2 (fixture offline — prossimo), timing+navigazione B2 (run dinamico), getRecord
+  (C15), baseline token.
 
-### Step 3 — Passa 5: la ricerca (recon-search)
+### Sessione B — validazione con estensione caricata (2026-07-29)
 
-Modo consigliato (più affidabile):
+Estensione buildata e caricata sulla KB reale (profilo loggato), backend mock. Esiti:
 
-1. Digita una parola nella **barra di ricerca** della KB (es. `rimborso`) e lancia la ricerca
-   a mano; aspetta che compaiano i **risultati** (URL tipo `/Runway/s/global-search/...`).
-2. Nella Console incolla **tutto** `docs/recon-kb-search.js` e premi Invio.
-3. Aspetta il blocco verde `RS-SEARCH` e incollami il JSON.
-
-Modo automatico (se il primo non ti è comodo): su una pagina qualsiasi con la barra di
-ricerca, prima digita `window.RS_SEARCH_Q = 'rimborso'`, poi incolla lo script: proverà a
-compilare e inviare la ricerca da solo. Se `reachedResults` risulta `false`, usa il modo
-consigliato.
-
-### Step 4 — Passa 6: tassonomia e domande frequenti (input tuo, non recon)
-
-Mandami, anche in testo libero:
-
-- i **topic/categorie principali** della KB (la struttura ad albero, se c'è);
-- **10-15 domande/richieste reali** che gli agenti fanno (es. "il cliente vuole annullare una
-  prenotazione hotel", "come emetto un rimborso CFAR"…). Servono a rifare lo scoring dei link
-  sul dominio vero al posto di quello e-commerce.
-
-### Step 5 — Passa 7: baseline token (cattura AUTOMATICA, niente trascrizioni)
-
-I numeri non vanno più ricopiati a mano dalla sidebar: **ogni `/ask` è già persistito** nella
-tabella `requests` (token stimati, modello, costo, pagine, durata) — vedi Passa 7 sotto per il
-dettaglio. Ti basta:
-
-1. Lanciare un **set fisso di 3-5 query reali** (le stesse prima e dopo le leve E), in EN e IT.
-   Due strade:
-   - **Dashboard, senza estensione:** apri la dashboard backend → **"Demo ask request"**
-     (`dashboard.ts`) e lancia le query. Zero build, zero caricamento estensione.
-   - **Sidebar (per confrontare le modalità):** `npm run build`, poi `chrome://extensions` →
-     **Modalità sviluppatore** → **Carica estensione non pacchettizzata** → `.output/chrome-mv3`;
-     lancia le query in **single** e (se gira) in **follow**/**tour**.
-2. Esportare i record: `GET /requests?limit=N` + `GET /analytics/summary`, oppure leggere
-   `server/data/runwaysurfer.db`. Mandami l'export (o il `.db`): compilo io la tabella Passa 7.
-3. Il **delta** before/after di questi numeri è la baseline per ri-tarare le soglie del router.
-   Con il provider reale i **token esatti** (`actual_*_tokens`, vedi Passa 7) affiancano le stime.
-
-### Cosa faccio io
-
-Man mano che mi reincolli i dati, compilo le sezioni qui sotto e traduco ogni rilevazione in
-valori concreti per le manopole (content-root, rumore, caps, timing SPA, scoring, soglie
-backend). Quando la mappa è piena, pianifichiamo la fase di ottimizzazione sui numeri reali.
+- ✅ **B2-iframe FUNZIONA dall'ISOLATED world** (il test che mancava): in `follow`, "pagine lette" = 2
+  (current + un articolo **non linkato** aperto via iframe). Nessuna sidebar duplicata nell'iframe,
+  il tab non naviga. Il rischio #1 di B2 è **chiuso**.
+- ✅ **E2 confermata live**: articolo Lufthansa (~31k char) → **~1126 token di contesto** → router →
+  `haiku` (economico). La leva token funziona sul contenuto reale.
+- ✅ router: `single`→haiku (~1126 tok), `follow`/2-pagine→sonnet (~1.1–2.3k tok). **Ritarato sulla
+  baseline reale (Passa 7): decide per dimensione contesto, non n. pagine** — i follow ≥3 pagine
+  piccoli non finiscono più su `opus`.
+- ✅ `single` estrae il corpo pulito; viewport/reflow OK anche col topic.
+- 🐞 **Titolo pagina-followed = `{!Record._Title}`** (merge-field non risolto): nell'iframe
+  `document.title` non è ancora risolto quando leggiamo. **Corretto** (`resolveTitle`: headline della
+  pagina → label indice → fallback).
+- 🐞 **Tour visivo instabile al primo giro**: ha aperto un link tangenziale e perso lo stato sidebar
+  (secondo giro liscio). Il click su anchor **reale** a volte fa full-reload → il tour resta fragile.
+  B2-`follow`+iframe è il percorso robusto; il tour è secondario (fix/de-enfasi in futuro).
+- 🔎 **Selezione articolo = solo scoring locale (a monte dell'AI):** quale articolo aprire lo decide
+  il keyword-scoring (`pickCandidatesWithKbIndex`/`pickRelevantLinks`), NON l'AI. Query IT vs
+  contenuto EN → selezione a volte tangenziale. **Collegare l'API reale migliora la RISPOSTA, non la
+  SELEZIONE**: per rendere "intelligente" la scelta serve un passo di retrieval AI (dare a Claude
+  l'elenco candidati dall'indice KB e farglieli scegliere) o ricerca semantica/embedding. Vedi la
+  proposta "retrieval AI" come prossimo upgrade architetturale.
 
 ---
 
@@ -105,99 +100,79 @@ IT→EN prima della ricerca (raffinamento futuro).
 
 ## Passa 0 — Tassonomia URL / tipi di pagina
 
-_Incolla il campo `pageType`/`pathname`/`params` da ogni run + una riga di sintesi._
+_Raccolto da `recon-kb-verify.js` C1. Riferimento tipi:_
 
-| Tipo     | Esempio pathname              | Contenuto o lista? | Param rilevanti |
-| -------- | ----------------------------- | ------------------ | --------------- |
-| article  | `/Runway/s/article/<slug>`    | contenuto          | `language`      |
-| detail   | `/Runway/s/detail/<id>`       | contenuto          | `language`      |
-| topic    | `/Runway/s/topic/<id>/<slug>` | lista              |                 |
-| category |                               |                    |                 |
-| search   | `/Runway/s/global-search/<q>` | lista              | `language`      |
-| home     | `/Runway/s/`                  | —                  |                 |
+| Tipo    | Esempio pathname              | Contenuto o lista? | Param rilevanti |
+| ------- | ----------------------------- | ------------------ | --------------- |
+| article | `/Runway/s/article/<slug>`    | contenuto          | `language`      |
+| topic   | `/Runway/s/topic/<id>/<slug>` | lista              | `language`      |
+| home    | `/Runway/s/`                  | —                  |                 |
 
-**Conclusioni (→ `rejectPathIncludes`, `linkIdentity`, `keepParams`):** _..._
+**Conclusioni:** identità = origin+path (slug), unico param utile `language` (→ `linkIdentity`,
+`keepParams`). Da aggiungere a `rejectPathIncludes`: `/s/topic/`, `/s/global-search/`, `/s/category/`.
+`detail` **non esiste** su questa KB (né in sitemap né trovabile); i topic portano un `&tabset-…`
+extra (rumore → lo togliamo, `linkIdentity` già ignora i query param).
 
-## Passa 1 — Content-root & rumore (per tipo pagina)
+## Passa 1 — Content-root & rumore
 
-_Incolla `contentRoot` e `noiseCandidates` di 2-3 articoli._
+_Raccolto da `recon-kb-verify.js` C2 (selettori) / C3 (rumore). CONFERMATO su 5 pagine (4 art + topic):_
 
-```json
-(incolla qui)
-```
+- **Corpo:** `[role="main"]` vince **sempre** (articoli 31k–65k char). ⚠️ **`.forceCommunityArticleLayout`
+  e `.cuf-content` sempre a 0** su tutte → vanno tolti da `contentSelectors`, `[role="main"]` è la root
+  reale. (Sul topic anche `article`×10 = le tile, ma role=main vince lo stesso.)
+- **Rumore:** i `noiseSelectors` attuali sono presenti ma tolgono solo **1–3%** del testo di role=main
+  sugli articoli (**22%** sul topic). Il rumore-testo vero sugli articoli è la **lista link** interna
+  (39–110 anchor) → serve un selettore che rimuova quel blocco per l'estrazione testo (i link restano
+  per la scoperta) + affidarsi a E2. Il container esatto va individuato su **fixture** (prossimo passo).
 
-**Selettore corpo articolo scelto (→ `contentSelectors` / probe `waitForSpaRender`) — PRELIMINARE (1 articolo):**
-`[role="main"]` = `div.body.isPageWidthFixed-true` (27.8k char, tutto incluso). Il corpo vero è
-la colonna **8-of-12** (`div.slds-col--padded.slds-size--12-of-12.slds-medium-size--8-of-12`, ~26k).
-Le classi SLDS sono generiche → più robusto tenere `[role="main"]` e rimuovere il rumore (sotto).
+## Passa 2 — Qualità estrazione
 
-**Selettori di rumore da aggiungere (→ `noiseSelectors`) — PRELIMINARE:**
-`.comm-content-header` (metadati: Preferred Language/Record Type/Article Number/Legacy Id/Publication
-Status), `.comm-content-footer` (Report a Problem/feedback), `header.forceHighlightsPanel` +
-`.forceCommunityRecordHeadline` + `.slds-page-header_record-home` (record headline), e — per
-l'estrazione del TESTO — la colonna `.slds-medium-size--4-of-12` (Suggested Articles, utile come
-LINK ma non come testo). Da confermare su più articoli.
-
-## Passa 2 — Qualità estrazione (≥5 articoli)
-
-_Incolla `extractionSample` per ciascun articolo._
-
-| Articolo | bodyChars | roleMainChars | metadataLeaks | note |
-| -------- | --------- | ------------- | ------------- | ---- |
-|          |           |               |               |      |
-
-**Conclusioni (→ `MAX_PAGE_CHARS`/`FOCUSED_PAGE_CHARS`, block selector/count, char-cap):** _..._
+_Raccolto da `recon-kb-verify.js` C2/C3._ role=main sugli articoli: **31k / 40k / 40k / 65k char**, di
+cui gran parte è la lista link (il corpo vero è molto più piccolo). → l'estrazione grezza è enorme: la
+leva **E2 per-heading** (`FOCUSED_PAGE_CHARS` 4.500) è essenziale, ma va **verificata offline** che
+`focusedByHeading` funzioni sul DOM reale (fixture) — non che ricada silenziosamente sul per-blocco.
 
 ## Passa 3 — Sorgenti dei "collegati"
 
-_Incolla `collegati` per ciascun articolo._
+_Raccolto da `recon-kb-verify.js` C8. CONFERMATO su 5 pagine:_ i "collegati" **SONO veri `<a href>`**
+(smentisce il timore che fossero componenti senza href): **39 / 77 / 110** anchor-articolo negli
+articoli, 21 sul topic. Ma NON stanno nel container `[class*="related"]` (0 lì): sono una lista ampia
+dentro role=main. → la scoperta link funziona, ma **il cap `MAX=40` è troppo basso** (superato su 3/4
+articoli) e va curato lo scoping (corpo vs lista). Scoring per-keyword debole cross-lingua (mitigato
+da E3 + indice E4).
 
-| Articolo | # link articolo | # nel corpo | sezione "Correlati"? | container tipico |
-| -------- | --------------- | ----------- | -------------------- | ---------------- |
-|          |                 |             |                      |                  |
-
-**Conclusioni (→ `extractInternalLinks` max, pesi scoring, `MAX_FOLLOW`; serve la ricerca?) — PRELIMINARE:**
-I "collegati" NON sono cross-link nel corpo (0 in 2 articoli), ma un pannello **"Suggested Articles"**
-(colonna 4-of-12) con le raccomandazioni della KB. I suoi link non sono `<a href>` classici catturati
-dallo scan generico (sonda `suggestedArticles` in verifica). → due sorgenti reali di collegati:
-**Suggested Articles** + **ricerca KB**. Lo scoring per-keyword locale conta poco (query IT vs
-contenuto EN). Serve la ricerca (Passa 5) e/o leggere i Suggested.
+**Pannello "Suggested Articles" — ASINCRONO, lento (2026-07-28, run dinamico):** `suggestedAnchorCount`
+resta **0** anche dopo un run completo con attese (C16 ~2.3s) **e** dopo scroll+1.2s (C18,
+`virtualized:false`) — il pannello semplicemente non è ancora popolato in quella finestra di tempo.
+Conferma: **non affidarsi al pannello Suggested per la scoperta link "al volo"** — l'indice KB (E4,
+`lib/kb-index.json`) resta la fonte primaria, indipendente dal timing di rendering della pagina.
 
 ## Passa 4 — Profilo navigazione SPA
 
-_Incolla `spaNav` da alcuni articoli (più campioni = distribuzione migliore)._
+**RISOLTA — run dinamico 2026-07-28 (`RS_VERIFY_TARGET_URL` esplicito), matrice C7 + iframe C9:**
 
-| Articolo | render min/med/max (ms) | allBackOk | anyFullReload | bodyMargin prima→dopo |
-| -------- | ----------------------- | --------- | ------------- | --------------------- |
-|          |                         |           |               |                       |
+- **Click su anchor sintetico → NON intercettato** dal router Aura (anchor@body/@root/MouseEvent
+  tutti falliti). ⇒ nell'estensione (senza la guardia `preventDefault` del probe) causerebbe un
+  **full reload** del tab. **Da NON usare.**
+- **`pushState`+popstate → `intercepted-spa`** (contenuto cambiato davvero): funziona, ma **naviga
+  il tab** (+ rischio stale-text, + mutazione history). Non ideale per una lettura in background.
+- **iframe nascosto (C9) → `rendered:true`, boot ~1,3s** e CSP `frame-ancestors 'self'` lo consente.
+  Il tab **non naviga**: si legge dal `contentDocument`. **← meccanismo B2 scelto.**
 
-**Conclusioni (→ timing `waitForSpaRender`, robustezza driver/margine body):** _..._
+**Decisione:** `openAndReadArticle` reimplementata su **iframe** (`lib/nav.ts`) — vedi Passa 11.
+`#auraLoadingBox` presente resta un possibile gate di readiness aggiuntivo; per l'iframe usiamo la
+stabilità del testo del content-root (via `waitForSpaRender` con probe sull'iframe).
 
 ## Passa 5 — Ricerca `/s/global-search`
 
-_Incolla l'output di `recon-kb-search.js`._
+**Scartata come modalità** (Passa 11 · GAP 3): la scoperta degli articoli passa dall'indice KB (E4),
+non dalla ricerca in-app. `recon-kb-search.js` resta utile solo per l'enumerazione (Passa 8).
 
-```json
-(incolla qui)
-```
+## Passa 6 — Tassonomia & vocabolario
 
-- URL risultati (pattern): _..._
-- Selettore item risultato / container lista: _..._
-- Forma URL dei risultati (article/detail): _..._
-- Ordine/ranking, snippet presenti?: _..._
-
-**Conclusioni (→ modalità search-driven, `linkIdentity` per URL-risultato):** _..._
-
-## Passa 6 — Tassonomia & vocabolario di dominio (per lo scoring)
-
-_Da compilare con input dell'utente (non da recon)._
-
-- **Topic/categorie principali della KB:** _..._
-- **Domande/intenti frequenti degli agenti** (esempi reali): _..._
-- **Termini/etichette ricorrenti** (per `INTENT_ALIASES`) e **parole generiche da penalizzare**
-  (per `GENERIC_LINK_WORDS`): _..._
-
-**Conclusioni (→ sostituire `INTENT_ALIASES`/`GENERIC_LINK_WORDS`, allineare `STOP_WORDS`):** _..._
+**Risolta in Passa 8:** i 135 topic della sitemap hanno già alimentato `INTENT_ALIASES` (E1). Resta
+solo un input **tuo** (testo libero), utile ma non bloccante: 10-15 domande/richieste reali degli
+agenti, per affinare scoring e `GENERIC_LINK_WORDS`.
 
 ## Passa 7 — Baseline token (per modalità)
 
@@ -234,24 +209,46 @@ l'estensione). Il metodo di stima è **costante** (`Math.ceil(len/4)`, `router.t
 > accanto alle stime (il mock li lascia `NULL`): con `AI_PROVIDER=anthropic` la tabella sotto
 > si compila con i **token esatti**, altrimenti con le sole stime.
 
-### Tabella before/after
+### Baseline reale — 16 `/ask`, tabella `requests` (2026-07-29, provider mock)
 
-_Da compilare con l'export di `GET /requests` dell'ambiente autenticato dell'utente. "Before" =
-prima delle leve E; "After" = dopo. Un blocco per query, filtrando per finestra temporale._
+Catturata dalla dashboard "Recent requests" (estensione caricata sulla KB, tutte `status: ok`).
+Raggruppata per modello scelto dal router:
 
-| Query | Fase   | Modalità | # pagine | # link | tok in (stima) | tok in (reale) | tok out | modello | costo $ | durata ms |
-| ----- | ------ | -------- | -------- | ------ | -------------- | -------------- | ------- | ------- | ------- | --------- |
-|       | before | single   |          |        |                |                |         |         |         |           |
-|       | after  | single   |          |        |                |                |         |         |         |           |
-|       | after  | follow   |          |        |                |                |         |         |         |           |
+| Modello (pre-taratura) | n. righe | # pagine | tok in (stima) | costo $ |
+| ---------------------- | -------- | -------- | -------------- | ------- |
+| `haiku`  | 8 | 1     | 317 – 1 842   | 0,0028 – 0,0043 |
+| `sonnet` | 4 | 1 – 2 | 702 – 2 601   | 0,0096 – 0,0153 |
+| `opus`   | 4 | **3 – 4** | **2 441 – 3 014** | **0,0247 – 0,0276** |
 
-**Delta atteso** (ipotesi da verificare coi numeri veri): da **~16-31k token/articolo** (corpo
-intero, cfr. Passa 9) verso **~4,5k** (retrieval per-heading, Passa 10 · E2), con **routing
-verso modelli più economici** (meno contesto → più `haiku`/`sonnet` invece di `opus`).
+**Mediana `estimated_input_tokens` ≈ 1,5k** → contro il corpo intero pre-E2 (**~16-31k**, cfr.
+Passa 9) è un **−95%** di contesto per `/ask`. La leva E2 (Passa 10) è confermata efficace sui
+numeri reali.
 
-**Conclusioni (→ soglie router `SIMPLE_/MODERATE_*`, `max_request_*`, trimming link-map):** _...
-(da scrivere quando la tabella è piena: quale modello viene scelto in pratica, dove tagliare le
-soglie `SIMPLE_MAX_CONTEXT_CHARS` / `MODERATE_MAX_CONTEXT_CHARS`, se ridurre `max_request_links`.)_
+**Problema individuato (mis-routing):** le 4 chiamate `opus` portano solo **~2,4-3k token**
+(~8-12k char) di contesto — più piccole di tante `sonnet`. Sono finite su `opus` **solo perché
+`pages ≥ 3`** (`MODERATE_MAX_PAGES = 2`), non perché il task fosse grande. Dopo E2 il numero di
+pagine NON è più un indicatore di dimensione: un follow di 3-4 pagine focalizzate resta minuscolo.
+Si pagava ~$0,026 per lavoro che `sonnet` fa a ~$0,015.
+
+### Ri-taratura router applicata (`server/src/router.ts`)
+
+| Soglia | Prima (Wikipedia) | Dopo (KB reale) | Perché |
+| ------ | ----------------- | --------------- | ------ |
+| `SIMPLE_MAX_CONTEXT_CHARS`   | 6 000  | **8 000**  | una pagina piena è ≤ `MAX_PAGE_CHARS` (6 000); a 6 000 il `< 6 000` la escludeva da `haiku`. |
+| `MODERATE_MAX_PAGES`         | 2      | **6**      | il conteggio pagine non implica più dimensione: non deve da solo forzare `opus`. |
+| `MODERATE_MAX_CONTEXT_CHARS` | 16 000 | **18 000** | copre ~4 pagine focalizzate (~4,5k char l'una) come "medio" → `sonnet`. |
+
+Ora **decide la dimensione del contesto in caratteri**, non il numero di pagine. `opus` scatta
+solo per sintesi davvero grande (≥18k char) o >6 pagine. Lock-in in `server/tests/router.test.ts`
+(follow multi-pagina piccolo → `sonnet`; pagina singola piena → `haiku`).
+
+**Effetto proiettato su queste 16 righe:** le 4 `opus` → `sonnet`, e la `sonnet` a 1 pagina
+(1 757 tok) → `haiku`. Nessuna chiamata `opus` su questo carico reale. Costo del batch da
+**~$0,184 → ~$0,133 (≈ −28%)**, a parità di qualità (sonnet regge ampiamente ~2,5k token di
+sintesi). Da riconfermare rilanciando lo stesso set dopo il rebuild.
+
+**Aperto:** `max_request_links` / trimming link-map (`provider/shared.ts`) non toccati — i
+contesti reali sono già piccoli, nessuna evidenza che serva tagliarli ora.
 
 ---
 
@@ -377,12 +374,14 @@ solo come ricognizione (struttura dati, dimensioni reali). Le 4 leve, tutte con 
   `docs/build-kb-index.mjs` dalla sitemap): `pickCandidatesWithKbIndex` unisce i link del DOM con
   l'intero indice e li scora insieme → l'articolo giusto emerge anche se non linkato nella pagina,
   **costo-token zero**. Dedup per identità. Innestato in `App.run` (follow); il tour resta sui
-  link di pagina (deve cliccarli). _NB: l'asset è placeholder finché non lo si popola col
-  `rs-sitemap-inventory.json` reale._
+  link di pagina (deve cliccarli). _Asset popolato con i 2.964 articoli reali (sitemap 2026-07-17),
+  URL normalizzati a `?language=en_US` (lingua di retrieval). Rigenerabile da
+  `rs-sitemap-inventory.json` via `docs/build-kb-index.mjs`._
 
-**Manopole backend (E4-token) NON ancora ri-tarate:** `router.ts` (`SIMPLE_/MODERATE_*`, oggi
-tarate su Wikipedia), link-map in `provider/shared.ts`. Da fare dopo la **baseline token** reale
-(Passa 7) per un before/after quantificato.
+**Manopole backend (E4-token):** `router.ts` (`SIMPLE_/MODERATE_*`) **ri-tarato sulla baseline
+reale (Passa 7, 2026-07-29)** — ora instrada per dimensione contesto e non per numero di pagine.
+Resta invariato il link-map in `provider/shared.ts` (i contesti reali sono già piccoli, nessuna
+evidenza che serva tagliarlo).
 
 ## Passa 11 — Capacità di navigazione (cosa la sidebar sa muoversi/leggere)
 
@@ -393,25 +392,25 @@ renderizzata** — e da questa passa il caso "solo-indice" è parzialmente sbloc
 
 ### Matrice WHAT / LIMITS / GAPS
 
-| Capacità                               | WHAT (cosa fa)                                                                                                         | LIMITS (dove si ferma)                                                                                                      | file:riga                                                         |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| Lettura pagina corrente                | Legge il DOM **renderizzato** del content-root, retrieval per-heading focalizzato sulla query.                         | Solo la pagina in cui la sidebar è montata; nessuna navigazione.                                                            | `extract.ts:233`, `extract.ts:276`, `App.tsx:334`                 |
-| Fetch `follow`                         | `fetch(url, credentials:'include')` same-origin, estrae il testo dei link scelti.                                      | **Morto sulla KB Aura**: `hasRenderedContent`→false sullo shell → pagina scartata. Vivo solo su siti server-rendered.       | `crawl.ts:186`, `crawl.ts:195`, `extract.ts:228`                  |
-| Tour SPA `visual`                      | Hub-and-spoke: clicca l'anchor → `waitForSpaRender` → legge il DOM → `history.back()` all'hub.                         | **Richiede un anchor vivo in pagina**; se il link non c'è (o rect 0×0) il target è **saltato**.                             | `useTourDriver.ts:107`, `highlight.ts:15`, `useTourDriver.ts:122` |
-| Link discovery (DOM)                   | `extractInternalLinks` raccoglie i link same-origin del content-root, dedup per identità.                              | Vede **solo** i link presenti nel DOM della pagina corrente.                                                                | `extract.ts:247`                                                  |
-| Candidati KB-wide (E4)                 | `pickCandidatesWithKbIndex` unisce i link del DOM con l'intero indice KB e li scora insieme, costo-token 0.            | Propone l'URL giusto ma **non ne legge il corpo** se non è fetchabile/navigabile.                                           | `crawl.ts:162`, `kb-index.ts:40`                                  |
-| Attesa render (SPA)                    | `waitForSpaRender`: attende route arrivata + testo stabile (non tempo fisso), timeout 9s.                              | Se il render non arriva entro 9s → false (degrada).                                                                         | `spa-nav.ts:46`                                                   |
-| Navigazione finale (tour)              | Click sull'anchor se sull'hub (client-side); altrimenti `location.href` + rehydration.                                 | Solo verso la fonte scelta a fine tour; non è navigazione libera.                                                           | `useTourDriver.ts:201`, `tour.ts:152`                             |
-| **Apertura articolo solo-indice (B2)** | `openAndReadArticle`: naviga client-side **senza anchor** (anchor sintetico → pushState), legge il DOM, torna all'hub. | Additivo alla modalità **follow**; degrada a suggerimento se il render non arriva. No full-reload (perderebbe la sessione). | `nav.ts:91`, `nav.ts:38`, `App.tsx:343`                           |
+| Capacità                               | WHAT (cosa fa)                                                                                                                                                                                        | LIMITS (dove si ferma)                                                                                                                                                                                      | file:riga                                                         |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Lettura pagina corrente                | Legge il DOM **renderizzato** del content-root, retrieval per-heading focalizzato sulla query.                                                                                                        | Solo la pagina in cui la sidebar è montata; nessuna navigazione.                                                                                                                                            | `extract.ts:233`, `extract.ts:276`, `App.tsx:334`                 |
+| Fetch `follow`                         | `fetch(url, credentials:'include')` same-origin, estrae il testo dei link scelti.                                                                                                                     | **Morto sulla KB Aura**: `hasRenderedContent`→false sullo shell → pagina scartata. Vivo solo su siti server-rendered.                                                                                       | `crawl.ts:186`, `crawl.ts:195`, `extract.ts:228`                  |
+| Tour SPA `visual`                      | Hub-and-spoke: clicca l'anchor → `waitForSpaRender` → legge il DOM → `history.back()` all'hub.                                                                                                        | **Richiede un anchor vivo in pagina**; se il link non c'è (o rect 0×0) il target è **saltato**.                                                                                                             | `useTourDriver.ts:107`, `highlight.ts:15`, `useTourDriver.ts:122` |
+| Link discovery (DOM)                   | `extractInternalLinks` raccoglie i link same-origin del content-root, dedup per identità.                                                                                                             | Vede **solo** i link presenti nel DOM della pagina corrente.                                                                                                                                                | `extract.ts:247`                                                  |
+| Candidati KB-wide (E4)                 | `pickCandidatesWithKbIndex` unisce i link del DOM con l'intero indice KB e li scora insieme, costo-token 0.                                                                                           | Propone l'URL giusto ma **non ne legge il corpo** se non è fetchabile/navigabile.                                                                                                                           | `crawl.ts:162`, `kb-index.ts:40`                                  |
+| Attesa render (SPA)                    | `waitForSpaRender`: attende route arrivata + testo stabile (non tempo fisso), timeout 9s.                                                                                                             | Se il render non arriva entro 9s → false (degrada).                                                                                                                                                         | `spa-nav.ts:46`                                                   |
+| Navigazione finale (tour)              | Click sull'anchor se sull'hub (client-side); altrimenti `location.href` + rehydration.                                                                                                                | Solo verso la fonte scelta a fine tour; non è navigazione libera.                                                                                                                                           | `useTourDriver.ts:201`, `tour.ts:152`                             |
+| **Apertura articolo solo-indice (B2)** | `openAndReadArticle`: apre l'articolo in un **iframe nascosto same-origin**, attende il render (probe su `contentDocument`) e legge — il tab NON naviga. Verificato live (C9 `rendered:true`, ~1,3s). | Additivo alla modalità **follow**; solo same-origin (CSP `frame-ancestors 'self'`); degrada a suggerimento se non renderizza. Il click su anchor sintetico è **scartato** (non intercettato → full-reload). | `nav.ts:44`, `App.tsx:343`, `spa-nav.ts:46`                       |
 
 ### GAP trasversali (stato dopo B2)
 
 1. **Articolo non-anchor** — prima: non leggibile se non anchor vivo in pagina. **Ora (B2):** i
-   candidati **solo-indice** in modalità `follow` sono aperti via SPA e letti (`openAndReadArticle`).
-   Resta scoperto: un candidato che è anchor in pagina ma non renderizza via fetch nel `follow`
-   (lo copre il tour `visual`, che lo clicca).
-2. **`fetch`/`follow` morto** sulla KB client-rendered → `single`/`visual`/`follow+SPA` sono le
-   uniche letture reali del corpo.
+   candidati **solo-indice** in modalità `follow` sono aperti in **iframe** e letti
+   (`openAndReadArticle`, verificato live). Resta scoperto: un candidato che è anchor in pagina ma
+   non renderizza via fetch nel `follow` (lo copre il tour `visual`, che lo clicca).
+2. **`fetch`/`follow` morto** sulla KB client-rendered → `single` / `visual` / `follow+iframe` sono
+   le uniche letture reali del corpo.
 3. **Niente pilotaggio della barra di ricerca KB** (opzione scartata a monte): la scoperta degli
    articoli passa dall'indice E4, non dalla ricerca in-app.
 4. **Niente multi-hop / crawl ricorsivo**: si legge un livello di candidati, non i loro link.

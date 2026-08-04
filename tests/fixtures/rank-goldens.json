@@ -1,0 +1,173 @@
+{
+  "schema": "rs-rank-goldens/1",
+  "note": "curated = casi reali (editati a mano); bootstrap = generato da build-rank-goldens.mjs",
+  "curated": [
+    {
+      "query": "quanto costa il bagaglio in aereo",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Explain-Flight-baggage-costs-1694551036790?language=en_US",
+      "source": "curated"
+    },
+    {
+      "query": "cambio orario del volo United Airlines",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Flight-ASC-Schedule-changes-in-United-Airlines-Farelogix-Global?language=en_US",
+      "source": "curated"
+    },
+    {
+      "query": "il rimborso non è arrivato al cliente",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/A-refund-or-exchange-did-not-go-through-1694551384872?language=en_US",
+      "source": "curated"
+    }
+  ],
+  "bootstrap": [
+    {
+      "query": "secure payment credit card verification",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/3D-Secure-Payment-credit-Card-verification-1694551042478?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "air travel restricted countries",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Air-travel-to-restricted-countries-1694551621214?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "amex payout",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/AMEX-payout-process-1694551654374?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "blended earn redeem points",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/B2B-Blended-TD-Earn-and-redeem-TD-Points?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "billing authorization exchange with add",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Billing-Authorization-Exchange-with-add-collect-penalty-not-as-an-EMD-BEX-COMET-MX-POSa?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "billing refund refund voyager classic",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Billing-Refund-Refund-in-Voyager-Classic?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "car age surcharge",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Car-Age-surcharge?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "charges refunds usd instead local",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Charges-and-refunds-in-USD-instead-of-local-currency-1694551412885?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "contact social media when transfer",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Contact-Social-media-When-to-transfer-to-Tier-3-in-Sprinklr-Global?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "dominican republic yellow fever vaccine",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Dominican-Republic-Yellow-Fever-Vaccine-Requirement-in-Punta-Cana-PUJ-June-13-14-2024?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "expedia mexico ending partnership with",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Expedia-Mexico-ending-partnership-with-Citibanamex-1694551215520?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "asc queues asc",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Flight-ASC-Queues-for-ASC?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "cancel cancel british airways ndc",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Flight-Cancel-Cancel-British-Airways-BA-NDC-exchanged-booking-Global?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "change lcc change requests",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Flight-Change-LCC-change-requests-Global?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "gds retrieve full fare rules",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Flight-GDS-Retrieve-full-Fare-Rules-in-Amadeus-using-FQD-Global?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "sabre hub",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Flight-Sabre-hub?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "germany lufthansa pilots strike april",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Germany-Lufthansa-pilots-strike-April-12-14-2026?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "hotels com rewards with hotels",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Hotels-com-Rewards-with-Hotels-comCash-Hub?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "insurance non contact information apac",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Insurance-Non-US-Contact-information-for-APAC-insurance-providers?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "lodging change cancel onedesk room",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Lodging-Change-Cancel-OneDesk-Room-type-change-L2-1?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "melia vacations",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Melia-Vacations-policies-1694551236233?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "package force majeure traveler wants",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Package-EU-UK-NO-CH-Force-majeure-Traveler-wants-to-cancel?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "promotions coupons promotions ebookers mrjet",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Promotions-Coupons-promotions-ebookers-and-MrJet?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "resend confirmation itinerary details",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Resend-confirmation-or-itinerary-details-1694551200867?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "spain metro line disruption affecting",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Spain-Metro-Line-Disruption-Affecting-Madrid-Airport-MAD-February-11-2026?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "templates transfers back office team",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Templates-Flight-Transfers-to-the-Back-Office-team?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "name correction build pnr",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/TS-name-correction-policy-Build-a-PNR-1694551390043?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "united states severe weather chicago",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/United-States-Severe-Weather-in-Chicago-IL-May-6-7-2024?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "use hold mic off",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Use-hold-or-mic-off-1694550999868?language=en_US",
+      "source": "bootstrap"
+    },
+    {
+      "query": "vrbo legal entity change faqs",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Vrbo-Legal-entity-change-FAQs?language=en_US",
+      "source": "bootstrap"
+    }
+  ]
+}

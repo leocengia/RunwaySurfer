@@ -6,7 +6,8 @@
 // server/network requirements) before AI licenses/tokens are sorted out.
 // Switching AI_PROVIDER=anthropic swaps in the real provider with no other
 // changes.
-import type { AiProvider, GenerateInput, StreamResult } from './shared.js';
+import type { AiProvider, GenerateInput, StreamResult, RankInput, RankResult } from './shared.js';
+import { RANK_MAX_SELECTED } from './shared.js';
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -51,5 +52,25 @@ export class MockProvider implements AiProvider {
     }
     // Il mock non chiama alcun modello: nessun token reale da riportare.
     return {};
+  }
+
+  /**
+   * Rerank deterministico SENZA AI: ordina i candidati per lo `score` locale
+   * (tie-break: `order`, poi indice, poi URL) e ritorna i primi K. In mock la
+   * selezione COINCIDE con quella locale di oggi — è il comportamento corretto
+   * quando non c'è una vera API. `usage` assente (nessun token reale).
+   */
+  async rankCandidates(input: RankInput): Promise<RankResult> {
+    const selectedUrls = input.candidates
+      .map((c, i) => ({ c, i }))
+      .sort(
+        (a, b) =>
+          (b.c.score ?? 0) - (a.c.score ?? 0) ||
+          (a.c.order ?? a.i) - (b.c.order ?? b.i) ||
+          a.c.url.localeCompare(b.c.url),
+      )
+      .slice(0, RANK_MAX_SELECTED)
+      .map((x) => x.c.url);
+    return { selectedUrls };
   }
 }

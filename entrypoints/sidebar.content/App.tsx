@@ -6,11 +6,17 @@ import {
   useState,
 } from 'react';
 import { browser } from 'wxt/browser';
-import { extractCurrentPage, extractInternalLinks } from '../../lib/extract';
-import { MAX_FOLLOW, pickCandidatesWithKbIndex, shallowFollow } from '../../lib/crawl';
+import { detectUnreadablePage, extractCurrentPage, extractInternalLinks } from '../../lib/extract';
+import {
+  MAX_FOLLOW,
+  pickCandidatesWithKbIndex,
+  shallowFollow,
+  shortlistCandidates,
+  resolveFollowLinks,
+} from '../../lib/crawl';
 import { readIndexOnlyArticles } from '../../lib/nav';
 import { linkIdentity } from '../../lib/site-profile';
-import { streamAsk } from '../../lib/client';
+import { streamAsk, rankCandidates } from '../../lib/client';
 import { getProxyUrl } from '../../lib/messaging';
 import { clearToken, fetchMe, getToken, logout, type AuthUser } from '../../lib/auth';
 import type { AiPlan, KbPage } from '../../lib/outcome';
@@ -311,6 +317,20 @@ export default function App() {
   const run = useCallback(async () => {
     if (!query.trim() || status === 'reading' || status === 'streaming') return;
 
+    // Guardia sessione: se la pagina corrente è la login KB (SSO scaduto) o un
+    // "record non trovato", non ha senso leggerla né mandarla all'AI. Vale per
+    // tutte le modalità → prima dello split.
+    const unreadable = detectUnreadablePage();
+    if (unreadable) {
+      setError(
+        unreadable === 'login'
+          ? 'Sembra la pagina di login della KB (sessione scaduta): apri un articolo da loggato e riprova.'
+          : 'Questa pagina non sembra un articolo leggibile (contenuto non trovato).',
+      );
+      setStatus('error');
+      return;
+    }
+
     if (mode === 'visual') {
       teardownFx();
       // A user-initiated run is authoritative: reset the reentrancy guard and
@@ -339,8 +359,34 @@ export default function App() {
     // se non è linkato qui. shallowFollow legge il corpo solo di quelli
     // effettivamente fetchabili (pagine renderizzate same-origin); i candidati
     // dell'indice non leggibili restano come suggerimenti per la risposta.
-    const askLinks = mode === 'follow' ? pickCandidatesWithKbIndex(links, query) : links;
+    //
+    // RERANK · lo scoring locale fa da PREFILTRO (shortlist ampia); la scelta
+    // finale dei 3 da leggere la fa il backend /rank (guidato dall'AI col provider
+    // reale, deterministico col mock). Su qualunque intoppo `resolveFollowLinks`
+    // ricade sulla selezione locale di oggi → mai peggio di prima.
+    let askLinks = links;
     if (mode === 'follow') {
+      // Prefiltro locale → shortlist ampia; rerank remoto sceglie i 3 da leggere.
+      const shortlist = shortlistCandidates(links, query);
+      const rankCtrl = new AbortController();
+      const rankTimer = setTimeout(() => rankCtrl.abort(), 5_000);
+      let selectedUrls: string[] = [];
+      try {
+        const proxyUrl = await getProxyUrl();
+        const token = await getToken();
+        const sel = await rankCandidates(
+          proxyUrl,
+          { query: query.trim(), candidates: shortlist },
+          rankCtrl.signal,
+          token,
+        );
+        selectedUrls = sel?.selectedUrls ?? [];
+      } finally {
+        clearTimeout(rankTimer);
+      }
+      // Fallback su selezione locale se il rerank non dà nulla di usabile.
+      askLinks = resolveFollowLinks(shortlist, selectedUrls, pickCandidatesWithKbIndex(links, query));
+
       const followed = await shallowFollow(askLinks, query, askLinks.length);
       pages.push(...followed);
       // B2 · i candidati SOLO-INDICE (non presenti come anchor in pagina, quindi

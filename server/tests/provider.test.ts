@@ -4,7 +4,8 @@
 import { describe, expect, it } from 'vitest';
 import { usageFromMessage } from '../src/provider/anthropic.js';
 import { MockProvider } from '../src/provider/mock.js';
-import type { GenerateInput } from '../src/provider/shared.js';
+import type { GenerateInput, RankInput } from '../src/provider/shared.js';
+import type { KbLink } from '../src/types.js';
 
 const input: GenerateInput = {
   query: 'come cambio indirizzo?',
@@ -56,5 +57,30 @@ describe('MockProvider', () => {
     controller.abort();
     const result = await provider.streamOutcome(input, () => {}, controller.signal);
     expect(result.usage).toBeUndefined();
+  });
+});
+
+describe('MockProvider.rankCandidates', () => {
+  const candidates: KbLink[] = [
+    { url: 'https://kb.example.com/a?language=en_US', text: 'A', score: 8, order: 2 },
+    { url: 'https://kb.example.com/b?language=en_US', text: 'B', score: 20, order: 0 },
+    { url: 'https://kb.example.com/c?language=en_US', text: 'C', score: 14, order: 1 },
+    { url: 'https://kb.example.com/d?language=en_US', text: 'D', score: 3, order: 3 },
+  ];
+  const rankInput: RankInput = { query: 'q', candidates, model: 'claude-haiku-4-5' };
+
+  it('ordina per score locale desc e ritorna i primi K (deterministico, no AI)', async () => {
+    const provider = new MockProvider();
+    const { selectedUrls, usage } = await provider.rankCandidates(rankInput);
+    // B(20) > C(14) > A(8) > D(3) → i primi 3.
+    expect(selectedUrls).toEqual([candidates[1].url, candidates[2].url, candidates[0].url]);
+    expect(usage).toBeUndefined();
+  });
+
+  it('è stabile (stesso input → stesso output)', async () => {
+    const provider = new MockProvider();
+    const a = await provider.rankCandidates(rankInput);
+    const b = await provider.rankCandidates(rankInput);
+    expect(a.selectedUrls).toEqual(b.selectedUrls);
   });
 });

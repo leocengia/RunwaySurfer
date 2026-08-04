@@ -36,6 +36,22 @@ function labelFromSlug(slug) {
     .trim();
 }
 
+/**
+ * Lingua di retrieval: leggiamo gli articoli in inglese (contenuto popolato +
+ * ricerca KB funzionante). La sitemap indicizza in lingue miste, quindi forziamo
+ * `?language=en_US` sull'URL memorizzato. Deve restare allineato a
+ * `withRetrievalLanguage` in lib/site-profile.ts.
+ */
+function withRetrievalLanguage(rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+    url.searchParams.set('language', 'en_US');
+    return url.href;
+  } catch {
+    return rawUrl;
+  }
+}
+
 const raw = JSON.parse(readFileSync(inPath, 'utf8'));
 const records = Array.isArray(raw.inventory) ? raw.inventory : Array.isArray(raw) ? raw : [];
 if (!records.length) {
@@ -49,7 +65,7 @@ const seen = new Set();
 const articles = [];
 for (const r of records) {
   if (r.type !== 'article') continue; // solo articoli (i topic non sono destinazioni di risposta)
-  const url = (r.url || r.id || '').split('#')[0];
+  const url = withRetrievalLanguage((r.url || r.id || '').split('#')[0]);
   const slug = r.slug || '';
   if (!url || !slug || seen.has(url)) continue;
   seen.add(url);
