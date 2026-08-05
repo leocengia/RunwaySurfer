@@ -7,31 +7,68 @@
 // Switching AI_PROVIDER=anthropic swaps in the real provider with no other
 // changes.
 import type { AiProvider, GenerateInput, StreamResult, RankInput, RankResult } from './shared.js';
-import { RANK_MAX_SELECTED } from './shared.js';
+import { outcomeSections, RANK_MAX_SELECTED } from './shared.js';
+import { SOURCES_SECTION } from '../shared-assets.js';
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function buildOutcome(input: GenerateInput): string {
+/**
+ * Corpo simulato di una sezione. Il mock non chiama alcun modello: serve a far
+ * vedere la forma della risposta e lo streaming, quindi ogni sezione dichiara
+ * cosa ci sarebbe al posto suo col provider reale.
+ */
+function mockSection(name: string, input: GenerateInput): string[] {
   const primary = input.pages[0];
-  const sources = input.pages.map((p) => `- ${p.title}: ${p.url}`).join('\n');
   const titles = input.pages.map((p) => p.title).join(', ');
-  return [
-    '## Procedura',
-    `[RISPOSTA SIMULATA] In base al contenuto di "${primary?.title ?? 'pagina corrente'}", ` +
-      `ecco i passi per: "${input.query}". (Con il provider reale, qui Claude sintetizzerebbe ` +
-      `la procedura dalle ${input.pages.length} pagina/e KB fornite: ${titles}.)`,
-    '',
-    '## Eccezioni',
-    'Casi particolari e condizioni segnalate nelle pagine collegate verrebbero elencati qui.',
-    '',
-    '## Risposta suggerita al cliente',
-    `"Gentile cliente, riguardo a «${input.query}» possiamo procedere come segue…"`,
-    '',
-    '## Fonti',
-    sources || '- (nessuna pagina fornita)',
-  ].join('\n');
+  if (name === SOURCES_SECTION) {
+    const sources = input.pages.map((p) => `- ${p.title}: ${p.url}`).join('\n');
+    return [sources || '- (nessuna pagina fornita)'];
+  }
+  if (name === 'Procedura') {
+    return [
+      `[RISPOSTA SIMULATA] In base al contenuto di "${primary?.title ?? 'pagina corrente'}", ` +
+        `ecco i passi per: "${input.query}". (Con il provider reale, qui Claude sintetizzerebbe ` +
+        `la procedura dalle ${input.pages.length} pagina/e KB fornite: ${titles}.)`,
+      '- Primo passo simulato dalla pagina letta.',
+      '- Secondo passo, con **una condizione** da verificare.',
+      '- Terzo passo e conferma al cliente.',
+    ];
+  }
+  if (name === 'Eccezioni') {
+    return [
+      'Casi particolari e condizioni segnalate nelle pagine collegate verrebbero elencati qui.',
+    ];
+  }
+  if (name === 'Risposta suggerita al cliente') {
+    return [`"Gentile cliente, riguardo a «${input.query}» possiamo procedere come segue…"`];
+  }
+  // Sezione richiesta dal form Schedule Change: nessun testo precotto.
+  return [`[SIMULATO] Qui il provider reale riporterebbe «${name}» come risulta dalla KB.`];
+}
+
+function buildOutcome(input: GenerateInput): string {
+  const lines: string[] = [];
+
+  // Con uno storico, il mock lo cita: altrimenti la demo dei follow-up non
+  // mostrerebbe alcuna differenza rispetto a una domanda isolata.
+  const previous = input.history?.at(-1);
+  if (previous) {
+    lines.push(`_[SIMULATO] Tengo conto della domanda precedente: «${previous.query}»._`, '');
+  }
+  if (input.form) {
+    lines.push(
+      `_[SIMULATO] Richiesta strutturata: ${input.form.requestType} · ${input.form.airline} · ` +
+        `${input.form.cityPair} · ${input.form.flightType} · ${input.form.originalDate}._`,
+      '',
+    );
+  }
+
+  for (const name of outcomeSections(input.form?.sections)) {
+    lines.push(`## ${name}`, ...mockSection(name, input), '');
+  }
+  return lines.join('\n').trimEnd();
 }
 
 export class MockProvider implements AiProvider {

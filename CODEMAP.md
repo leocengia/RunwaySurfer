@@ -78,38 +78,68 @@ Se la sidebar non appare su un sito, controllare prima questo file e `wxt.config
 
 ### `entrypoints/sidebar.content/App.tsx`
 
-Cuore della sidebar.
+Cuore della sidebar: stato, orchestrazione e JSX.
 
 Contiene:
 
-- stato UI: aperta/chiusa, query, loading, errore, risultato;
-- checkbox per leggere pagine collegate;
-- funzione `run()`, cioe il flusso operativo principale;
-- rendering del piano AI, risposta, pagine usate.
+- stato UI: aperta/chiusa, query, loading, errore, avviso, risultato, thread;
+- le tre modalità (`Immersiva` / `Background` / `Analisi Articolo`) come segmented
+  control in cima — le **etichette** sono cambiate, i valori interni (`visual` /
+  `follow` / `single`) no, perché su quelli ramificano `run()`, il driver del tour
+  e `supportedModes` lato server;
+- l'interruttore "È un caso Schedule Change?", che scambia il prompt libero col form;
+- `searchWholeKb()`: indice KB → `/rank` → lettura (fetch + iframe nascosto). Unico
+  punto usato da tre chiamanti: modalità Background, richiesta strutturata e
+  allargamento automatico;
+- `run()`, il flusso operativo principale;
+- `runAsk()`, che accoda ogni turno concluso a `thread` (lo storico rimandato al
+  modello vive nel client: il backend è stateless).
 
 La funzione `run()` fa:
 
 ```text
-1. legge la pagina corrente
-2. estrae link interni
-3. se abilitato, segue alcuni link
-4. chiama il backend
-5. aggiorna la risposta mentre arriva lo stream
+1. se il form è compilato → cerca in tutta la KB coi suoi campi e chiude qui
+2. legge la pagina corrente ed estrae i link interni
+3. modalità Background → searchWholeKb()
+   altrimenti, se isOffTopic() → searchWholeKb() + avviso all'agente
+4. riusa le pagine dei turni precedenti invece di rileggerle
+5. chiama il backend e aggiorna la risposta mentre arriva lo stream
 ```
+
+### Altri componenti della sidebar
+
+- `Logo.tsx` — marchio condiviso (`shared/logo.svg`), header/launcher/banner.
+- `OutcomeView.tsx` — resa della risposta: heading, elenchi, grassetto, chip delle
+  fonti. Usato sia dal turno in streaming sia da ogni turno del thread.
+- `ThreadView.tsx` — turni conclusi, collassabili; marca quelli usciti dal contesto.
+- `ScheduleChangeForm.tsx` — form della richiesta strutturata + checkbox delle
+  sezioni di output.
+- `TourTimeline.tsx` — avanzamento della modalità immersiva e **unico** punto di stop.
+- `useAutoGrow.ts` — la textarea segue il contenuto fino a 200px.
+- `useTourDriver.ts` — macchina a stati del tour.
 
 ### `entrypoints/sidebar.content/style.css`
 
-Stili della sidebar.
+Stili della sidebar. I design token **non** stanno qui: arrivano da
+`shared/theme.css`, lo stesso file che alimenta dashboard, pagine auth e FX del
+tour (`tests/theme-tokens.test.ts` impedisce che qualcuno ne reintroduca una copia).
 
 Classi principali:
 
 - `.rs-launcher`: bottone quando sidebar e chiusa.
 - `.rs-panel`: contenitore laterale.
-- `.rs-header`: intestazione.
-- `.rs-input`: textarea domanda.
-- `.rs-submit`: bottone invio.
-- `.rs-plan`: box modello/token/costo.
-- `.rs-outcome`: risposta finale.
+- `.rs-header`: intestazione. `min-height: var(--rs-host-header-h, 56px)` — si
+  allinea alla banda blu della KB, misurata a runtime da `lib/host-chrome.ts`.
+- `.rs-body` / `.rs-footer`: corpo scorrevole e footer ancorato (utente + logout).
+- `.rs-segmented` / `.rs-seg`: selettore di modalità e di Flight Type.
+- `.rs-switch`: interruttore Schedule Change.
+- `.rs-input`: textarea domanda (altezza gestita da `useAutoGrow`).
+- `.rs-form`: form della richiesta strutturata.
+- `.rs-submit`: bottone invio. `.rs-new`: "+" che azzera il thread.
+- `.rs-plan`: box modello/token/costo/contesto.
+- `.rs-outcome` / `.rs-list` / `.rs-sources`: risposta finale.
+- `.rs-thread` / `.rs-turn`: turni precedenti.
+- `.rs-notice`: avviso non bloccante (es. allargamento della ricerca).
 
 ## Lettura Pagine Web
 
@@ -169,9 +199,11 @@ DOM+CSS, un solo `<style id="rs-fx-style">`, tutto con prefisso `rs-fx-`,
 
 - `motion.ts`: easing, `sleep`, `smoothScrollTo` (scroll cinematico rAF ~950ms,
   annullato da un gesto dell'utente);
-- `banner.ts`: banner di avanzamento fisso in alto (brand, "passo N/M",
-  narrazione typewriter `narrate()`, barra progresso, bottone Interrompi che
-  emette l'evento `rs-tour-abort` + scrive il flag storage `rs:tourAbort`);
+- `banner.ts`: banner di avanzamento fisso in alto (marchio, "passo N/M",
+  narrazione typewriter `narrate()`, barra di progresso con percentuale). Non ha
+  il bottone Interrompi: si ferma dalla timeline in sidebar (`TourTimeline`),
+  unico punto di stop. `setBannerOffset()` scrive `--rs-fx-right` su `<html>` così
+  il vetro della barra si arresta al bordo del pannello anche dopo un resize;
 - `spotlight.ts`: overlay a riflettore (gradiente radiale con buco che segue
   il link) + alone giallo pulsante su `.rs-tour-highlight`;
 - `cursor.ts`: cursore AI fantasma che plana sul link con curva di Bézier e
@@ -247,12 +279,27 @@ Contiene prompt e interfaccia provider.
 
 Punti importanti:
 
-- `buildSystemPrompt()`: istruzioni generali al modello.
-- `buildUserContent()`: impacchetta query, pagine KB e link.
-- `ASSUMED_OUTPUT_TOKENS`: output previsto per stima costi.
-- `ANTHROPIC_EGRESS`: host esterno dichiarato nei requisiti.
+- `buildSystemPrompt(options)`: istruzioni al modello. Condizionale: cambia con le
+  sezioni richieste dal form, e aggiunge righe quando c'è uno storico.
+- `buildUserContent()`: impacchetta storico, form, query, pagine KB e link in un
+  **singolo messaggio utente**, non in un array `messages[]` — così la stima di
+  costo in `routes/ask.ts`, che misura il prompt renderizzato, resta esatta senza
+  duplicare la logica di composizione.
+- `outcomeSections(requested?)`: le sezioni della risposta. I titoli vengono da
+  `shared/sections.json` (unica fonte, letta anche dall'estensione): le fonti sono
+  sempre ultime e mai opzionali, perché la sidebar ci aggancia i chip cliccabili.
+- `maxOutputTokens()`: budget di output, cresce con pagine e sezioni richieste.
+- `systemPromptOptionsFor()`: un solo punto che deriva le opzioni dalla richiesta,
+  così stima e chiamata reale non possono costruire prompt diversi.
+- `ASSUMED_OUTPUT_TOKENS`, `ANTHROPIC_EGRESS`.
 
-Se vuoi cambiare il formato della risposta AI, parti da qui.
+Se vuoi cambiare il formato della risposta AI, parti da qui — e dai titoli in
+`shared/sections.json`.
+
+### `server/src/itinerary.ts`
+
+`parseCityPair()`: da "Milano-Parigi" a "MIL-PAR". Mappa seed delle città più
+frequenti; ciò che non si risolve passa intatto e viene segnalato.
 
 ### `server/src/provider/mock.ts`
 
@@ -275,10 +322,41 @@ ANTHROPIC_API_KEY=...
 
 Qui si modificano:
 
-- `max_tokens`;
+- `max_tokens` (delegato a `maxOutputTokens()`);
 - parametri SDK;
 - streaming reale;
-- eventuali opzioni modello.
+- eventuali opzioni modello;
+- `rankCandidates()`: selezione articoli via `tool_use` forzato su
+  `select_articles`. È ciò che rende utile la ricerca su tutta la KB — l'indice
+  offre 2964 articoli, ma solo un giudizio semantico sa quale risponde a un quesito
+  posto in italiano su articoli scritti in inglese. `parseRankSelection` scarta
+  qualunque id non presente fra i candidati, quindi un modello che inventa non può
+  far leggere una pagina non richiesta. Su errore la rotta `/rank` risponde
+  `{selectedUrls: []}` e il client ricade sullo scoring locale.
+
+## Asset condivisi (`shared/`)
+
+Un solo posto per ciò che serve a più superfici. Il server non può importarli
+(`rootDir: "src"`), quindi li legge da disco a runtime tramite
+`server/src/shared-assets.ts`; l'estensione li importa direttamente.
+
+- `theme.css` — design token (`:root, :host`). Sidebar, dashboard, pagine auth, FX.
+- `logo.svg` — marchio, dimensionato dal contenitore.
+- `sections.json` — titoli delle sezioni di output e campi del form Schedule Change.
+- `contracts.d.ts` — tipi condivisi con il backend.
+
+## Ricerca su tutta la KB e fuori tema
+
+- `lib/kb-index.json` + `lib/kb-index.ts` — indice statico di tutti gli articoli.
+- `lib/off-topic.ts` — `isOffTopic()`: la domanda c'entra con la pagina aperta? Due
+  segnali, entrambi necessari: bassa copertura dei termini **e** un candidato che
+  batte la pagina secondo lo stesso scorer. Serve a evitare la risposta
+  strutturalmente sbagliata quando l'agente chiede altro rispetto all'articolo che
+  ha davanti — caso normale nell'uso quotidiano, non eccezione.
+- `lib/host-chrome.ts` — misura la banda blu della pagina host per allinearci a
+  essa. Candidati per nome, sonda geometrica di riserva, `ResizeObserver`, e
+  override manuale in `browser.storage.local` (`rs:hostHeaderHeight`) se
+  l'euristica sbaglia sulla KB reale.
 
 ## Checklist Per Interventi Rapidi
 

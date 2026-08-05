@@ -31,11 +31,45 @@ export interface KbLink {
   matchedKeywords?: string[];
 }
 
+/**
+ * Un turno già concluso della conversazione, rimandato al modello per i
+ * follow-up. Lo storico vive nel CLIENT: il backend resta stateless, e la tabella
+ * di audit è volutamente privacy-minimised (solo hash della query, nessuna
+ * risposta), quindi non potrebbe farne da sorgente.
+ */
+export interface AskTurn {
+  query: string;
+  answer: string;
+}
+
+/**
+ * Richiesta operativa strutturata al posto del prompt libero: l'agente compila
+ * campi invece di descrivere il caso in prosa. `sections` sono le sezioni che
+ * vuole nella risposta (le fonti vengono sempre aggiunte a parte).
+ */
+export interface ScheduleChangeRequest {
+  kind: 'schedule-change';
+  requestType: 'Schedule Change' | 'Name Correction';
+  /** Codice vettore come lo scrive l'agente (LH, W8, ...), normalizzato maiuscolo. */
+  airline: string;
+  /** Coppia di città in un unico campo: "MIL-PAR" oppure "Milano-Parigi". */
+  cityPair: string;
+  flightType: 'Online' | 'Codeshare';
+  /** Data di partenza originale, ISO `YYYY-MM-DD`. */
+  originalDate: string;
+  /** Sezioni richieste nella risposta, dall'elenco in shared/sections.json. */
+  sections: string[];
+}
+
 /** Payload the sidebar/background sends to the backend `POST /ask`. */
 export interface AskRequest {
   query: string;
   pages: KbPage[];
   links: KbLink[];
+  /** Turni precedenti della conversazione, dal più vecchio al più recente. */
+  history?: AskTurn[];
+  /** Presente quando l'agente ha compilato il form invece del prompt libero. */
+  form?: ScheduleChangeRequest;
 }
 
 /**
@@ -78,6 +112,12 @@ export interface AiPlan {
   egress: string;
   /** Whether this response came from the mock or a real provider. */
   provider: 'mock' | 'anthropic';
+  /**
+   * Turni di storico effettivamente rimandati al modello, DOPO il taglio a
+   * `max_history_turns`. È il numero vero, non quello che il client ha inviato:
+   * serve alla sidebar per dire quali turni sono ancora contesto e quali no.
+   */
+  historyTurnsUsed?: number;
 }
 
 /**

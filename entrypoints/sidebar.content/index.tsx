@@ -3,7 +3,15 @@
 // never clash with the host page's CSS.
 import ReactDOM from 'react-dom/client';
 import App from './App';
+// I token condivisi (shared/theme.css, blocco `:root, :host`) sono la stessa
+// fonte che alimenta dashboard, pagine auth e FX del tour.
+//
+// L'ordine conta: style.css dichiara `:host { all: initial }` per isolarsi dal
+// CSS della pagina host. Per spec `all` non azzera le custom property, ma
+// caricando i token DOPO la regola la palette sopravvive comunque — e questo
+// file non dipende più da quel dettaglio.
 import './style.css';
+import '../../shared/theme.css';
 
 export default defineContentScript({
   // KB reale (Salesforce Experience Cloud) + Wikipedia per il demo/dev.

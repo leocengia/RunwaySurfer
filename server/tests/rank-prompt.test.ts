@@ -8,6 +8,7 @@ import {
   candidateId,
   RANK_MAX_SELECTED,
 } from '../src/provider/shared.js';
+import { firstToolInput } from '../src/provider/anthropic.js';
 import type { KbLink } from '../src/types.js';
 
 const CANDIDATES: KbLink[] = [
@@ -70,7 +71,11 @@ describe('parseRankSelection', () => {
   });
 
   it('scarta gli id inventati non presenti tra i candidati (anti-allucinazione)', () => {
-    const sel = parseRankSelection({ selectedIds: ['c9', 'c1', 'nope'] }, CANDIDATES, RANK_MAX_SELECTED);
+    const sel = parseRankSelection(
+      { selectedIds: ['c9', 'c1', 'nope'] },
+      CANDIDATES,
+      RANK_MAX_SELECTED,
+    );
     expect(sel).toEqual([CANDIDATES[0].url]);
   });
 
@@ -129,5 +134,39 @@ describe('rankReplayKey', () => {
 
   it('cambia se cambia l’insieme dei candidati', () => {
     expect(rankReplayKey('x', CANDIDATES)).not.toBe(rankReplayKey('x', CANDIDATES.slice(0, 2)));
+  });
+});
+
+// Il reranker reale forza `tool_choice` su select_articles, quindi la risposta è
+// un blocco tool_use e non prosa. Questo è il pezzo che estrae l'input del tool;
+// il resto della catena (parseRankSelection) è già coperto sopra.
+describe('firstToolInput', () => {
+  const toolBlock = (name: string, input: unknown) =>
+    ({ type: 'tool_use', id: 'tu_1', name, input }) as never;
+  const message = (content: unknown[]) => ({ content }) as never;
+
+  it('estrae l’input del blocco select_articles', () => {
+    expect(
+      firstToolInput(message([toolBlock('select_articles', { selectedIds: ['c1'] })])),
+    ).toEqual({ selectedIds: ['c1'] });
+  });
+
+  it('salta i blocchi di testo che precedono il tool', () => {
+    const msg = message([
+      { type: 'text', text: 'ecco la selezione' },
+      toolBlock('select_articles', { selectedIds: ['c2', 'c3'] }),
+    ]);
+    expect(firstToolInput(msg)).toEqual({ selectedIds: ['c2', 'c3'] });
+  });
+
+  it('ignora un tool con nome diverso', () => {
+    expect(
+      firstToolInput(message([toolBlock('altro_tool', { selectedIds: ['c1'] })])),
+    ).toBeUndefined();
+  });
+
+  it('ritorna undefined senza blocchi tool (→ selezione vuota, fallback locale)', () => {
+    expect(firstToolInput(message([{ type: 'text', text: 'nessun tool' }]))).toBeUndefined();
+    expect(parseRankSelection(undefined, CANDIDATES, RANK_MAX_SELECTED)).toEqual([]);
   });
 });

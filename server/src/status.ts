@@ -34,7 +34,7 @@ export function dashboardData() {
   const settings = getSettings();
   const history = analyticsSummary();
   return {
-    service: 'RunwaySurfer proxy',
+    service: 'Runway Surfer proxy',
     status: 'ok',
     provider: provider.name,
     aiReady: provider.name === 'mock' || anthropicKeyConfigured,

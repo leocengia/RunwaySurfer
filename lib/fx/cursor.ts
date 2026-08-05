@@ -5,33 +5,51 @@ import { easeInOutCubic, prefersReducedMotion, sleep } from './motion';
 
 const CURSOR_ID = 'rs-fx-cursor';
 
-// Navy arrow with a yellow stroke, tip at the top-left of the viewBox: the
+// Blue arrow with a yellow stroke, tip at the top-left of the viewBox: the
 // element position IS the pointing position.
 const CURSOR_SVG = `
   <svg viewBox="0 0 24 24" width="28" height="28" xmlns="http://www.w3.org/2000/svg">
-    <path d="M2 2 L11 22 L13.5 13.5 L22 11 Z" fill="#0b1f3a" stroke="#ffcc00" stroke-width="1.8" stroke-linejoin="round" />
+    <path d="M2 2 L11 22 L13.5 13.5 L22 11 Z" fill="#000099" stroke="#ffcc00" stroke-width="1.8" stroke-linejoin="round" />
   </svg>
 `;
 
 let lastPos: { x: number; y: number } | null = null;
 
-function ensureCursor(): HTMLElement {
-  let cursor = document.getElementById(CURSOR_ID);
-  if (!cursor) {
-    cursor = document.createElement('div');
-    cursor.id = CURSOR_ID;
-    cursor.innerHTML = CURSOR_SVG;
-    document.documentElement.appendChild(cursor);
-    const start = lastPos ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-    cursor.style.left = `${start.x}px`;
-    cursor.style.top = `${start.y}px`;
-  }
-  return cursor;
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
 }
 
 function targetPoint(el: HTMLElement): { x: number; y: number } {
   const r = el.getBoundingClientRect();
   return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+}
+
+/**
+ * Punto di ingresso del cursore alla prima comparsa: appena sotto/sinistra del
+ * bersaglio, non al centro del viewport. Un puntatore che si materializza in
+ * mezzo alla pagina si legge come un indicatore di caricamento centrale — che è
+ * esattamente ciò che il tour non deve mostrare.
+ */
+function entryPoint(el: HTMLElement): { x: number; y: number } {
+  const t = targetPoint(el);
+  return {
+    x: clamp(t.x - 150, 12, Math.max(12, window.innerWidth - 12)),
+    y: clamp(t.y + 110, 12, Math.max(12, window.innerHeight - 12)),
+  };
+}
+
+function ensureCursor(el: HTMLElement): HTMLElement {
+  let cursor = document.getElementById(CURSOR_ID);
+  if (!cursor) {
+    cursor = document.createElement('div');
+    cursor.id = CURSOR_ID;
+    cursor.innerHTML = CURSOR_SVG;
+    const start = lastPos ?? entryPoint(el);
+    cursor.style.left = `${start.x}px`;
+    cursor.style.top = `${start.y}px`;
+    document.documentElement.appendChild(cursor);
+  }
+  return cursor;
 }
 
 /**
@@ -44,8 +62,8 @@ export function cursorGlideTo(
   shouldAbort?: () => boolean,
 ): Promise<void> {
   if (prefersReducedMotion()) return Promise.resolve();
-  ensureCursor();
-  const p0 = lastPos ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+  ensureCursor(el);
+  const p0 = lastPos ?? entryPoint(el);
   const startedAt = performance.now();
 
   return new Promise((resolve) => {

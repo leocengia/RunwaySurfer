@@ -1,15 +1,18 @@
 // POST /ask — l'endpoint principale: sanificazione dell'input, routing del
 // modello, stima token/costo, guardrail e streaming SSE dell'outcome.
 import { Router } from 'express';
-import type { AskRequest, AskEvent, AiPlan } from '../types.js';
+import type { AskRequest, AskEvent, AiPlan, AskTurn, ScheduleChangeRequest } from '../types.js';
 import { chooseModel, estimateTokens, estimateCostUsd } from '../router.js';
 import {
   getProvider,
   buildSystemPrompt,
   buildUserContent,
+  maxOutputTokens,
+  systemPromptOptionsFor,
   ANTHROPIC_EGRESS,
   ASSUMED_OUTPUT_TOKENS,
 } from '../provider/index.js';
+import { SCHEDULE_CHANGE_FIELDS } from '../shared-assets.js';
 import {
   getSettings,
   insertRequestHistory,
@@ -20,6 +23,65 @@ import { requireAuth, type AuthContext } from '../auth.js';
 import { metrics, recordMetric, canAcceptRequest, beginActive, endActive } from '../metrics.js';
 import { truncate, newRequestId } from '../util.js';
 import { MAX_QUERY_CHARS } from '../config.js';
+
+/** Caratteri massimi per la risposta di un turno precedente rimandato al modello. */
+export const MAX_HISTORY_ANSWER_CHARS = 1_200;
+/** Caratteri massimi per la domanda di un turno precedente. */
+export const MAX_HISTORY_QUERY_CHARS = 300;
+
+const REQUEST_TYPES: ScheduleChangeRequest['requestType'][] = [
+  'Schedule Change',
+  'Name Correction',
+];
+const FLIGHT_TYPES: ScheduleChangeRequest['flightType'][] = ['Online', 'Codeshare'];
+const SECTION_LABELS = new Set(SCHEDULE_CHANGE_FIELDS.map((f) => f.label));
+
+/**
+ * Storico normalizzato: solo gli ultimi `max_history_turns` turni, con domanda e
+ * risposta troncate. Senza questo tetto ogni follow-up rimanderebbe tutto il
+ * pregresso e il costo crescerebbe col quadrato dei turni sullo stesso budget
+ * giornaliero.
+ */
+function sanitizeHistory(raw: unknown, maxTurns: number): AskTurn[] | undefined {
+  if (!Array.isArray(raw) || maxTurns <= 0) return undefined;
+  const turns = raw
+    .slice(-maxTurns)
+    .map((turn) => ({
+      query: truncate((turn as Partial<AskTurn>)?.query, MAX_HISTORY_QUERY_CHARS),
+      answer: truncate((turn as Partial<AskTurn>)?.answer, MAX_HISTORY_ANSWER_CHARS),
+    }))
+    .filter((turn) => turn.query && turn.answer);
+  return turns.length ? turns : undefined;
+}
+
+/**
+ * Form strutturato normalizzato. I valori enumerati passano da una WHITELIST, non
+ * da un troncamento: `requestType`, `flightType` e i nomi delle sezioni finiscono
+ * dentro le istruzioni di sistema, quindi una stringa libera dell'agente lì
+ * sarebbe una via d'ingresso per l'injection.
+ */
+function sanitizeForm(raw: unknown): ScheduleChangeRequest | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const f = raw as Partial<ScheduleChangeRequest>;
+  const requestType = REQUEST_TYPES.find((t) => t === f.requestType);
+  const flightType = FLIGHT_TYPES.find((t) => t === f.flightType);
+  if (!requestType || !flightType) return undefined;
+  const sections = Array.isArray(f.sections)
+    ? f.sections.filter((s): s is string => typeof s === 'string' && SECTION_LABELS.has(s))
+    : [];
+  return {
+    kind: 'schedule-change',
+    requestType,
+    flightType,
+    airline: truncate(f.airline, 8).toUpperCase(),
+    cityPair: truncate(f.cityPair, 80),
+    // Solo `YYYY-MM-DD`: è ciò che produce <input type="date">.
+    originalDate: /^\d{4}-\d{2}-\d{2}$/.test(String(f.originalDate ?? ''))
+      ? String(f.originalDate)
+      : '',
+    sections,
+  };
+}
 
 /** Esportata per i test: normalizza e tronca il payload non fidato di /ask. */
 export function sanitizeRequest(body: Partial<AskRequest>, settings: SettingsRecord): AskRequest {
@@ -51,6 +113,8 @@ export function sanitizeRequest(body: Partial<AskRequest>, settings: SettingsRec
     query: truncate(body.query, MAX_QUERY_CHARS),
     pages,
     links: links.filter((link) => link.url && link.text),
+    history: sanitizeHistory(body.history, settings.max_history_turns),
+    form: sanitizeForm(body.form),
   };
 }
 
@@ -75,7 +139,10 @@ askRoutes.post('/ask', requireAuth('agent'), async (req, res) => {
     return;
   }
   const request = sanitizeRequest(body, settings);
-  if (!request.query || request.pages.length === 0) {
+  // Con un form compilato la prosa libera è opzionale (i campi SONO la domanda),
+  // e la richiesta può partire anche da una pagina non leggibile: l'articolo
+  // giusto lo si cerca in tutta la KB.
+  if (!request.form && (!request.query || request.pages.length === 0)) {
     res.status(400).json({ error: 'invalid request: non-empty query and pages are required' });
     return;
   }
@@ -113,9 +180,18 @@ askRoutes.post('/ask', requireAuth('agent'), async (req, res) => {
   const provider = getProvider();
   const { spec, reason } = chooseModel(request);
 
-  const promptText = buildSystemPrompt() + '\n' + buildUserContent({ ...request, model: spec.id });
+  // Il prompt viene renderizzato qui SOLO per la stima: essendo composto dalle
+  // stesse funzioni che usa il provider, storico e form ci finiscono dentro da
+  // soli e la stima resta esatta senza duplicare logica.
+  const generateInput = { ...request, model: spec.id };
+  const promptText =
+    buildSystemPrompt(systemPromptOptionsFor(generateInput)) +
+    '\n' +
+    buildUserContent(generateInput);
   const estimatedInputTokens = estimateTokens(promptText);
-  const estimatedOutputTokens = ASSUMED_OUTPUT_TOKENS;
+  // Conservativo: mai sotto la costante storica, ma se il form chiede più sezioni
+  // il tetto reale è più alto e il budget deve saperlo.
+  const estimatedOutputTokens = Math.max(ASSUMED_OUTPUT_TOKENS, maxOutputTokens(generateInput));
   const estimatedCostUsd = estimateCostUsd(spec, estimatedInputTokens, estimatedOutputTokens);
 
   const plan: AiPlan = {
@@ -126,6 +202,8 @@ askRoutes.post('/ask', requireAuth('agent'), async (req, res) => {
     estimatedCostUsd,
     egress: ANTHROPIC_EGRESS,
     provider: provider.name,
+    // Post-taglio: è il numero di turni davvero in contesto, non quello inviato.
+    historyTurnsUsed: request.history?.length ?? 0,
   };
 
   // Per-request usage log (cost visibility for the CED / FinOps).

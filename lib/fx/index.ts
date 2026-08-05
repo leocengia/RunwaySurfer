@@ -3,18 +3,36 @@
 // All effects live in the HOST page DOM (not the sidebar shadow root): one
 // injected <style id="rs-fx-style"> holds every rule/keyframe, and every
 // element uses the rs-fx- prefix so teardownFx() can sweep everything away.
+// The shared design tokens ride along in the same <style> (shared/theme.css,
+// whose `:root` block matches the host page's <html>), so the tour uses the
+// same palette as the sidebar and the dashboard instead of its own literals.
 //
 // z-index ladder (sidebar stays on top at 2147483647):
 //   spotlight 2147483640 < beam 2147483641 < banner 2147483645 < cursor 2147483646
 
+import themeTokensCss from '../../shared/theme.css?inline';
 import { stopNarration } from './banner';
 
 export const FX_STYLE_ID = 'rs-fx-style';
 const LEGACY_STYLE_ID = 'rs-tour-style';
+/** Classe su <html> attiva per l'intera durata del tour. */
+export const FX_TOUR_CLASS = 'rs-fx-tour';
 
 const FX_CSS = `
+  /* La KB Salesforce mostra il proprio spinner Lightning al centro della pagina
+     a ogni route Aura. Durante il tour l'avanzamento lo raccontano già la barra
+     in alto e la timeline in sidebar: un terzo indicatore, centrato e slegato
+     dagli altri, dice solo "aspetta" senza dire quanto. Nascosto solo mentre il
+     tour è in corso (classe su <html>), quindi la KB resta intatta fuori dal tour. */
+  html.${FX_TOUR_CLASS} #auraLoadingBox,
+  html.${FX_TOUR_CLASS} .slds-spinner,
+  html.${FX_TOUR_CLASS} .slds-spinner_container,
+  html.${FX_TOUR_CLASS} lightning-spinner {
+    display: none !important;
+  }
+
   .rs-tour-highlight {
-    outline: 2px solid #0b1f3a !important;
+    outline: 2px solid var(--rs-primary, #000099) !important;
     outline-offset: 2px !important;
     background: rgba(255, 204, 0, 0.22) !important;
     border-radius: 4px !important;
@@ -26,21 +44,25 @@ const FX_CSS = `
     50% { box-shadow: 0 0 0 5px rgba(255, 204, 0, 0.35), 0 0 18px 7px rgba(255, 204, 0, 0.35); }
   }
 
+  /* Parte invisibile e compare solo quando spotlight.ts l'ha agganciato al
+     bersaglio (classe rs-fx-ready). Senza questo, il gradiente coi default
+     --rs-spot-* disegnava un cerchio luminoso al CENTRO di una pagina scurita:
+     letto come un caricamento centrale, in competizione con la barra in alto. */
   #rs-fx-spotlight {
     position: fixed;
     inset: 0;
     pointer-events: none;
     z-index: 2147483640;
+    opacity: 0;
     background: radial-gradient(
       circle at var(--rs-spot-x, 50%) var(--rs-spot-y, 50%),
       transparent var(--rs-spot-r, 80px),
-      rgba(4, 16, 34, 0.32) calc(var(--rs-spot-r, 80px) + 50px)
+      rgba(2, 2, 40, 0.34) calc(var(--rs-spot-r, 80px) + 50px)
     );
-    animation: rs-fx-fade-in 250ms ease-out;
+    transition: opacity 250ms ease-out;
   }
-  @keyframes rs-fx-fade-in {
-    from { opacity: 0; }
-    to { opacity: 1; }
+  #rs-fx-spotlight.rs-fx-ready {
+    opacity: 1;
   }
 
   #rs-fx-cursor {
@@ -52,6 +74,7 @@ const FX_CSS = `
     filter: drop-shadow(0 0 4px rgba(255, 204, 0, 0.8));
     transition: none;
   }
+  #rs-fx-cursor.rs-fx-hidden { opacity: 0; }
   #rs-fx-cursor::after {
     content: '';
     position: absolute;
@@ -69,7 +92,7 @@ const FX_CSS = `
     width: 12px;
     height: 12px;
     margin: -6px 0 0 -6px;
-    border: 3px solid #ffcc00;
+    border: 3px solid var(--rs-yellow, #ffcc00);
     border-radius: 50%;
     pointer-events: none;
     z-index: 2147483646;
@@ -80,12 +103,19 @@ const FX_CSS = `
     to { transform: scale(1.9); opacity: 0; }
   }
 
+  /* --rs-fx-right è la larghezza occupata dalla sidebar: il vetro della barra si
+     ferma al bordo del pannello invece di correrci sotto. La sidebar la aggiorna
+     a ogni resize/apertura (App.tsx), quindi non può più desincronizzarsi. */
+  /* L'altezza segue la banda blu della KB (--rs-host-header-h, misurata da
+     lib/host-chrome.ts e scritta su <html> dalla sidebar): così la barra si
+     sovrappone esattamente a quella del sito invece di tagliarla a metà. */
   #rs-fx-banner {
     position: fixed;
     top: 0;
     left: 0;
-    right: 0;
-    height: 44px;
+    right: var(--rs-fx-right, 0px);
+    height: var(--rs-host-header-h, 44px);
+    min-height: 44px;
     z-index: 2147483645;
     pointer-events: none;
     display: flex;
@@ -93,14 +123,15 @@ const FX_CSS = `
     gap: 12px;
     padding: 0 16px;
     box-sizing: border-box;
-    background: linear-gradient(90deg, rgba(11, 31, 58, 0.72), rgba(0, 53, 95, 0.72));
-    -webkit-backdrop-filter: blur(12px) saturate(160%);
-    backdrop-filter: blur(12px) saturate(160%);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+    background: linear-gradient(90deg, rgba(0, 0, 153, 0.78), rgba(22, 104, 227, 0.7));
+    -webkit-backdrop-filter: blur(14px) saturate(170%);
+    backdrop-filter: blur(14px) saturate(170%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.16);
     color: #fff;
     font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
     font-size: 13px;
-    box-shadow: 0 2px 12px rgba(4, 16, 34, 0.4);
+    box-shadow: 0 2px 12px rgba(2, 2, 40, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    transition: right 140ms ease;
     animation: rs-fx-banner-in 350ms ease-out;
   }
   @keyframes rs-fx-banner-in {
@@ -111,20 +142,17 @@ const FX_CSS = `
     flex-shrink: 0;
     width: 24px;
     height: 24px;
-    border-radius: 50%;
-    background: #ffcc00;
-    color: #0b1f3a;
-    font-weight: 900;
-    font-size: 10px;
+    line-height: 0;
     display: flex;
     align-items: center;
     justify-content: center;
+    filter: drop-shadow(0 1px 3px rgba(2, 2, 40, 0.45));
   }
-  .rs-fx-banner-title { flex-shrink: 0; font-weight: 800; white-space: nowrap; }
+  .rs-fx-banner-title { flex-shrink: 0; font-weight: 800; white-space: nowrap; letter-spacing: 0.02em; }
   .rs-fx-banner-step {
     flex-shrink: 0;
-    background: #ffcc00;
-    color: #0b1f3a;
+    background: var(--rs-yellow, #ffcc00);
+    color: var(--rs-navy, #191e3b);
     font-weight: 800;
     font-size: 11px;
     padding: 2px 8px;
@@ -143,29 +171,24 @@ const FX_CSS = `
     display: inline-block;
     width: 7px;
     margin-left: 2px;
-    border-bottom: 2px solid #ffcc00;
+    border-bottom: 2px solid var(--rs-yellow, #ffcc00);
     animation: rs-fx-blink 700ms step-end infinite;
   }
   @keyframes rs-fx-blink {
     0%, 100% { opacity: 1; }
     50% { opacity: 0; }
   }
-  .rs-fx-banner-stop {
+  /* Percentuale accanto alla barra: durante un'attesa lunga un numero che sale
+     è l'unica cosa che distingue "sta lavorando" da "è piantato". */
+  .rs-fx-banner-pct {
     flex-shrink: 0;
-    pointer-events: auto;
-    border: 1px solid rgba(255, 255, 255, 0.35);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.1);
-    -webkit-backdrop-filter: blur(6px);
-    backdrop-filter: blur(6px);
-    color: #fff;
-    font: inherit;
     font-size: 11px;
     font-weight: 800;
-    padding: 4px 10px;
-    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.9;
+    min-width: 30px;
+    text-align: right;
   }
-  .rs-fx-banner-stop:hover { background: rgba(255, 255, 255, 0.18); }
   .rs-fx-banner-bar {
     position: absolute;
     left: 0;
@@ -178,12 +201,19 @@ const FX_CSS = `
   .rs-fx-banner-fill {
     height: 100%;
     width: 0%;
-    background: #ffcc00;
+    background: var(--rs-yellow, #ffcc00);
     transition: width 400ms ease;
   }
   .rs-fx-banner-fill.rs-fx-indeterminate {
     width: 100% !important;
-    background: linear-gradient(90deg, transparent, #ffcc00 40%, #ffe680 50%, #ffcc00 60%, transparent);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--rs-yellow, #ffcc00) 40%,
+      var(--rs-yellow-lite, #ffe680) 50%,
+      var(--rs-yellow, #ffcc00) 60%,
+      transparent
+    );
     background-size: 50% 100%;
     background-repeat: no-repeat;
     animation: rs-fx-shimmer 1.1s linear infinite;
@@ -194,9 +224,9 @@ const FX_CSS = `
   }
   #rs-fx-banner.rs-fx-done-flash { animation: rs-fx-done 600ms ease-out; }
   @keyframes rs-fx-done {
-    0% { box-shadow: 0 2px 12px rgba(4, 16, 34, 0.4); }
+    0% { box-shadow: 0 2px 12px rgba(2, 2, 40, 0.4); }
     40% { box-shadow: 0 2px 26px rgba(255, 204, 0, 0.8); }
-    100% { box-shadow: 0 2px 12px rgba(4, 16, 34, 0.4); }
+    100% { box-shadow: 0 2px 12px rgba(2, 2, 40, 0.4); }
   }
 
   #rs-fx-beam {
@@ -216,8 +246,8 @@ const FX_CSS = `
   }
 
   .rs-scan-hit {
-    background: #ffcc00 !important;
-    color: #0b1f3a !important;
+    background: var(--rs-yellow, #ffcc00) !important;
+    color: var(--rs-navy, #191e3b) !important;
     padding: 0 !important;
     display: inline;
     border-radius: 2px;
@@ -239,12 +269,17 @@ const FX_CSS = `
   }
 `;
 
-/** Inject the FX stylesheet into the host page once. */
+/**
+ * Inject the FX stylesheet into the host page once and flag <html> for the whole
+ * tour (the flag is what suppresses the host KB's own centered spinner).
+ */
 export function ensureFxStyles(): void {
+  document.documentElement.classList.add(FX_TOUR_CLASS);
   if (document.getElementById(FX_STYLE_ID)) return;
   const style = document.createElement('style');
   style.id = FX_STYLE_ID;
-  style.textContent = FX_CSS;
+  // I token condivisi vanno per primi: le regole sotto li leggono con var().
+  style.textContent = `${themeTokensCss}\n${FX_CSS}`;
   document.head.appendChild(style);
 }
 
@@ -256,6 +291,8 @@ export function teardownFx(): void {
   // Stop the typewriter interval before detaching the banner, otherwise it
   // keeps firing on a now-removed node until the text finishes.
   stopNarration();
+  document.documentElement.classList.remove(FX_TOUR_CLASS);
+  document.documentElement.style.removeProperty('--rs-fx-right');
   for (const id of ['rs-fx-banner', 'rs-fx-spotlight', 'rs-fx-cursor', 'rs-fx-beam']) {
     document.getElementById(id)?.remove();
   }

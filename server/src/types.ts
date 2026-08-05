@@ -6,6 +6,8 @@ export type {
   KbPage,
   KbLink,
   AskRequest,
+  AskTurn,
+  ScheduleChangeRequest,
   AiPlan,
   AskEvent,
   RankRequest,

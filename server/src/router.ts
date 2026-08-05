@@ -51,9 +51,17 @@ export function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-/** Total characters of KB context the request carries. */
+/**
+ * Total characters of context the request carries: pagine KB, storico della
+ * conversazione e campi del form. Contare le sole pagine renderebbe INVISIBILE
+ * al router tutto il pregresso di un thread — un follow-up al terzo turno
+ * resterebbe sul modello più economico pur avendo il doppio del contesto.
+ */
 function contextChars(req: AskRequest): number {
-  return req.pages.reduce((n, p) => n + p.text.length, 0);
+  const pages = req.pages.reduce((n, p) => n + p.text.length, 0);
+  const history = (req.history ?? []).reduce((n, t) => n + t.query.length + t.answer.length, 0);
+  const form = req.form ? JSON.stringify(req.form).length : 0;
+  return pages + history + form;
 }
 
 /**
@@ -66,8 +74,15 @@ export function chooseModel(req: AskRequest): RoutingDecision {
   const pages = req.pages.length;
   const chars = contextChars(req);
   const queryTokens = estimateTokens(req.query);
+  // Una richiesta strutturata non è mai "semplice": la query libera è corta o
+  // vuota, ma va prodotta una risposta a più sezioni su condizioni tariffarie.
+  const simple =
+    !req.form &&
+    pages <= 1 &&
+    chars < SIMPLE_MAX_CONTEXT_CHARS &&
+    queryTokens < SIMPLE_MAX_QUERY_TOKENS;
 
-  if (pages <= 1 && chars < SIMPLE_MAX_CONTEXT_CHARS && queryTokens < SIMPLE_MAX_QUERY_TOKENS) {
+  if (simple) {
     return {
       spec: MODELS.haiku,
       reason: `task semplice (1 pagina, ~${Math.round(chars / 4)} token contesto) → modello economico/veloce`,

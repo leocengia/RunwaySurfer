@@ -101,6 +101,8 @@ export interface SettingsRecord {
   max_request_pages: number;
   max_request_links: number;
   max_page_text_chars: number;
+  /** Turni precedenti rimandati al modello nei follow-up (0 = thread disattivati). */
+  max_history_turns: number;
   retention_days: number;
 }
 
@@ -111,6 +113,7 @@ const DEFAULT_SETTINGS: SettingsRecord = {
   max_request_pages: Number(process.env.MAX_REQUEST_PAGES ?? 4),
   max_request_links: Number(process.env.MAX_REQUEST_LINKS ?? 12),
   max_page_text_chars: Number(process.env.MAX_PAGE_TEXT_CHARS ?? 6_000),
+  max_history_turns: Number(process.env.MAX_HISTORY_TURNS ?? 3),
   retention_days: Number(process.env.REQUEST_RETENTION_DAYS ?? 90),
 };
 
@@ -296,6 +299,7 @@ export function getSettings(): SettingsRecord {
     max_request_pages: values.max_request_pages ?? DEFAULT_SETTINGS.max_request_pages,
     max_request_links: values.max_request_links ?? DEFAULT_SETTINGS.max_request_links,
     max_page_text_chars: values.max_page_text_chars ?? DEFAULT_SETTINGS.max_page_text_chars,
+    max_history_turns: values.max_history_turns ?? DEFAULT_SETTINGS.max_history_turns,
     retention_days: values.retention_days ?? DEFAULT_SETTINGS.retention_days,
   };
 }
