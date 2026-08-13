@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- In una scheda, non nel riquadro modale: la pagina contiene istruzioni da
+         leggere durante l'installazione e un campo da incollare. -->
+    <meta name="manifest.open_in_tab" content="true" />
+    <title>Runway Surfer — configurazione</title>
+    <link rel="stylesheet" href="../../shared/theme.css" />
+    <link rel="stylesheet" href="./options.css" />
+  </head>
+  <body>
+    <main class="wrap">
+      <header class="head">
+        <div class="mark" id="mark" aria-hidden="true"></div>
+        <div>
+          <h1>Runway Surfer</h1>
+          <p class="sub">Configurazione dell'estensione</p>
+        </div>
+      </header>
+
+      <section class="card">
+        <h2>Indirizzo del backend</h2>
+        <p class="hint">
+          Lo trovi nella scheda di installazione fornita dal referente interno. Deve iniziare per
+          <code>https://</code>: una pagina sicura come la Knowledge Base non può contattare un
+          indirizzo <code>http://</code>, e le richieste verrebbero bloccate dal browser.
+        </p>
+
+        <div class="row">
+          <label class="label" for="proxy-url">URL</label>
+          <input
+            id="proxy-url"
+            class="input"
+            type="url"
+            inputmode="url"
+            spellcheck="false"
+            placeholder="https://runway-surfer.example.local"
+          />
+        </div>
+
+        <div class="actions">
+          <button id="save" class="btn btn-primary" type="button">Salva</button>
+          <button id="test" class="btn" type="button">Testa connessione</button>
+        </div>
+
+        <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
+
+        <p id="managed" class="managed" hidden>
+          Questo valore è impostato dalla tua azienda tramite policy e non è modificabile qui.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>Se qualcosa non funziona</h2>
+        <ol class="steps">
+          <li>Premi <strong>Testa connessione</strong>: dice subito se il servizio risponde.</li>
+          <li>
+            Se non risponde, controlla di essere in rete aziendale (o in VPN) e riprova fra un
+            minuto.
+          </li>
+          <li>Se continua, segnalalo al referente interno riportando il messaggio che vedi qui.</li>
+        </ol>
+      </section>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

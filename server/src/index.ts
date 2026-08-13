@@ -26,12 +26,34 @@ if (provider === 'anthropic' && ALLOWED_ORIGIN === '*') {
   );
   process.exit(1);
 }
+// Guardia simmetrica: senza chiave il provider reale esplode alla PRIMA richiesta
+// vera, cioè quando un agente sta già aspettando una risposta. Meglio non partire.
+if (provider === 'anthropic' && !process.env.ANTHROPIC_API_KEY) {
+  console.error(
+    '[config] ANTHROPIC_API_KEY è obbligatoria quando AI_PROVIDER=anthropic: ' +
+      'impostala in .env e riavvia (senza, ogni richiesta fallirebbe a runtime).',
+  );
+  process.exit(1);
+}
 if (ALLOWED_ORIGIN === '*') {
   console.warn(
     '[config] ATTENZIONE: CORS aperto (ALLOWED_ORIGIN=*) — accettabile solo per la demo mock. ' +
       'In produzione restringere ad ALLOWED_ORIGIN specifica.',
   );
 }
+
+// Un errore asincrono sfuggito a tutte le reti non deve spegnere il servizio per
+// tutti gli agenti: su Node una rejection non gestita termina il processo. Qui si
+// logga e si continua — il backend di un call center deve restare in piedi.
+process.on('unhandledRejection', (reason) => {
+  console.error('[fatal:unhandledRejection] il servizio continua:', reason);
+});
+// Un'eccezione sincrona non gestita lascia invece lo stato del processo incerto:
+// si logga e si esce con un codice != 0, così il process manager riavvia pulito.
+process.on('uncaughtException', (err) => {
+  console.error('[fatal:uncaughtException] esco per farmi riavviare:', err);
+  process.exit(1);
+});
 
 initDb();
 await bootstrapAdmin();

@@ -17,7 +17,8 @@ import {
 import { readIndexOnlyArticles } from '../../lib/nav';
 import { isOffTopic } from '../../lib/off-topic';
 import { linkIdentity } from '../../lib/site-profile';
-import { streamAsk, rankCandidates } from '../../lib/client';
+import { streamAsk, rankCandidates, BACKEND_UNREACHABLE } from '../../lib/client';
+import { redactionNotice, scrubPii } from '../../lib/scrub';
 import { getProxyUrl } from '../../lib/messaging';
 import { clearToken, fetchMe, getToken, logout, type AuthUser } from '../../lib/auth';
 import type { AiPlan, AskTurn, KbLink, KbPage, ScheduleChangeRequest } from '../../lib/outcome';
@@ -48,7 +49,10 @@ import { useTourDriver, type AskResult } from './useTourDriver';
 
 type Status = 'idle' | 'reading' | 'streaming' | 'done' | 'error';
 type Mode = 'single' | 'follow' | 'visual';
-type AuthPhase = 'checking' | 'loggedOut' | 'mustChange' | 'in';
+// 'offline' esiste perché "backend spento" e "sessione scaduta" sono problemi
+// diversi con rimedi diversi: mandare al form di login chi non ha rete gli fa
+// digitare le credenziali per poi vedere un errore di rete incomprensibile.
+type AuthPhase = 'checking' | 'offline' | 'loggedOut' | 'mustChange' | 'in';
 
 /** Le tre modalità come segmented control: l'etichetta breve sta nel bottone,
  *  la spiegazione completa nel title (in 320px non ci stanno entrambe).
@@ -63,6 +67,9 @@ const MODES: ReadonlyArray<{ value: Mode; label: string; hint: string }> = [
 /** Override manuale dell'altezza banda, se l'euristica sbaglia sulla KB reale.
  *  Il default vive nel CSS (`var(--rs-host-header-h, 56px)`), non qui. */
 const HOST_HEADER_OVERRIDE_KEY = 'rs:hostHeaderHeight';
+
+/** Diagnostica estesa nel pannello risposta: per noi durante il pilota. */
+const DEBUG_KEY = 'rs:debug';
 
 const SIDEBAR_WIDTH_KEY = 'rs:sidebarWidth';
 const DEFAULT_SIDEBAR_WIDTH = 360;
@@ -113,6 +120,8 @@ function CloseIcon() {
 export default function App() {
   const [open, setOpen] = useState(true);
   const [authPhase, setAuthPhase] = useState<AuthPhase>('checking');
+  /** Motivo per cui la sessione non è verificabile, mostrato nella fase offline. */
+  const [authError, setAuthError] = useState('');
   const [me, setMe] = useState<AuthUser | null>(null);
   const [query, setQuery] = useState('');
   // Default single-page: sulla KB Salesforce (client-rendered) le altre modalità
@@ -125,6 +134,11 @@ export default function App() {
   const [error, setError] = useState('');
   /** Avviso non bloccante: es. "la pagina aperta non copre la domanda". */
   const [notice, setNotice] = useState('');
+  /**
+   * Avviso di redazione, separato da `notice`: i due possono capitare nella
+   * stessa ricerca (dato rimosso E ricerca allargata) e non devono sovrascriversi.
+   */
+  const [redaction, setRedaction] = useState('');
   const [pagesUsed, setPagesUsed] = useState<KbPage[]>([]);
   const [tour, setTour] = useState<TourState | null>(null);
   /** Turni conclusi della conversazione: restano a schermo e tornano al modello. */
@@ -138,6 +152,12 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
   /** Altezza della banda blu della KB, per allinearci a essa. 0 = non misurata. */
   const [hostHeaderHeight, setHostHeaderHeight] = useState(0);
+  /**
+   * Diagnostica estesa nel pannello della risposta (modello, token, costo,
+   * egress). Si attiva mettendo `rs:debug` a true in storage.local: serve a noi
+   * durante il pilota, non all'agente al telefono.
+   */
+  const [debug, setDebug] = useState(false);
   const queryRef = useRef<HTMLTextAreaElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   // `runAsk` è memoizzato su [] e viene passato a useTourDriver: leggere lo
@@ -153,11 +173,38 @@ export default function App() {
   const originalBodyStylesRef = useRef<{ marginRight: string; transition: string } | null>(null);
 
   // Validate the stored token at mount: decides login form vs main UI.
+  // Estratta da useEffect perché il pulsante "Riprova" della schermata offline
+  // rifà esattamente questo controllo.
+  const checkSession = useCallback(async (): Promise<void> => {
+    setAuthPhase('checking');
+    setAuthError('');
+    const result = await fetchMe(await getProxyUrl());
+    if (result.state === 'offline') {
+      setMe(null);
+      setAuthError(result.message);
+      setAuthPhase('offline');
+      return;
+    }
+    if (result.state === 'loggedOut') {
+      setMe(null);
+      setAuthPhase('loggedOut');
+      return;
+    }
+    setMe(result.user);
+    setAuthPhase(result.user.mustChangePassword ? 'mustChange' : 'in');
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const user = await fetchMe(await getProxyUrl());
+      const result = await fetchMe(await getProxyUrl());
       if (cancelled) return;
+      if (result.state === 'offline') {
+        setAuthError(result.message);
+        setAuthPhase('offline');
+        return;
+      }
+      const user = result.state === 'in' ? result.user : null;
       setMe(user);
       setAuthPhase(user ? (user.mustChangePassword ? 'mustChange' : 'in') : 'loggedOut');
     })();
@@ -188,6 +235,21 @@ export default function App() {
         }
       } catch {
         /* keep default */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const stored = await browser.storage.local.get(DEBUG_KEY);
+        if (!cancelled) setDebug(stored[DEBUG_KEY] === true);
+      } catch {
+        /* niente diagnostica: è il default */
       }
     })();
     return () => {
@@ -306,6 +368,7 @@ export default function App() {
     setOutcome('');
     setError('');
     setNotice('');
+    setRedaction('');
     setPagesUsed([]);
     setThread([]);
     threadRef.current = [];
@@ -344,6 +407,7 @@ export default function App() {
       // Lo storico viaggia dal client: il backend resta stateless e la tabella di
       // audit è privacy-minimised, quindi non potrebbe ricostruirlo. Il tetto sui
       // turni lo applica il server (setting max_history_turns).
+      let streamFailed = false;
       await streamAsk(
         proxyUrl,
         { query: q.trim(), pages, links: linksOverride, history: threadRef.current, form },
@@ -364,11 +428,13 @@ export default function App() {
               setStatus('done');
               break;
             case 'error':
+              streamFailed = true;
               setError(event.message);
               setStatus('error');
               break;
             case 'auth-required':
               // Session expired or revoked: back to the login form.
+              streamFailed = true;
               void clearToken();
               setMe(null);
               setAuthPhase('loggedOut');
@@ -385,7 +451,7 @@ export default function App() {
       if (accumulatedOutcome.trim() && !controller.signal.aborted) {
         setThread((prev) => [...prev, { query: q.trim(), answer: accumulatedOutcome }]);
       }
-      return { outcome: accumulatedOutcome, plan: receivedPlan };
+      return { outcome: accumulatedOutcome, plan: receivedPlan, failed: streamFailed };
     },
     [],
   );
@@ -513,6 +579,14 @@ export default function App() {
     if (!query.trim() && !formReady) return;
     setNotice('');
 
+    // REDAZIONE, prima di qualunque uso. `safeQuery` sostituisce la query grezza
+    // in TUTTO ciò che segue — ricerca in KB, estrazione della pagina, prompt,
+    // storico del thread — così il dato del cliente non esiste già da qui in poi.
+    // Il testo nella textarea resta quello scritto dall'agente: vede ciò che ha
+    // digitato, ma non è quello che parte.
+    const { text: safeQuery, redacted } = scrubPii(query.trim());
+    setRedaction(redactionNotice(redacted));
+
     // Guardia sessione: se la pagina corrente è la login KB (SSO scaduto) niente
     // è leggibile, nemmeno gli altri articoli (serve la stessa sessione).
     const unreadable = detectUnreadablePage();
@@ -544,7 +618,7 @@ export default function App() {
         formDraft.airline,
         formDraft.cityPair,
         formDraft.flightType,
-        query.trim(),
+        safeQuery,
       ]
         .filter(Boolean)
         .join(' ');
@@ -556,7 +630,7 @@ export default function App() {
         );
         pages.push(extractCurrentPage(searchQuery));
       }
-      await runAsk(query, pages, askLinks, { kind: 'schedule-change', ...formDraft });
+      await runAsk(safeQuery, pages, askLinks, { kind: 'schedule-change', ...formDraft });
       return;
     }
 
@@ -576,13 +650,13 @@ export default function App() {
       setError('');
       setTourDetail('');
       setStopping(false);
-      const t = startTour(query.trim());
+      const t = startTour(safeQuery);
       await driveTour(t);
       return;
     }
 
     setStatus('reading');
-    const current = extractCurrentPage(query);
+    const current = extractCurrentPage(safeQuery);
     const links = extractInternalLinks();
     const pages: KbPage[] = [current];
     let askLinks = links;
@@ -591,16 +665,16 @@ export default function App() {
       // I candidati non vengono solo dai link della pagina ma dall'intero indice
       // KB (a costo-token zero): l'articolo giusto emerge anche se non è linkato
       // qui. Lo scoring locale fa da prefiltro, la scelta finale la fa `/rank`.
-      const found = await searchWholeKb(query.trim(), links, pages);
+      const found = await searchWholeKb(safeQuery, links, pages);
       pages.push(...found.pages);
       askLinks = found.askLinks;
-    } else if (isOffTopic(current, query.trim(), shortlistCandidates(links, query.trim()))) {
+    } else if (isOffTopic(current, safeQuery, shortlistCandidates(links, safeQuery))) {
       // ALLARGAMENTO AUTOMATICO. La modalità Analisi Articolo legge solo la pagina
       // aperta: se la domanda non c'entra con essa, la risposta sarebbe
       // strutturalmente sbagliata. Meglio cercare in tutta la KB — e DIRLO, perché
       // un allargamento silenzioso lascerebbe l'agente senza sapere da dove viene
       // la risposta.
-      const found = await searchWholeKb(query.trim(), links, pages);
+      const found = await searchWholeKb(safeQuery, links, pages);
       if (found.pages.length) {
         pages.push(...found.pages);
         askLinks = found.askLinks;
@@ -610,10 +684,13 @@ export default function App() {
     // Follow-up: le pagine già lette nei turni precedenti si RIUSANO invece di
     // essere rilette. Il cap lo applica il server (max_request_pages), quindi la
     // pagina corrente resta prima in lista ed è l'ultima a essere tagliata.
+    // `p.text` vuoto = pagina ricostruita da un risultato di tour persistito, che
+    // non porta più il corpo dell'articolo (vedi saveTourResult): rimandarla
+    // costerebbe token senza aggiungere contesto.
     const reused = pagesUsed.filter(
-      (p) => !pages.some((fresh) => identityOf(fresh.url) === identityOf(p.url)),
+      (p) => p.text.trim() && !pages.some((fresh) => identityOf(fresh.url) === identityOf(p.url)),
     );
-    await runAsk(query, thread.length ? [...pages, ...reused] : pages, askLinks);
+    await runAsk(safeQuery, thread.length ? [...pages, ...reused] : pages, askLinks);
   }, [
     query,
     mode,
@@ -626,6 +703,20 @@ export default function App() {
     thread.length,
     pagesUsed,
   ]);
+
+  // Rete di sicurezza attorno a `run`. La catena fa await su lettura pagine,
+  // /rank, iframe nascosti e /ask: se un qualunque passo lancia, senza questo
+  // catch l'eccezione muore dentro l'onClick, `status` resta su
+  // 'reading'/'streaming' e il pulsante NON torna più cliccabile — l'agente può
+  // solo ricaricare la pagina. Non deve esistere un percorso che lascia la
+  // sidebar bloccata in silenzio.
+  const runSafely = useCallback(() => {
+    void run().catch((e: unknown) => {
+      console.error('[rs] ricerca interrotta da un errore inatteso:', e);
+      setError('Errore inatteso durante la ricerca. Riprova; se continua, segnalalo.');
+      setStatus('error');
+    });
+  }, [run]);
 
   // Unico punto di stop del tour: il pulsante nella timeline. (Prima esisteva
   // anche nel banner della pagina host, che parlava a React via evento DOM.)
@@ -738,6 +829,19 @@ export default function App() {
 
       <div className="rs-body">
         {authPhase === 'checking' && <div className="rs-auth-note">Verifica sessione...</div>}
+        {authPhase === 'offline' && (
+          <div className="rs-offline">
+            <div className="rs-offline-title">Backend non raggiungibile</div>
+            <p className="rs-offline-text">{authError || BACKEND_UNREACHABLE}</p>
+            <p className="rs-offline-hint">
+              La tua sessione è ancora valida: non serve rifare il login, basta che il servizio
+              torni raggiungibile.
+            </p>
+            <button className="rs-submit" onClick={() => void checkSession()}>
+              Riprova
+            </button>
+          </div>
+        )}
         {authPhase === 'loggedOut' && <LoginForm onLoggedIn={onLoggedIn} />}
         {authPhase === 'mustChange' && <ChangePasswordForm onChanged={onLoggedIn} />}
         {authPhase === 'in' && (
@@ -762,10 +866,14 @@ export default function App() {
               ))}
             </div>
 
-            <div className="rs-provider-note">
-              <strong>Demo mock.</strong> I link sono scelti con scoring locale; il provider AI
-              reale si collega lato backend senza esporre chiavi nell'estensione.
-            </div>
+            {/* Compare SOLO col provider finto. Prima era un banner fisso che
+                l'agente avrebbe letto ogni giorno in produzione: informazione
+                per noi, rumore per lui. */}
+            {plan?.provider === 'mock' && (
+              <div className="rs-provider-note">
+                <strong>Modalità dimostrativa.</strong> Le risposte non arrivano dall’AI reale.
+              </div>
+            )}
 
             {/* Il caso Schedule Change non è una domanda in prosa: è un insieme
                 di campi. L'interruttore scambia il box libero con il form. */}
@@ -792,15 +900,17 @@ export default function App() {
               className="rs-input"
               ref={queryRef}
               rows={1}
+              // I placeholder insegnano cosa scrivere: nessuno dei due invita a
+              // incollare dati del cliente. Chiedi la regola, non il caso.
               placeholder={
                 structured
                   ? 'es. il cliente ha già accettato la riprotezione'
-                  : 'es. cliente vuole cambiare indirizzo ordine'
+                  : 'es. si può cambiare il nome sul biglietto dopo il check-in?'
               }
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) run();
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) runSafely();
               }}
             />
 
@@ -809,7 +919,7 @@ export default function App() {
             )}
 
             <div className="rs-actions">
-              <button className="rs-submit" onClick={run} disabled={busy || !canRun}>
+              <button className="rs-submit" onClick={runSafely} disabled={busy || !canRun}>
                 {status === 'reading'
                   ? mode === 'visual'
                     ? 'Tour in corso...'
@@ -840,21 +950,18 @@ export default function App() {
               />
             )}
 
+            {/* Un agente al telefono non deve leggere "Stima costo $0.0004" né
+                l'host di egress: sono dati per il CED, e stanno nella dashboard.
+                Qui resta ciò che gli dice qualcosa — quante pagine ha letto e se
+                la risposta tiene conto dei turni precedenti. Il dettaglio tecnico
+                completo torna a schermo solo con `rs:debug` in storage. */}
             {plan && (
-              <div className="rs-plan" title="Richiesta che il backend invierebbe al modello AI">
+              <div className="rs-plan" title="Come è stata costruita questa risposta">
                 <div className="rs-plan-row">
-                  <span>Modello</span>
-                  <strong>{plan.model}</strong>
-                </div>
-                <div className="rs-plan-row">
-                  <span>Stima token</span>
+                  <span>Fonti lette</span>
                   <strong>
-                    {plan.estimatedInputTokens} in / {plan.estimatedOutputTokens} out
+                    {pagesUsed.length === 1 ? '1 articolo' : `${pagesUsed.length} articoli`}
                   </strong>
-                </div>
-                <div className="rs-plan-row">
-                  <span>Stima costo</span>
-                  <strong>${plan.estimatedCostUsd.toFixed(4)}</strong>
                 </div>
                 {plan.historyTurnsUsed ? (
                   <div className="rs-plan-row">
@@ -866,18 +973,38 @@ export default function App() {
                     </strong>
                   </div>
                 ) : null}
-                <div className="rs-plan-row">
-                  <span>Egress</span>
-                  <code>{plan.egress}</code>
-                </div>
-                <div className="rs-plan-reason">
-                  {plan.provider === 'mock' ? 'Risposta MOCK - ' : 'Provider reale - '}
-                  {plan.routingReason}
-                </div>
+                {debug && (
+                  <>
+                    <div className="rs-plan-row">
+                      <span>Modello</span>
+                      <strong>{plan.model}</strong>
+                    </div>
+                    <div className="rs-plan-row">
+                      <span>Stima token</span>
+                      <strong>
+                        {plan.estimatedInputTokens} in / {plan.estimatedOutputTokens} out
+                      </strong>
+                    </div>
+                    <div className="rs-plan-row">
+                      <span>Stima costo</span>
+                      <strong>${plan.estimatedCostUsd.toFixed(4)}</strong>
+                    </div>
+                    <div className="rs-plan-row">
+                      <span>Egress</span>
+                      <code>{plan.egress}</code>
+                    </div>
+                    <div className="rs-plan-reason">{plan.routingReason}</div>
+                  </>
+                )}
               </div>
             )}
 
             {error && <div className="rs-error">{error}</div>}
+            {redaction && (
+              <div className="rs-notice" role="status">
+                {redaction}
+              </div>
+            )}
             {notice && (
               <div className="rs-notice" role="status">
                 {notice}

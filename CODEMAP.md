@@ -358,6 +358,50 @@ Un solo posto per ciò che serve a più superfici. Il server non può importarli
   override manuale in `browser.storage.local` (`rs:hostHeaderHeight`) se
   l'euristica sbaglia sulla KB reale.
 
+## Resilienza e dati (verso il rilascio)
+
+Tre moduli piccoli che esistono per motivi operativi, non architetturali.
+
+- `lib/abort.ts` — `withTimeout()`. Non usa `AbortSignal.timeout()`+`any()` perché
+  servono due cose che quelle primitive non danno: distinguere "tempo scaduto" da
+  "l'agente ha premuto Stop" (con un signal combinato l'abort arriva identico e la
+  sidebar mostrerebbe un errore dove non c'è nulla di rotto), e un timeout di
+  **inattività** riarmabile a ogni chunk — su uno stream la durata lunga è
+  legittima, il silenzio no. Usato da `client.ts` (30s di silenzio su `/ask`),
+  `auth.ts` (10s) e `crawl.ts` (8s per pagina).
+- `lib/scrub.ts` — `scrubPii()` redige email, PNR, numero di biglietto, carta
+  (con Luhn) e telefono **prima** che il testo lasci il browser; `redactionNotice()`
+  produce l'avviso mostrato in sidebar, perché una redazione silenziosa lascerebbe
+  l'agente senza capire perché la risposta ignora un dettaglio. Non si applica al
+  testo degli articoli KB: è contenuto aziendale, e passarlo al setaccio
+  corromperebbe la fonte. Un PNR richiede lettere **e** cifre (una parola in
+  stampatello non è un codice) e i numeri di volo tipo `LH1234` sono esclusi.
+- `server/src/http.ts` — `asyncRoute()`. Express 4 non conosce le Promise: la
+  rejection di un handler `async` non raggiunge il middleware d'errore e su Node
+  termina il processo. Ogni handler async passa da qui, altrimenti l'error
+  middleware in `app.ts` non vedrebbe nulla.
+
+Guardrail di spesa: la fonte unica è `estimatedCostToday()` in `server/src/db.ts`
+(somma da SQLite dall'inizio della giornata UTC). La applica `canAcceptRequest()`
+e la mostra la dashboard: prima erano due numeri diversi e nessuno dei due era
+"oggi". `metrics.totalEstimatedCostUsd` resta come metrica live dall'ultimo
+avvio e **non** è un guardrail.
+
+## Configurazione del rilascio
+
+- `wxt.config.ts` contiene la chiave **pubblica** dell'estensione: l'ID è fisso
+  (`ihpknodkjnjcbdfmdneeeollnedbdcpd`) su ogni macchina, quindi
+  `ALLOWED_ORIGIN=chrome-extension://<id>` è un solo valore. La privata è fuori dal
+  repo (`.gitignore`).
+- `entrypoints/options/` — pagina di configurazione dell'URL del backend, con
+  "Testa connessione" su `/health`. Prima l'unico modo era scrivere in
+  `storage.local` dalla console DevTools, su ogni postazione.
+- `getProxyUrl()` in `lib/messaging.ts` legge `storage.managed` (policy aziendale,
+  vince sempre) → `storage.local` → default. Lo schema della policy è in
+  `public/managed-schema.json`.
+- `docs/INSTALLAZIONE-PILOTA.md` e `docs/RUNBOOK-BACKEND.md` — procedura per chi
+  installa e per chi tiene in piedi il servizio.
+
 ## Checklist Per Interventi Rapidi
 
 ### Far funzionare su KB reale

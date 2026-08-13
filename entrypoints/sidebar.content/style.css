@@ -1203,6 +1203,42 @@
   color: var(--rs-muted);
 }
 
+/* Backend non raggiungibile: schermata di attesa, NON un form di login. La
+   sessione è ancora valida, quindi il tono è "riprova", non "riautenticati". */
+.rs-offline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--rs-yellow-line);
+  border-radius: var(--rs-r-md);
+  background: var(--rs-yellow-soft);
+}
+
+.rs-offline-title {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--rs-yellow-ink);
+}
+
+.rs-offline-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--rs-navy);
+}
+
+.rs-offline-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--rs-muted);
+}
+
+.rs-offline .rs-submit {
+  align-self: flex-start;
+}
+
 .rs-whoami {
   display: flex;
   align-items: center;

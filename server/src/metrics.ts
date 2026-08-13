@@ -1,7 +1,45 @@
 // Metriche live in memoria (si azzerano al riavvio — lo storico persistente è
 // nella tabella `requests` di SQLite) + guardrail di concorrenza/costo.
-import type { SettingsRecord } from './db.js';
+import { estimatedCostToday, type SettingsRecord } from './db.js';
 import { RECENT_REQUEST_LIMIT } from './config.js';
+
+/** Finestra del rate limiting per agente. */
+const RATE_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * Istanti (epoch ms) delle richieste accettate, per agente. Finestra scorrevole
+ * in memoria: al riavvio si perde, ed è accettabile — il tetto per ora serve a
+ * fermare un ciclo impazzito, mentre il tetto di spesa (quello che protegge il
+ * budget) vive su SQLite proprio per sopravvivere ai riavvii.
+ */
+const requestTimes = new Map<string, number[]>();
+
+/** Registra una richiesta accettata nella finestra dell'agente. */
+export function noteRequestForRateLimit(agentId: string, now = Date.now()): void {
+  const times = requestTimes.get(agentId) ?? [];
+  times.push(now);
+  requestTimes.set(agentId, prune(times, now));
+}
+
+function prune(times: number[], now: number): number[] {
+  const cutoff = now - RATE_WINDOW_MS;
+  // Gli istanti sono in ordine crescente: basta tagliare la testa.
+  let i = 0;
+  while (i < times.length && times[i] < cutoff) i += 1;
+  return i > 0 ? times.slice(i) : times;
+}
+
+/** Quante richieste ha fatto l'agente nell'ultima ora. Esportata per i test. */
+export function requestsInWindow(agentId: string, now = Date.now()): number {
+  const times = prune(requestTimes.get(agentId) ?? [], now);
+  requestTimes.set(agentId, times);
+  return times.length;
+}
+
+/** Azzera le finestre. Serve ai test, che non devono influenzarsi a vicenda. */
+export function resetRateLimiter(): void {
+  requestTimes.clear();
+}
 
 export interface RequestMetric {
   id: string;
@@ -27,6 +65,11 @@ export const metrics = {
   activeRequests: 0,
   totalEstimatedInputTokens: 0,
   totalEstimatedOutputTokens: 0,
+  /**
+   * Cumulato DALL'ULTIMO AVVIO, non giornaliero: è una metrica live e nulla più.
+   * Il guardrail di spesa usa estimatedCostToday() da SQLite — vedi
+   * canAcceptRequest. Non rimetterlo a fare da tetto: si azzera a ogni riavvio.
+   */
   totalEstimatedCostUsd: 0,
   byModel: {} as Record<string, number>,
   byAgent: {} as Record<string, { requests: number; failures: number; estimatedCostUsd: number }>,
@@ -90,11 +133,21 @@ export function canAcceptRequest(
       message: `agent busy: max ${settings.max_concurrent_per_agent} concurrent requests per agent`,
     };
   }
-  if (metrics.totalEstimatedCostUsd >= settings.max_daily_estimated_cost_usd) {
+  const perHour = requestsInWindow(agentId);
+  if (perHour >= settings.max_requests_per_hour_per_agent) {
     return {
       ok: false,
       status: 429,
-      message: `estimated cost guardrail reached: $${settings.max_daily_estimated_cost_usd.toFixed(2)}`,
+      message: `rate limit reached: max ${settings.max_requests_per_hour_per_agent} requests per hour per agent (riprova più tardi)`,
+    };
+  }
+  // Il tetto di spesa si legge da SQLite, non dal contatore in memoria: così è
+  // davvero "oggi" e sopravvive ai riavvii del servizio. Vedi estimatedCostToday.
+  if (estimatedCostToday() >= settings.max_daily_estimated_cost_usd) {
+    return {
+      ok: false,
+      status: 429,
+      message: `estimated cost guardrail reached: $${settings.max_daily_estimated_cost_usd.toFixed(2)} today`,
     };
   }
   return { ok: true };

@@ -8,6 +8,9 @@ export default defineConfig({
     environmentOptions: {
       happyDOM: { url: 'https://kb.example.com/wiki/Pagina_iniziale' },
     },
-    include: ['tests/**/*.test.ts'],
+    // `.tsx` incluso perché il glob precedente (solo `.test.ts`) avrebbe
+    // silenziosamente ignorato qualunque test di componente: un file scritto e
+    // mai eseguito è peggio di un file assente.
+    include: ['tests/**/*.test.{ts,tsx}'],
   },
 });

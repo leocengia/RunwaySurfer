@@ -37,7 +37,15 @@ import {
   unmountBanner,
 } from '../../lib/fx';
 
-export type AskResult = { outcome: string; plan: AiPlan | null };
+export type AskResult = {
+  outcome: string;
+  plan: AiPlan | null;
+  /**
+   * Lo stream è finito male (errore di rete, timeout, sessione scaduta). Il tour
+   * lo legge per fermarsi invece di proseguire verso una fonte che non esiste.
+   */
+  failed: boolean;
+};
 
 export interface TourDriverDeps {
   /** Avvia lo stream della risposta per le pagine raccolte (definito in App). */
@@ -261,6 +269,20 @@ export function useTourDriver(deps: TourDriverDeps): (initial: TourState) => Pro
         if (aborted()) {
           setTour(null);
           setTourDetail('');
+          return;
+        }
+        // Stream finito male (rete caduta, timeout, sessione scaduta a metà
+        // tour): la risposta non esiste. Navigare comunque verso la "fonte
+        // scelta" porterebbe l'agente su un'altra pagina — dove trova il form di
+        // login e nessuna spiegazione, dopo minuti di tour. Si chiude qui, dove
+        // il messaggio d'errore è visibile nella sidebar.
+        if (result.failed) {
+          setTour(null);
+          setTourDetail('');
+          bannerComplete('Tour interrotto: vedi il messaggio nella sidebar.');
+          await sleep(900);
+          unmountBanner();
+          teardownFx();
           return;
         }
         setTour(null);

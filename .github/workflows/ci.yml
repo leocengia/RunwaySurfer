@@ -22,6 +22,15 @@ jobs:
       - run: npm run format:check
       - run: npm test
       - run: npm run build
+      # Il pacchetto del pilota deve essere tracciabile a un commit, non
+      # costruito a mano su un portatile: da qui si scarica lo zip da installare.
+      - run: npm run zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runway-surfer-extension
+          path: .output/*.zip
+          if-no-files-found: error
+          retention-days: 30
 
   server:
     name: Backend (typecheck + lint + test + build)

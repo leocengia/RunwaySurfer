@@ -1,6 +1,7 @@
 // Endpoint amministrativi e di osservabilità (JSON): utenti, team, storico
 // richieste, analytics, settings, manutenzione e stato del proxy.
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
+import { asyncRoute } from '../http.js';
 import { truncate } from '../util.js';
 import { PORT, ALLOWED_ORIGIN } from '../config.js';
 import { getProvider, ANTHROPIC_EGRESS } from '../provider/index.js';
@@ -69,7 +70,7 @@ adminRoutes.get('/users', requireAuth('team_lead'), (_req, res) => {
   res.json({ users: listUsers().map(sanitizeUser) });
 });
 
-adminRoutes.post('/users', requireAuth('admin'), async (req, res) => {
+const handleCreateUser = async (req: Request, res: Response): Promise<void> => {
   try {
     const body = req.body as Record<string, unknown>;
     const externalId = truncate(body.externalId ?? body.external_id, 120);
@@ -97,11 +98,13 @@ adminRoutes.post('/users', requireAuth('admin'), async (req, res) => {
   } catch (e) {
     res.status(400).json({ error: String(e) });
   }
-});
+};
+
+adminRoutes.post('/users', requireAuth('admin'), asyncRoute(handleCreateUser));
 
 // Recovery path for locked-out or pre-auth users: new temporary password,
 // forced change, all existing sessions revoked.
-adminRoutes.post('/users/:id/reset-password', requireAuth('admin'), async (req, res) => {
+const handleResetPassword = async (req: Request, res: Response): Promise<void> => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     res.status(400).json({ error: 'invalid user id' });
@@ -120,7 +123,13 @@ adminRoutes.post('/users/:id/reset-password', requireAuth('admin'), async (req, 
   }
   revokeAllUserSessions(id);
   res.json({ user: sanitizeUser(user) });
-});
+};
+
+adminRoutes.post(
+  '/users/:id/reset-password',
+  requireAuth('admin'),
+  asyncRoute(handleResetPassword),
+);
 
 adminRoutes.patch('/users/:id', requireAuth('admin'), (req, res) => {
   const id = Number(req.params.id);

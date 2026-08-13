@@ -4,6 +4,7 @@
 // KEY MECHANISM: the fetch is same-origin with `credentials: 'include'`, so it
 // reuses whatever session the browser already has for this origin. On the real
 // Runway KB that is the agent's SSO session: no separate credentials.
+import { withTimeout } from './abort';
 import type { KbLink, KbPage } from './outcome';
 import { extractPageText, hasRenderedContent } from './extract';
 import { matchedKeywords, normalize, unique, wordsOf } from './text';
@@ -12,6 +13,8 @@ import { kbIndexAsLinks } from './kb-index';
 import { linkIdentity } from './site-profile';
 
 export const MAX_FOLLOW = 3;
+/** Scadenza per la lettura di una pagina collegata (vedi fetchPage). */
+const PAGE_FETCH_TIMEOUT_MS = 8_000;
 const MIN_SELECTED_SCORE = 5;
 const STRONG_SINGLE_SCORE = 13;
 const SECONDARY_RATIO = 0.58;
@@ -253,8 +256,11 @@ export function resolveFollowLinks(
 
 /** Fetch one same-origin page reusing the current session and extract its text. */
 async function fetchPage(link: KbLink, query: string): Promise<KbPage | null> {
+  // Queste fetch partono in parallelo su tutti i candidati: senza scadenza, una
+  // sola pagina che non risponde tiene in attesa l'intera ricerca.
+  const deadline = withTimeout(PAGE_FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(link.url, { credentials: 'include' });
+    const res = await fetch(link.url, { credentials: 'include', signal: deadline.signal });
     if (!res.ok) return null;
     const html = await res.text();
     const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -262,9 +268,9 @@ async function fetchPage(link: KbLink, query: string): Promise<KbPage | null> {
     // shell, senza il testo dell'articolo. La scarto invece di inviare una
     // pagina vuota all'AI (token sprecati + risposta peggiore).
     if (!hasRenderedContent(doc)) {
-      console.warn(
-        `[rs] pagina client-rendered senza contenuto nell'HTML grezzo, la salto: ${link.url}`,
-      );
+      // Nessun URL nel log: sono indirizzi di articoli KB, e la console del
+      // browser dell'agente non è il posto dove lasciarli.
+      console.warn('[rs] pagina client-rendered senza contenuto nell’HTML grezzo, la salto');
       return null;
     }
     return {
@@ -276,8 +282,15 @@ async function fetchPage(link: KbLink, query: string): Promise<KbPage | null> {
   } catch (e) {
     // Rende distinguibile un guasto di rete/sessione da una pagina scartata
     // perché non rilevante: prima questo errore era completamente muto.
-    console.warn(`[rs] fetch della pagina collegata fallita (${link.url}):`, e);
+    console.warn(
+      deadline.expired()
+        ? '[rs] fetch della pagina collegata scaduta'
+        : '[rs] fetch della pagina collegata fallita:',
+      e,
+    );
     return null;
+  } finally {
+    deadline.dispose();
   }
 }
 

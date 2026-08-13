@@ -5,6 +5,7 @@ import { LOGO_SVG, THEME_CSS } from '../shared-assets.js';
 import { MODELS } from '../router.js';
 import {
   analyticsSummary,
+  estimatedCostToday,
   getSettings,
   listRequests,
   listTeams,
@@ -132,6 +133,9 @@ export function renderDashboard(auth: AuthContext): string {
       estimatedCostUsd: number;
     };
   };
+  // Stessa funzione che applica il guardrail (metrics.canAcceptRequest): la card
+  // deve mostrare il numero che blocca, non un totale storico che non c'entra.
+  const costToday = estimatedCostToday();
   const readiness = data.aiReady ? 'Ready' : 'Missing API key';
   return `<!doctype html>
 <html lang="it">
@@ -539,9 +543,9 @@ ${THEME_CSS}
       </div>
       <div class="card">
         <div class="label">Cost guardrail</div>
-        <div class="value">$${summary.totals.estimatedCostUsd.toFixed(4)} / $${settings.max_daily_estimated_cost_usd.toFixed(2)}</div>
-        <div class="meter"><i style="width:${percent(summary.totals.estimatedCostUsd, settings.max_daily_estimated_cost_usd)}%"></i></div>
-        <div class="sub">Spesa stimata cumulata sul budget giornaliero.</div>
+        <div class="value">$${costToday.toFixed(4)} / $${settings.max_daily_estimated_cost_usd.toFixed(2)}</div>
+        <div class="meter"><i style="width:${percent(costToday, settings.max_daily_estimated_cost_usd)}%"></i></div>
+        <div class="sub">Spesa stimata di <strong>oggi</strong> (UTC) sul budget giornaliero: è lo stesso numero che blocca le richieste. Totale storico: $${summary.totals.estimatedCostUsd.toFixed(4)}.</div>
       </div>
     </section>
     <section class="card" style="margin-top:12px">
@@ -675,6 +679,7 @@ ${THEME_CSS}
         <label class="form-row">Max concurrent<input name="max_concurrent_requests" type="number" value="${settings.max_concurrent_requests}" /></label>
         <label class="form-row">Per agent<input name="max_concurrent_per_agent" type="number" value="${settings.max_concurrent_per_agent}" /></label>
         <label class="form-row">Daily cost USD<input name="max_daily_estimated_cost_usd" type="number" step="0.01" value="${settings.max_daily_estimated_cost_usd}" /></label>
+        <label class="form-row">Richieste/ora per agente<input name="max_requests_per_hour_per_agent" type="number" min="1" value="${settings.max_requests_per_hour_per_agent}" /></label>
         <label class="form-row">Max pages<input name="max_request_pages" type="number" value="${settings.max_request_pages}" /></label>
         <label class="form-row">Max links<input name="max_request_links" type="number" value="${settings.max_request_links}" /></label>
         <label class="form-row">Page chars<input name="max_page_text_chars" type="number" value="${settings.max_page_text_chars}" /></label>

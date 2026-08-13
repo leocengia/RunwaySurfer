@@ -98,6 +98,12 @@ export interface SettingsRecord {
   max_concurrent_requests: number;
   max_concurrent_per_agent: number;
   max_daily_estimated_cost_usd: number;
+  /**
+   * Richieste a pagamento per agente per ora. La concorrenza limita quante
+   * partono INSIEME, non quante in sequenza: senza questo tetto un ciclo
+   * impazzito (o un agente che tiene premuto) brucia budget indisturbato.
+   */
+  max_requests_per_hour_per_agent: number;
   max_request_pages: number;
   max_request_links: number;
   max_page_text_chars: number;
@@ -110,6 +116,7 @@ const DEFAULT_SETTINGS: SettingsRecord = {
   max_concurrent_requests: Number(process.env.MAX_CONCURRENT_REQUESTS ?? 30),
   max_concurrent_per_agent: Number(process.env.MAX_CONCURRENT_PER_AGENT ?? 2),
   max_daily_estimated_cost_usd: Number(process.env.MAX_DAILY_ESTIMATED_COST_USD ?? 50),
+  max_requests_per_hour_per_agent: Number(process.env.MAX_REQUESTS_PER_HOUR_PER_AGENT ?? 30),
   max_request_pages: Number(process.env.MAX_REQUEST_PAGES ?? 4),
   max_request_links: Number(process.env.MAX_REQUEST_LINKS ?? 12),
   max_page_text_chars: Number(process.env.MAX_PAGE_TEXT_CHARS ?? 6_000),
@@ -296,6 +303,8 @@ export function getSettings(): SettingsRecord {
       values.max_concurrent_per_agent ?? DEFAULT_SETTINGS.max_concurrent_per_agent,
     max_daily_estimated_cost_usd:
       values.max_daily_estimated_cost_usd ?? DEFAULT_SETTINGS.max_daily_estimated_cost_usd,
+    max_requests_per_hour_per_agent:
+      values.max_requests_per_hour_per_agent ?? DEFAULT_SETTINGS.max_requests_per_hour_per_agent,
     max_request_pages: values.max_request_pages ?? DEFAULT_SETTINGS.max_request_pages,
     max_request_links: values.max_request_links ?? DEFAULT_SETTINGS.max_request_links,
     max_page_text_chars: values.max_page_text_chars ?? DEFAULT_SETTINGS.max_page_text_chars,
@@ -615,6 +624,35 @@ export function analyticsSummary() {
     )
     .all();
   return { totals, byModel, byAgent };
+}
+
+/** Inizio della giornata corrente in UTC, in ISO — lo stesso formato di created_at. */
+export function startOfTodayIso(now = new Date()): string {
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  ).toISOString();
+}
+
+/**
+ * Costo stimato accumulato dall'inizio della giornata (UTC).
+ *
+ * È il numero che il guardrail deve applicare E che la dashboard deve mostrare.
+ * Prima erano due valori diversi e nessuno dei due era "oggi": l'enforcement
+ * guardava un contatore in memoria azzerato a ogni riavvio, la dashboard il
+ * totale di sempre da SQLite. Con un provider a pagamento questo blocca tutti
+ * per sempre oppure non scatta mai, e la dashboard non dice quale dei due.
+ *
+ * Fonte unica: la tabella `requests`, che sopravvive ai riavvii. `rejected` è
+ * incluso solo se ha un costo (le richieste respinte hanno costo 0).
+ */
+export function estimatedCostToday(now = new Date()): number {
+  const row = db
+    .prepare(
+      `SELECT COALESCE(SUM(estimated_cost_usd), 0) as cost
+       FROM requests WHERE created_at >= ?`,
+    )
+    .get(startOfTodayIso(now)) as { cost: number } | undefined;
+  return row?.cost ?? 0;
 }
 
 export function pruneOldRequests(retentionDays = getSettings().retention_days): number {

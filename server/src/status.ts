@@ -2,7 +2,7 @@
 // payload completo della dashboard (usato da /dashboard-data e dalla pagina HTML).
 import { MODELS } from './router.js';
 import { getProvider, ANTHROPIC_EGRESS, ASSUMED_OUTPUT_TOKENS } from './provider/index.js';
-import { analyticsSummary, getSettings } from './db.js';
+import { analyticsSummary, estimatedCostToday, getSettings } from './db.js';
 import { metrics } from './metrics.js';
 import { PORT, ALLOWED_ORIGIN } from './config.js';
 
@@ -59,10 +59,15 @@ export function dashboardData() {
     concurrency: {
       maxConcurrentRequests: settings.max_concurrent_requests,
       maxConcurrentPerAgent: settings.max_concurrent_per_agent,
+      maxRequestsPerHourPerAgent: settings.max_requests_per_hour_per_agent,
       activeRequests: metrics.activeRequests,
       activeByAgent: metrics.activeByAgent,
       rejectedRequests: metrics.rejectedRequests,
       maxDailyEstimatedCostUsd: settings.max_daily_estimated_cost_usd,
+      // Il valore APPLICATO dal guardrail: da SQLite, quindi sopravvive ai
+      // riavvii. `metrics.totalEstimatedCostUsd` è invece solo il cumulato
+      // dall'ultimo avvio del processo, utile come metrica live e nient'altro.
+      estimatedCostTodayUsd: estimatedCostToday(),
     },
     settings,
     metrics,

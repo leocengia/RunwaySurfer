@@ -8,3 +8,10 @@ stats.html
 server/data/
 *.msi
 dependences/
+
+# Chiave PRIVATA dell'estensione: fuori dal repo, sempre. La pubblica sta nel
+# manifest (wxt.config.ts) e fissa l'extension ID; questa serve solo a firmare
+# un .crx. Va custodita altrove — perderla impedisce futuri aggiornamenti con lo
+# stesso ID, pubblicarla permette a chiunque di firmare al posto nostro.
+extension-private-key.pem
+.extension-public-key.txt

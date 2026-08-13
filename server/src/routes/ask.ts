@@ -1,6 +1,7 @@
 // POST /ask — l'endpoint principale: sanificazione dell'input, routing del
 // modello, stima token/costo, guardrail e streaming SSE dell'outcome.
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
+import { asyncRoute } from '../http.js';
 import type { AskRequest, AskEvent, AiPlan, AskTurn, ScheduleChangeRequest } from '../types.js';
 import { chooseModel, estimateTokens, estimateCostUsd } from '../router.js';
 import {
@@ -20,7 +21,14 @@ import {
   type SettingsRecord,
 } from '../db.js';
 import { requireAuth, type AuthContext } from '../auth.js';
-import { metrics, recordMetric, canAcceptRequest, beginActive, endActive } from '../metrics.js';
+import {
+  metrics,
+  recordMetric,
+  canAcceptRequest,
+  beginActive,
+  endActive,
+  noteRequestForRateLimit,
+} from '../metrics.js';
 import { truncate, newRequestId } from '../util.js';
 import { MAX_QUERY_CHARS } from '../config.js';
 
@@ -129,7 +137,7 @@ function persistRequest(input: RequestHistoryInput): void {
 export const askRoutes = Router();
 
 /** Main endpoint: model routing + cost estimate + streamed outcome (SSE). */
-askRoutes.post('/ask', requireAuth('agent'), async (req, res) => {
+const handleAsk = async (req: Request, res: Response): Promise<void> => {
   const settings = getSettings();
   const { user } = res.locals.auth as AuthContext;
   const agentId = user.external_id;
@@ -176,6 +184,8 @@ askRoutes.post('/ask', requireAuth('agent'), async (req, res) => {
     res.status(capacity.status).json({ error: capacity.message });
     return;
   }
+  // Conta solo le richieste ACCETTATE: un 429 non deve allungare la punizione.
+  noteRequestForRateLimit(agentId);
 
   const provider = getProvider();
   const { spec, reason } = chooseModel(request);
@@ -214,15 +224,26 @@ askRoutes.post('/ask', requireAuth('agent'), async (req, res) => {
   // never leak it and eventually trip the concurrency guardrail (429).
   beginActive(agentId);
   try {
+    // NIENTE query nel log. La tabella `requests` è volutamente
+    // privacy-minimised (hash + preview) e stampare il testo su stdout
+    // vanificava la scelta: i log finiscono in file, backup e ticket. Qui resta
+    // tutto ciò che serve a diagnosticare una richiesta: id, agente, modello,
+    // pagine, token e costo.
     console.log(
       `[ask:${requestId}] agent=${agentId} provider=${provider.name} model=${spec.id} pages=${request.pages.length} ` +
-        `inTok≈${estimatedInputTokens} cost≈$${estimatedCostUsd.toFixed(4)} :: "${request.query.slice(0, 60)}"`,
+        `queryChars=${request.query.length} inTok≈${estimatedInputTokens} cost≈$${estimatedCostUsd.toFixed(4)}`,
     );
 
     // SSE setup.
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    // Dice ai reverse proxy (nginx e derivati) di NON bufferizzare la risposta.
+    // Senza, il proxy accumula lo stream e lo consegna tutto alla fine: per
+    // l'agente la sidebar sembra piantata e poi stampa il testo di colpo. Non
+    // sostituisce `proxy_buffering off;` su tutti i proxy, ma è la metà che
+    // possiamo garantire noi.
+    res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders?.();
 
     const send = (event: AskEvent) => res.write(`data: ${JSON.stringify(event)}\n\n`);
@@ -313,4 +334,6 @@ askRoutes.post('/ask', requireAuth('agent'), async (req, res) => {
       /* socket already closed */
     }
   }
-});
+};
+
+askRoutes.post('/ask', requireAuth('agent'), asyncRoute(handleAsk));

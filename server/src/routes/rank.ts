@@ -6,7 +6,8 @@
 // l'endpoint risponde comunque 200 con `{selectedUrls: []}`; il client interpreta
 // la lista vuota come "nessuna selezione utile" e ricade sullo scoring locale.
 // Il rerank non è quindi mai peggio del comportamento di oggi.
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
+import { asyncRoute } from '../http.js';
 import type { RankRequest, RankResponse } from '../types.js';
 import { getProvider } from '../provider/index.js';
 import { buildRankPrompt } from '../provider/shared.js';
@@ -14,7 +15,13 @@ import { estimateTokens, estimateCostUsd, MODELS, type ModelSpec } from '../rout
 import { insertRequestHistory, type RequestHistoryInput } from '../db.js';
 import { getSettings } from '../db.js';
 import { requireAuth, type AuthContext } from '../auth.js';
-import { canAcceptRequest, beginActive, endActive, recordMetric } from '../metrics.js';
+import {
+  canAcceptRequest,
+  beginActive,
+  endActive,
+  recordMetric,
+  noteRequestForRateLimit,
+} from '../metrics.js';
 import { truncate, newRequestId } from '../util.js';
 import { MAX_QUERY_CHARS, MAX_RANK_CANDIDATES, RANK_MODEL } from '../config.js';
 
@@ -54,7 +61,7 @@ function persistRank(input: RequestHistoryInput): void {
 
 export const rankRoutes = Router();
 
-rankRoutes.post('/rank', requireAuth('agent'), async (req, res) => {
+const handleRank = async (req: Request, res: Response): Promise<void> => {
   const settings = getSettings();
   const { user } = res.locals.auth as AuthContext;
   const agentId = user.external_id;
@@ -78,6 +85,7 @@ rankRoutes.post('/rank', requireAuth('agent'), async (req, res) => {
     res.status(capacity.status).json({ error: capacity.message });
     return;
   }
+  noteRequestForRateLimit(agentId);
 
   const provider = getProvider();
   const spec = rankSpec();
@@ -160,4 +168,6 @@ rankRoutes.post('/rank', requireAuth('agent'), async (req, res) => {
 
   const response: RankResponse = { selectedUrls, model: spec.id, provider: provider.name };
   res.json(response);
-});
+};
+
+rankRoutes.post('/rank', requireAuth('agent'), asyncRoute(handleRank));

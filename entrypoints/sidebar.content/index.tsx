@@ -14,8 +14,10 @@ import './style.css';
 import '../../shared/theme.css';
 
 export default defineContentScript({
-  // KB reale (Salesforce Experience Cloud) + Wikipedia per il demo/dev.
-  matches: ['https://traveler.my.site.com/Runway/*', '*://*.wikipedia.org/*'],
+  // Solo la KB reale (Salesforce Experience Cloud). Wikipedia serviva alle prove
+  // e va via prima del pilota: la sidebar non deve comparire sulle pagine che
+  // l'agente apre per sé. Vedi host_permissions in wxt.config.ts.
+  matches: ['https://traveler.my.site.com/Runway/*'],
   cssInjectionMode: 'ui',
   async main(ctx) {
     // Monta SOLO nel top frame. B2 (`lib/nav.ts openAndReadArticle`) legge gli

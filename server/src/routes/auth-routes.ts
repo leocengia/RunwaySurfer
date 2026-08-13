@@ -1,6 +1,7 @@
 // Endpoint di autenticazione. L'identità arriva esclusivamente da una sessione
 // verificata (cookie per la dashboard, bearer token per l'estensione).
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
+import { asyncRoute } from '../http.js';
 import { truncate } from '../util.js';
 import { deleteExpiredSessions, getUserByExternalId, setUserPassword } from '../db.js';
 import {
@@ -23,7 +24,7 @@ import {
 
 export const authRoutes = Router();
 
-authRoutes.post('/auth/login', async (req, res) => {
+const handleLogin = async (req: Request, res: Response): Promise<void> => {
   const body = req.body as Record<string, unknown>;
   const username = truncate(body.username, 120);
   const password = typeof body.password === 'string' ? body.password : '';
@@ -66,7 +67,9 @@ authRoutes.post('/auth/login', async (req, res) => {
     res.setHeader('Set-Cookie', sessionCookie(session.token, maxAge));
     res.json(payload);
   }
-});
+};
+
+authRoutes.post('/auth/login', asyncRoute(handleLogin));
 
 authRoutes.post('/auth/logout', (req, res) => {
   const presented = extractToken(req);
@@ -84,7 +87,7 @@ authRoutes.get('/auth/me', (req, res) => {
   res.json({ user: publicUser(auth.user) });
 });
 
-authRoutes.post('/auth/change-password', async (req, res) => {
+const handleChangePassword = async (req: Request, res: Response): Promise<void> => {
   const auth = authenticate(req);
   if (!auth) {
     res.status(401).json({ error: 'unauthorized' });
@@ -106,4 +109,6 @@ authRoutes.post('/auth/change-password', async (req, res) => {
   // Every other session dies with the old password; the presenting one survives.
   revokeAllUserSessions(auth.user.id, extractToken(req)?.token);
   res.json({ ok: true, user: publicUser(updated ?? auth.user) });
-});
+};
+
+authRoutes.post('/auth/change-password', asyncRoute(handleChangePassword));

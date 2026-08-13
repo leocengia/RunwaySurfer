@@ -141,17 +141,40 @@ export async function loadTourResult(): Promise<TourResultState | null> {
     const abortedAt = stored[ABORT_KEY];
     if (typeof abortedAt === 'number' && abortedAt >= result.startedAt) {
       await clearTourResult();
+      await clearTourAbort();
       return null;
     }
+    // Il flag ha finito il suo compito: se resta, sopravvive indefinitamente su
+    // disco (nessun codice lo rimuoveva) e al primo riavvio del browser può
+    // scartare il risultato di un tour successivo con `startedAt` più basso.
+    await clearTourAbort();
     return result;
   } catch {
     return null;
   }
 }
 
+/** Rimuove il flag di abort dopo che è stato consumato. */
+export async function clearTourAbort(): Promise<void> {
+  try {
+    await browser.storage.local.remove(ABORT_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function saveTourResult(state: TourResultState): Promise<void> {
   try {
-    await browser.storage.local.set({ [RESULT_KEY]: state });
+    // Il TESTO INTEGRALE degli articoli non va su disco. Questo record serve
+    // solo a ricomporre la risposta e l'elenco delle fonti dopo l'unica
+    // navigazione finale: url e titolo bastano. Il corpo degli articoli, invece,
+    // resterebbe in storage.local anche se l'agente chiude il tab prima di
+    // atterrare — la scadenza di 5 minuti si applica solo in lettura.
+    const lean: TourResultState = {
+      ...state,
+      pages: state.pages.map((page) => ({ ...page, text: '' })),
+    };
+    await browser.storage.local.set({ [RESULT_KEY]: lean });
   } catch {
     /* best-effort */
   }

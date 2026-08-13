@@ -45,5 +45,21 @@ export function createApp(): express.Express {
   app.use(adminRoutes);
   app.use(pageRoutes);
 
+  // Rete finale: qualunque errore non gestito arriva qui (gli handler async lo
+  // raggiungono grazie ad asyncRoute — vedi http.ts). Lo stack resta nei log del
+  // server e NON va nella risposta: al client basta sapere che è colpa nostra.
+  // Su /ask gli header SSE possono essere già partiti: in quel caso non si può
+  // più cambiare status, si chiude solo la connessione.
+  app.use(
+    (err: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+      console.error(`[error] ${req.method} ${req.path}:`, err);
+      if (res.headersSent) {
+        res.end();
+        return;
+      }
+      res.status(500).json({ error: 'internal error' });
+    },
+  );
+
   return app;
 }

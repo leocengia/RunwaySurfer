@@ -7,7 +7,15 @@
 // PRODUCTION OPTION: route the proxy call through the background instead (e.g.
 // to centralize auth headers or per-agent identity), bridging the SSE stream to
 // the sidebar over a chrome.runtime Port. The message contracts for that path
-// live in lib/messaging.ts.
+// live in lib/messaging.ts. Serve anche come piano B se il backend non potrà
+// avere un certificato TLS: il background ha origine estensione e non subisce il
+// blocco mixed-content della pagina.
+import { browser } from 'wxt/browser';
 export default defineBackground(() => {
-  // No-op for the demo. Lifecycle hooks can go here later.
+  // Click sull'icona nella barra di Chrome → pagina di configurazione. È l'unico
+  // modo per cui l'installatore possa impostare l'URL del backend senza aprire
+  // la console DevTools su ogni postazione.
+  browser.action?.onClicked.addListener(() => {
+    void browser.runtime.openOptionsPage();
+  });
 });
