@@ -405,6 +405,12 @@ tetto di spesa, non per la contabilità.
   `public/managed-schema.json`.
 - `docs/INSTALLAZIONE-PILOTA.md` e `docs/RUNBOOK-BACKEND.md` — procedura per chi
   installa e per chi tiene in piedi il servizio.
+- `docs/build-icons.mjs` — genera `public/icons/{16,32,48,128}.png` da
+  `shared/logo_v2_alpha.png`. Decodifica/ricodifica PNG a mano (zlib + CRC32,
+  riduzione a box filter con alpha premoltiplicato) per non aggiungere una
+  dipendenza nativa alla build per quattro file rigenerati una volta a ogni
+  cambio di logo. Gestisce solo PNG 8 bit non interlacciati e si ferma con un
+  messaggio esplicito su tutto il resto.
 
 ## Checklist Per Interventi Rapidi
 

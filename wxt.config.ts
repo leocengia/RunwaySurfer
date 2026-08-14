@@ -35,6 +35,16 @@ export default defineConfig({
     // l'unico segno che l'estensione è installata è la sidebar iniettata, e
     // l'installatore non ha modo di impostare l'URL del backend.
     action: { default_title: 'Runway Surfer — configurazione' },
+    // Generate da shared/logo_v2_alpha.png con `node docs/build-icons.mjs`.
+    // La cartella è `icons/` (plurale) di proposito: WXT scoprirebbe da sé
+    // `public/icon/`, e due sorgenti per lo stesso campo del manifest sono un
+    // modo garantito di non capire più quale vince.
+    icons: {
+      16: 'icons/16.png',
+      32: 'icons/32.png',
+      48: 'icons/48.png',
+      128: 'icons/128.png',
+    },
     // Permette al CED di imporre l'URL del backend via policy aziendale invece
     // di configurare dieci postazioni a mano (vedi lib/messaging.ts).
     storage: { managed_schema: 'managed-schema.json' },

@@ -171,7 +171,10 @@ chrome.storage.local.set({ 'rs:debug': true });
 È volutamente nascosto: un agente al telefono non deve leggere «Stima costo
 $0.0004».
 
-**Cosa non è ancora coperto.** L'estensione non ha icone proprie (Chrome mostra
-l'iniziale) in attesa del file grafico definitivo, e l'installazione è manuale:
-non c'è distribuzione via Chrome Web Store né `ExtensionInstallForcelist`. Per
-5-10 agenti è una scelta, non una dimenticanza.
+**Icone.** Sono generate dal marchio con `node docs/build-icons.mjs`, che riscrive
+`public/icons/{16,32,48,128}.png`. Se il logo cambia, si rilancia quel comando e si
+ricostruisce: non serve nessuno strumento grafico né dipendenze aggiuntive.
+
+**Cosa non è ancora coperto.** L'installazione è manuale: non c'è distribuzione
+via Chrome Web Store né `ExtensionInstallForcelist`. Per 5-10 agenti è una scelta,
+non una dimenticanza.
