@@ -1,6 +1,6 @@
 // Pagine standalone di login e cambio password (HTML renderizzato lato server).
 import { escapeHtml } from './html.js';
-import { LOGO_SVG, THEME_CSS } from '../shared-assets.js';
+import { LOGO_MARK, THEME_CSS } from '../shared-assets.js';
 
 // Stile delle pagine auth. I token arrivano da shared/theme.css, gli stessi di
 // sidebar e dashboard: è la prima schermata che un agente vede, e prima aveva la
@@ -9,7 +9,7 @@ const AUTH_PAGE_STYLE = `
 ${THEME_CSS}
     * { box-sizing: border-box; }
     body {
-      margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color: var(--rs-navy);
+      margin: 0; font-family: var(--rs-font); color: var(--rs-navy);
       background:
         radial-gradient(1000px 560px at 15% -10%, rgba(0, 0, 153, 0.18), transparent 60%),
         radial-gradient(820px 480px at 100% 0%, rgba(255, 204, 0, 0.14), transparent 55%),
@@ -33,8 +33,8 @@ ${THEME_CSS}
     }
     .auth-card > * { position: relative; }
     .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
-    .brand .mark { flex-shrink: 0; width: 30px; height: 30px; line-height: 0; filter: drop-shadow(0 2px 6px rgba(0, 0, 153, 0.28)); }
-    .brand strong { font-size: 15px; letter-spacing: 0.02em; }
+    .brand .mark { flex-shrink: 0; width: 34px; height: 34px; border-radius: 22%; filter: drop-shadow(0 2px 6px rgba(0, 0, 153, 0.28)); }
+    .brand strong { font-family: var(--rs-font-brand); font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
     h1 { margin: 0 0 4px; font-size: 20px; }
     p.sub { margin: 0 0 16px; color: var(--rs-muted); font-size: 13px; }
     label { display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--rs-muted); margin: 12px 0 4px; }
@@ -91,7 +91,7 @@ function authPage(options: {
 <body>
   <div class="auth-card">
     <div class="brand">
-      <span class="mark">${LOGO_SVG}</span>
+      <img class="mark" src="${LOGO_MARK}" alt="" aria-hidden="true" />
       <strong>Runway Surfer</strong>
     </div>
     <h1>${escapeHtml(options.title)}</h1>

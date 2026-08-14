@@ -8,8 +8,12 @@
 // solo path copre entrambi i casi.
 import { readFileSync } from 'node:fs';
 
+function sharedUrl(relativePath: string): URL {
+  return new URL(`../../shared/${relativePath}`, import.meta.url);
+}
+
 function readShared(relativePath: string): string {
-  const url = new URL(`../../shared/${relativePath}`, import.meta.url);
+  const url = sharedUrl(relativePath);
   try {
     return readFileSync(url, 'utf8');
   } catch (error) {
@@ -24,8 +28,28 @@ function readShared(relativePath: string): string {
 /** Blocco `:root, :host` dei design token, da inlinare in un <style>. */
 export const THEME_CSS = readShared('theme.css');
 
-/** Marchio come stringa SVG, dimensionato dal contenitore. */
-export const LOGO_SVG = readShared('logo.svg');
+/**
+ * Marchio come data-URI, pronto per un `<img src>`.
+ *
+ * Lo stesso file (shared/logo-mark.png, 96px generato da docs/build-icons.mjs)
+ * alimenta anche l'estensione, che lo importa come modulo TS: il server non può
+ * fare quell'import perché `rootDir: "src"` glielo vieta, quindi legge il PNG.
+ * Una sola fonte, due modi di raggiungerla.
+ *
+ * 96px e non l'originale da 1,7 MB: questa stringa viene inlinata in OGNI
+ * caricamento della dashboard e delle pagine di login.
+ */
+export const LOGO_MARK = (() => {
+  const url = sharedUrl('logo-mark.png');
+  try {
+    return `data:image/png;base64,${readFileSync(url).toString('base64')}`;
+  } catch (error) {
+    throw new Error(
+      `Impossibile leggere shared/logo-mark.png (${url.pathname}): ${String(error)}. ` +
+        'Rigeneralo con `node docs/build-icons.mjs`.',
+    );
+  }
+})();
 
 export interface ScheduleChangeField {
   id: string;

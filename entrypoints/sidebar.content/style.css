@@ -18,12 +18,10 @@
   display: inline-flex;
   align-items: center;
   gap: 9px;
-  font-family:
-    system-ui,
-    -apple-system,
-    Segoe UI,
-    Roboto,
-    sans-serif;
+  /* Ridichiarato perché `:host { all: initial }` riporta font-family al serif di
+     default: questo e `.rs-panel` sono i due soli nodi montati sotto :host, tutto
+     il resto erediterebbe da loro. */
+  font-family: var(--rs-font);
   font-size: 13px;
   font-weight: 700;
   padding: 8px 14px 8px 9px;
@@ -61,10 +59,12 @@
 /* --- Marchio --- */
 
 .rs-logo {
-  display: inline-flex;
+  display: block;
   flex-shrink: 0;
-  line-height: 0;
-  filter: drop-shadow(0 2px 5px rgba(0, 0, 153, 0.35));
+  /* Il marchio ha già gli angoli arrotondati e il proprio fondo: l'ombra lo
+     stacca dalla banda blu senza aggiungere un bordo. */
+  border-radius: 22%;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 40, 0.4));
 }
 
 /* --- Pannello --- */
@@ -90,12 +90,8 @@
   backdrop-filter: var(--rs-glass-blur);
   border-left: 1px solid var(--rs-glass-border);
   color: var(--rs-navy);
-  font-family:
-    system-ui,
-    -apple-system,
-    Segoe UI,
-    Roboto,
-    sans-serif;
+  /* Vedi .rs-launcher: `:host { all: initial }` va compensato qui. */
+  font-family: var(--rs-font);
   font-size: 13px;
   line-height: 1.45;
   box-shadow: -10px 0 28px rgba(0, 0, 153, 0.18);
@@ -166,14 +162,18 @@
 .rs-brand {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   min-width: 0;
 }
 
+/* Wordmark: taglio Display e tracking NEGATIVO. A peso alto le lettere di Segoe
+   respirano troppo in un titolo corto, e il nome si legge come due parole
+   staccate invece che come un marchio. */
 .rs-title {
-  font-weight: 800;
-  font-size: 14px;
-  letter-spacing: 0.02em;
+  font-family: var(--rs-font-brand);
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: -0.01em;
   white-space: nowrap;
 }
 

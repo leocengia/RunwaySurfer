@@ -58,6 +58,22 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.62), inset 0 -1px 0 rgba(255, 255, 255, 0.16);
   --rs-focus-ring: 0 0 0 3px rgba(0, 0, 153, 0.22);
 
+  /* --- Tipografia ---
+     Un solo posto per il font. Prima lo stesso stack era ricopiato a mano in
+     sette punti, e la pagina Options ne usava già una variante diversa.
+
+     Font di SISTEMA, non incorporato: un file remoto verrebbe bloccato dalla CSP
+     della pagina KB, e uno in base64 andrebbe sia nel bundle del content script
+     sia in OGNI caricamento della dashboard. Le postazioni sono Windows 11, dove
+     `Segoe UI Variable` esiste in due tagli disegnati per usi diversi. */
+
+  /* Testo: il taglio "Text" è ottimizzato per le misure piccole. */
+  --rs-font: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+  /* Marchio e titoli: il taglio "Display" è disegnato per le misure grandi. */
+  --rs-font-brand:
+    'Segoe UI Variable Display', 'Segoe UI Semibold', 'Segoe UI', system-ui, sans-serif;
+  --rs-font-mono: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+
   /* --- Forma e movimento --- */
   --rs-r-sm: 10px;
   --rs-r-md: 14px;

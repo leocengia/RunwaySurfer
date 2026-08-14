@@ -10,7 +10,7 @@ import type { AuthContext } from '../src/auth.js';
 import { initDb } from '../src/db.js';
 import { renderDashboard } from '../src/views/dashboard.js';
 import { renderChangePasswordPage, renderLoginPage } from '../src/views/auth-pages.js';
-import { LOGO_SVG, THEME_CSS } from '../src/shared-assets.js';
+import { LOGO_MARK, THEME_CSS } from '../src/shared-assets.js';
 
 function authContext(role: 'admin' | 'team_lead'): AuthContext {
   const now = new Date().toISOString();
@@ -45,9 +45,14 @@ describe('asset condivisi', () => {
     expect(THEME_CSS).toMatch(/:root\s*,\s*:host\s*\{/);
   });
 
-  it('legge il marchio da shared/logo.svg', () => {
-    expect(LOGO_SVG).toContain('<svg');
-    expect(LOGO_SVG).toContain('rs-logo-plate');
+  it('legge il marchio da shared/logo-mark.png come data-URI', () => {
+    // Il PNG è generato da docs/build-icons.mjs: se manca, shared-assets lancia
+    // al boot invece di servire una dashboard senza marchio.
+    expect(LOGO_MARK.startsWith('data:image/png;base64,')).toBe(true);
+    // Abbastanza grande da essere il marchio vero e non un segnaposto, e
+    // abbastanza piccolo da poter stare in ogni pagina servita.
+    expect(LOGO_MARK.length).toBeGreaterThan(5_000);
+    expect(LOGO_MARK.length).toBeLessThan(120_000);
   });
 });
 
@@ -68,7 +73,7 @@ describe('renderDashboard', () => {
   });
 
   it('mostra il marchio e il nome staccato', () => {
-    expect(admin).toContain('rs-logo-plate');
+    expect(admin).toContain('<img class="mark" src="data:image/png;base64,');
     expect(admin).toContain('Runway Surfer');
     expect(admin).not.toContain('RunwaySurfer');
   });
@@ -208,7 +213,7 @@ describe('pagine auth', () => {
   it('usano i token condivisi e il marchio', () => {
     for (const html of [renderLoginPage(), renderChangePasswordPage(true)]) {
       expect(html).toContain('--rs-primary: #000099');
-      expect(html).toContain('rs-logo-plate');
+      expect(html).toContain('<img class="mark" src="data:image/png;base64,');
       expect(html).toContain('Runway Surfer');
     }
   });

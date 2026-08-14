@@ -17,6 +17,13 @@ import { deflateSync, inflateSync } from 'node:zlib';
 const SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 /** Dimensioni richieste da Chrome: barra, gestione estensioni, negozio/finestre. */
 const SIZES = [16, 32, 48, 128];
+/**
+ * Marchio per l'INTERFACCIA (sidebar, banner del tour, dashboard, pagine di
+ * login, Options). 96px perché la misura più grande a schermo è 56px e serve il
+ * doppio per gli schermi ad alta densità. L'originale da 1,7 MB non è utilizzabile:
+ * finirebbe in base64 dentro ogni caricamento della dashboard.
+ */
+const MARK_SIZE = 96;
 
 // --- CRC32 (richiesto da ogni chunk PNG) -------------------------------------
 const CRC_TABLE = new Int32Array(256);
@@ -209,3 +216,23 @@ for (const size of SIZES) {
   writeFileSync(target, png);
   console.log(`  → public/icons/${size}.png (${png.length} byte)`);
 }
+
+// Marchio dell'interfaccia. Due forme dello stesso byte-stream:
+//  - il PNG su disco, che il SERVER legge a runtime (server/src/shared-assets.ts:
+//    `rootDir: "src"` vieta gli import fuori da src);
+//  - un modulo TS con il data-URI, che l'ESTENSIONE importa. Un data-URI e non un
+//    asset emesso dal bundler: così funziona identico dentro React, nel DOM della
+//    pagina host (banner del tour) e nella pagina Options, senza dover dichiarare
+//    web_accessible_resources.
+const markPng = encodePng(resize(src, MARK_SIZE), MARK_SIZE);
+writeFileSync(resolve(root, 'shared/logo-mark.png'), markPng);
+const dataUri = `data:image/png;base64,${markPng.toString('base64')}`;
+writeFileSync(
+  resolve(root, 'shared/logo-mark.ts'),
+  `// GENERATO da docs/build-icons.mjs — non modificare a mano.\n` +
+    `// Marchio Runway Surfer a ${MARK_SIZE}px come data-URI. Sorgente: ${process.argv[2] ?? 'shared/logo_v2_alpha.png'}\n` +
+    `// Rigenera con: node docs/build-icons.mjs\n` +
+    `export const LOGO_MARK =\n  '${dataUri}';\n`,
+);
+console.log(`  → shared/logo-mark.png (${markPng.length} byte)`);
+console.log(`  → shared/logo-mark.ts (data-URI, ${dataUri.length} caratteri)`);

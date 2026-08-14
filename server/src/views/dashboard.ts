@@ -1,7 +1,7 @@
 // Dashboard HTML (renderizzata lato server). Solo presentazione: i dati
 // arrivano da status.ts / db.ts, la logica delle route resta in routes/pages.ts.
 import { escapeHtml, percent } from './html.js';
-import { LOGO_SVG, THEME_CSS } from '../shared-assets.js';
+import { LOGO_MARK, THEME_CSS } from '../shared-assets.js';
 import { MODELS } from '../router.js';
 import {
   analyticsSummary,
@@ -153,7 +153,7 @@ ${THEME_CSS}
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      font-family: var(--rs-font);
       color: var(--rs-navy);
       background:
         radial-gradient(1200px 600px at 12% -10%, rgba(0, 0, 153, 0.16), transparent 60%),
@@ -217,13 +217,14 @@ ${THEME_CSS}
     .brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
     .brand .mark {
       flex-shrink: 0;
-      width: 48px;
-      height: 48px;
-      line-height: 0;
+      width: 56px;
+      height: 56px;
+      border-radius: 22%;
       filter: drop-shadow(0 3px 8px rgba(2, 2, 40, 0.45));
     }
-    h1 { margin: 0; font-size: 26px; line-height: 1.15; letter-spacing: 0.01em; }
-    h1 small { display: block; margin-top: 2px; font-size: 13px; font-weight: 600; opacity: 0.75; letter-spacing: 0.05em; }
+    /* Wordmark col taglio Display e tracking negativo: vedi shared/theme.css. */
+    h1 { margin: 0; font-family: var(--rs-font-brand); font-size: 30px; font-weight: 700; line-height: 1.12; letter-spacing: -0.015em; }
+    h1 small { display: block; margin-top: 3px; font-family: var(--rs-font); font-size: 13px; font-weight: 600; opacity: 0.75; letter-spacing: 0.05em; }
     .whoami { display: flex; align-items: center; gap: 12px; font-size: 13px; }
     .whoami .role { opacity: 0.75; }
     .whoami button { width: auto; padding: 7px 12px; }
@@ -346,6 +347,10 @@ ${THEME_CSS}
       background: linear-gradient(180deg, var(--rs-yellow-hi), var(--rs-yellow));
       color: var(--rs-navy);
       cursor: pointer;
+      /* Nel DOM normale i controlli NON ereditano il font: senza questa riga i
+         bottoni della dashboard usavano il font dell'UA, non il nostro. */
+      font-family: inherit;
+      font-size: 13px;
       font-weight: 800;
       box-shadow: var(--rs-glass-edge), 0 4px 14px rgba(216, 173, 0, 0.28);
       transition:
@@ -401,7 +406,7 @@ ${THEME_CSS}
     .filter-bar .form-row { font-size: 12px; }
     .response-panel { white-space: pre-wrap; max-height: 420px; }
     .api-graphic { max-height: 460px; overflow: auto; }
-    code, pre { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+    code, pre { font-family: var(--rs-font-mono); font-size: 12px; }
     pre {
       overflow: auto;
       padding: 12px;
@@ -510,7 +515,7 @@ ${THEME_CSS}
   <header>
     <div class="header-inner">
       <div class="brand">
-        <span class="mark">${LOGO_SVG}</span>
+        <img class="mark" src="${LOGO_MARK}" alt="" aria-hidden="true" />
         <h1>Runway Surfer<small>Control Dashboard</small></h1>
       </div>
       <div class="whoami">

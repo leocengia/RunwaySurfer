@@ -129,7 +129,7 @@ const FX_CSS = `
     backdrop-filter: blur(14px) saturate(170%);
     border-bottom: 1px solid rgba(255, 255, 255, 0.16);
     color: #fff;
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    font-family: var(--rs-font);
     font-size: 13px;
     box-shadow: 0 2px 12px rgba(2, 2, 40, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.22);
     transition: right 140ms ease;
@@ -141,12 +141,10 @@ const FX_CSS = `
   }
   .rs-fx-banner-mark {
     flex-shrink: 0;
-    width: 24px;
-    height: 24px;
-    line-height: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 22%;
+    display: block;
     filter: drop-shadow(0 1px 3px rgba(2, 2, 40, 0.45));
   }
   .rs-fx-banner-title { flex-shrink: 0; font-weight: 800; white-space: nowrap; letter-spacing: 0.02em; }

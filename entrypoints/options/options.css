@@ -10,12 +10,11 @@ body {
   padding: 32px 20px 48px;
   background: var(--rs-soft);
   color: var(--rs-navy);
-  font:
-    14px/1.55 -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    sans-serif;
+  /* Token condiviso: prima questa pagina usava uno stack tutto suo, diverso da
+     quello di sidebar e dashboard. */
+  font-family: var(--rs-font);
+  font-size: 14px;
+  line-height: 1.55;
 }
 
 .wrap {
@@ -38,9 +37,10 @@ body {
 }
 
 .mark {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   flex: 0 0 auto;
+  border-radius: 22%;
 }
 
 .head h1 {

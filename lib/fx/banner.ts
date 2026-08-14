@@ -6,7 +6,7 @@
 // Non porta il pulsante di stop: interrompere il tour si fa dalla timeline in
 // sidebar (TourTimeline), dove vive anche il resto dello stato. Un solo posto da
 // cui fermare, invece di due comandi identici su due superfici.
-import { LOGO_SVG } from '../../shared/logo';
+import { LOGO_MARK } from '../../shared/logo-mark';
 import type { KbLink } from '../outcome';
 import { prefersReducedMotion } from './motion';
 
@@ -40,7 +40,7 @@ export function mountBanner(options: BannerOptions): void {
     banner = document.createElement('div');
     banner.id = BANNER_ID;
     banner.innerHTML = `
-      <span class="rs-fx-banner-mark">${LOGO_SVG}</span>
+      <img class="rs-fx-banner-mark" src="${LOGO_MARK}" alt="" aria-hidden="true" />
       <span class="rs-fx-banner-title">Runway Surfer · Immersiva</span>
       <span class="rs-fx-banner-step"></span>
       <span class="rs-fx-banner-narr" aria-live="polite"></span>

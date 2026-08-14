@@ -792,7 +792,7 @@ export default function App() {
         onClick={() => setOpen(true)}
         title="Riapri Runway Surfer: il contenuto resta stabile fino al reload"
       >
-        <Logo size={26} />
+        <Logo size={30} />
         <span>{hasSession ? 'Riprendi' : 'Runway Surfer'}</span>
       </button>
     );
@@ -819,7 +819,7 @@ export default function App() {
       />
       <header className="rs-header">
         <div className="rs-brand">
-          <Logo size={22} />
+          <Logo size={28} />
           <span className="rs-title">Runway Surfer</span>
         </div>
         <div className="rs-header-actions">

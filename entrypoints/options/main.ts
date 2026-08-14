@@ -5,7 +5,7 @@
 // Con 5-10 agenti da installare a mano quella non è una procedura.
 import { browser } from 'wxt/browser';
 import { DEFAULT_PROXY_URL, PROXY_URL_KEY, getProxyUrl, setProxyUrl } from '../../lib/messaging';
-import { LOGO_SVG } from '../../shared/logo';
+import { LOGO_MARK } from '../../shared/logo-mark';
 
 const el = <T extends HTMLElement>(id: string): T => {
   const node = document.getElementById(id);
@@ -19,7 +19,7 @@ const managedNote = el<HTMLParagraphElement>('managed');
 const saveBtn = el<HTMLButtonElement>('save');
 const testBtn = el<HTMLButtonElement>('test');
 
-el('mark').innerHTML = LOGO_SVG;
+el<HTMLImageElement>('mark').src = LOGO_MARK;
 
 type Tone = 'ok' | 'error' | 'busy' | 'none';
 
