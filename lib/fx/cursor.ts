@@ -19,8 +19,20 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-function targetPoint(el: HTMLElement): { x: number; y: number } {
+/**
+ * Centro del bersaglio, oppure `null` se non è misurabile.
+ *
+ * `null` NON è un caso di scuola: sulla KB Aura una route SPA può staccare
+ * l'anchor mentre il cursore ci sta scivolando sopra. Un elemento staccato (o con
+ * un lato a zero) restituisce un rect tutto zero, e il vecchio codice ci
+ * interpolava sopra — mandando il cursore nell'angolo in alto a sinistra, dove è
+ * stato visto. Basta UN lato a zero: il centro di un rect 0×20 è comunque un
+ * punto che non corrisponde a nulla di visibile.
+ */
+function targetPoint(el: HTMLElement): { x: number; y: number } | null {
+  if (!el.isConnected) return null;
   const r = el.getBoundingClientRect();
+  if (r.width === 0 || r.height === 0) return null;
   return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
 }
 
@@ -30,25 +42,27 @@ function targetPoint(el: HTMLElement): { x: number; y: number } {
  * mezzo alla pagina si legge come un indicatore di caricamento centrale — che è
  * esattamente ciò che il tour non deve mostrare.
  */
-function entryPoint(el: HTMLElement): { x: number; y: number } {
+function entryPoint(el: HTMLElement): { x: number; y: number } | null {
   const t = targetPoint(el);
+  if (!t) return null;
   return {
     x: clamp(t.x - 150, 12, Math.max(12, window.innerWidth - 12)),
     y: clamp(t.y + 110, 12, Math.max(12, window.innerHeight - 12)),
   };
 }
 
-function ensureCursor(el: HTMLElement): HTMLElement {
-  let cursor = document.getElementById(CURSOR_ID);
-  if (!cursor) {
-    cursor = document.createElement('div');
-    cursor.id = CURSOR_ID;
-    cursor.innerHTML = CURSOR_SVG;
-    const start = lastPos ?? entryPoint(el);
-    cursor.style.left = `${start.x}px`;
-    cursor.style.top = `${start.y}px`;
-    document.documentElement.appendChild(cursor);
-  }
+/** `null` se non c'è un punto di partenza sensato: meglio nessun cursore che uno nell'angolo. */
+function ensureCursor(el: HTMLElement): HTMLElement | null {
+  const existing = document.getElementById(CURSOR_ID);
+  if (existing) return existing;
+  const start = lastPos ?? entryPoint(el);
+  if (!start) return null;
+  const cursor = document.createElement('div');
+  cursor.id = CURSOR_ID;
+  cursor.innerHTML = CURSOR_SVG;
+  cursor.style.left = `${start.x}px`;
+  cursor.style.top = `${start.y}px`;
+  document.documentElement.appendChild(cursor);
   return cursor;
 }
 
@@ -62,8 +76,9 @@ export function cursorGlideTo(
   shouldAbort?: () => boolean,
 ): Promise<void> {
   if (prefersReducedMotion()) return Promise.resolve();
-  ensureCursor(el);
+  if (!ensureCursor(el)) return Promise.resolve();
   const p0 = lastPos ?? entryPoint(el);
+  if (!p0) return Promise.resolve();
   const startedAt = performance.now();
 
   return new Promise((resolve) => {
@@ -76,6 +91,12 @@ export function cursorGlideTo(
       const t = Math.min(1, (now - startedAt) / durationMs);
       const e = easeInOutCubic(t);
       const p2 = targetPoint(el);
+      // Bersaglio scomparso a metà volo: il cursore si FERMA dov'è. Prima
+      // continuava verso un rect a zero, cioè verso l'angolo dello schermo.
+      if (!p2) {
+        resolve();
+        return;
+      }
       // Control point: midway, offset perpendicular to the path for the curve.
       const dx = p2.x - p0.x;
       const dy = p2.y - p0.y;
@@ -106,7 +127,9 @@ export async function cursorClick(el?: HTMLElement): Promise<void> {
   if (prefersReducedMotion()) return;
   const cursor = document.getElementById(CURSOR_ID);
   if (!cursor || !lastPos) return;
-  const center = el ? targetPoint(el) : lastPos;
+  // Se il link non è più misurabile si ricade sulla posizione del cursore: mai
+  // su (0,0), che disegnerebbe l'onda del click nell'angolo della pagina.
+  const center = (el ? targetPoint(el) : null) ?? lastPos;
   cursor.classList.add('rs-fx-press');
   const ripple = document.createElement('div');
   ripple.className = 'rs-fx-ripple';

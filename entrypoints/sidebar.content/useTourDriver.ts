@@ -15,7 +15,7 @@ import type { AiPlan, KbLink, KbPage } from '../../lib/outcome';
 import { DEFAULT_SCAN_MS, saveTourResult, type TourState } from '../../lib/tour';
 import { linkIdentity } from '../../lib/site-profile';
 import { waitForSpaRender, type SpaRenderProgress } from '../../lib/spa-nav';
-import { findLinkElement } from '../../lib/highlight';
+import { clickInSameTab, findLinkElement } from '../../lib/highlight';
 import { findTourTargetUrl } from '../../lib/tour-target';
 import {
   abortableSleep,
@@ -166,7 +166,9 @@ export function useTourDriver(deps: TourDriverDeps): (initial: TourState) => Pro
 
           const el = findLinkElement(target.url);
           const rect = el?.getBoundingClientRect();
-          const visible = el && !((rect?.width ?? 0) === 0 && (rect?.height ?? 0) === 0);
+          // `||` e non `&&`: un anchor 0×20 non è cliccabile né inquadrabile più
+          // di uno 0×0, e dava coordinate degeneri alle animazioni.
+          const visible = el && (rect?.width ?? 0) > 0 && (rect?.height ?? 0) > 0;
           if (!el || !visible) {
             // Il link collegato non è (più) in pagina: non possiamo navigarci.
             void narrate(`Non trovo il link «${target.text}» in pagina, lo salto…`);
@@ -189,7 +191,7 @@ export function useTourDriver(deps: TourDriverDeps): (initial: TourState) => Pro
           if (aborted(offSpotlight)) return;
           await cursorClick(el);
           offSpotlight();
-          el.click();
+          clickInSameTab(el);
 
           // Attendi che la SPA renderizzi l'articolo collegato (route + stabilità).
           // L'attesa è la parte lunga e imprevedibile del passo (~1s tipici, fino
@@ -222,6 +224,21 @@ export function useTourDriver(deps: TourDriverDeps): (initial: TourState) => Pro
           } else {
             void narrate('Render non riuscito, salto questo articolo…');
             setTourDetail('render non riuscito');
+          }
+
+          // NON tornare indietro se non si è andati avanti. Se il render non è
+          // arrivato la pagina non ha cambiato route (caso reale: il click ha
+          // aperto una scheda nuova), e un `history.back()` qui porterebbe
+          // l'agente sulla pagina PRECEDENTE a quella di partenza — cioè fuori
+          // dall'hub, che è esattamente il modo in cui il tour si perdeva.
+          if (!rendered) {
+            if (idOf(location.href) !== startIdentity) {
+              // Route cambiata comunque, ma non in quella attesa: rientrare è
+              // giusto, la condizione sopra non si applica.
+              history.back();
+              await waitForSpaRender(startIdentity ?? '', shouldAbort);
+            }
+            continue;
           }
 
           // Torna sempre all'hub (client-side), anche dopo l'ultimo target: così
@@ -299,7 +316,7 @@ export function useTourDriver(deps: TourDriverDeps): (initial: TourState) => Pro
         if (targetUrl && idOf(targetUrl) !== startIdentity) {
           const el = findLinkElement(targetUrl);
           if (el) {
-            el.click();
+            clickInSameTab(el);
           } else {
             await saveTourResult({
               query: t.query,

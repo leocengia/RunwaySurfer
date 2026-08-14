@@ -12,6 +12,7 @@
 
 import themeTokensCss from '../../shared/theme.css?inline';
 import { stopNarration } from './banner';
+import { removeCursor } from './cursor';
 
 export const FX_STYLE_ID = 'rs-fx-style';
 const LEGACY_STYLE_ID = 'rs-tour-style';
@@ -293,6 +294,10 @@ export function teardownFx(): void {
   stopNarration();
   document.documentElement.classList.remove(FX_TOUR_CLASS);
   document.documentElement.style.removeProperty('--rs-fx-right');
+  // removeCursor() e non solo la rimozione del nodo: azzera anche `lastPos`, che
+  // è stato di modulo. Rimuovendo solo il nodo, un tour finito male lasciava la
+  // posizione a (0,0) e il cursore del tour SUCCESSIVO ci nasceva dentro.
+  removeCursor();
   for (const id of ['rs-fx-banner', 'rs-fx-spotlight', 'rs-fx-cursor', 'rs-fx-beam']) {
     document.getElementById(id)?.remove();
   }

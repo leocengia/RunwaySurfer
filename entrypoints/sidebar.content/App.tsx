@@ -650,7 +650,19 @@ export default function App() {
       setError('');
       setTourDetail('');
       setStopping(false);
-      const t = startTour(safeQuery);
+      // Follow-up: le pagine già lette entrano nel tour invece di essere buttate,
+      // e la camminata si salta se la pagina aperta copre già la domanda. Prima il
+      // ramo visual ignorava `pagesUsed` e rifaceva l'intero giro a ogni domanda,
+      // rileggendo articoli che aveva già in memoria.
+      const visualLinks = extractInternalLinks();
+      const t = startTour(safeQuery, {
+        alreadyRead: pagesUsed,
+        currentPageCovers: !isOffTopic(
+          extractCurrentPage(safeQuery),
+          safeQuery,
+          shortlistCandidates(visualLinks, safeQuery),
+        ),
+      });
       await driveTour(t);
       return;
     }

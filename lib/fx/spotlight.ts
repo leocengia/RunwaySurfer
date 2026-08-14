@@ -27,7 +27,9 @@ export function removeSpotlight(): void {
 
 export function spotlightOn(el: HTMLElement): () => void {
   const rect = el.getBoundingClientRect();
-  if (rect.width === 0 && rect.height === 0) return () => {};
+  // `||` e non `&&`: un rect 0×20 non ha un centro utilizzabile più di uno 0×0,
+  // e il buco del riflettore finirebbe fuori posto.
+  if (rect.width === 0 || rect.height === 0) return () => {};
 
   el.classList.add(HL_CLASS);
   if (prefersReducedMotion()) {
@@ -41,7 +43,11 @@ export function spotlightOn(el: HTMLElement): () => void {
   let frame = 0;
   const track = () => {
     frame = 0;
+    // Il bersaglio può essere stato staccato da una route SPA dopo il mount:
+    // in quel caso il buco resta dov'era invece di migrare in alto a sinistra.
+    if (!el.isConnected) return;
     const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) return;
     overlay.style.setProperty('--rs-spot-x', `${r.left + r.width / 2}px`);
     overlay.style.setProperty('--rs-spot-y', `${r.top + r.height / 2}px`);
     overlay.style.setProperty('--rs-spot-r', `${Math.max(r.width, r.height) / 2 + 50}px`);
