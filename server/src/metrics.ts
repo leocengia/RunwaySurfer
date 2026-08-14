@@ -1,7 +1,7 @@
 // Metriche live in memoria (si azzerano al riavvio — lo storico persistente è
 // nella tabella `requests` di SQLite) + guardrail di concorrenza/costo.
-import { estimatedCostToday, type SettingsRecord } from './db.js';
-import { RECENT_REQUEST_LIMIT } from './config.js';
+import { estimatedCostMonthToDate, type SettingsRecord } from './db.js';
+import { RECENT_REQUEST_LIMIT, USD_PER_EUR } from './config.js';
 
 /** Finestra del rate limiting per agente. */
 const RATE_WINDOW_MS = 60 * 60 * 1000;
@@ -66,9 +66,9 @@ export const metrics = {
   totalEstimatedInputTokens: 0,
   totalEstimatedOutputTokens: 0,
   /**
-   * Cumulato DALL'ULTIMO AVVIO, non giornaliero: è una metrica live e nulla più.
-   * Il guardrail di spesa usa estimatedCostToday() da SQLite — vedi
-   * canAcceptRequest. Non rimetterlo a fare da tetto: si azzera a ogni riavvio.
+   * Cumulato DALL'ULTIMO AVVIO: è una metrica live e nulla più. Il guardrail di
+   * spesa usa estimatedCostMonthToDate() da SQLite — vedi canAcceptRequest. Non
+   * rimetterlo a fare da tetto: si azzera a ogni riavvio.
    */
   totalEstimatedCostUsd: 0,
   byModel: {} as Record<string, number>,
@@ -141,14 +141,24 @@ export function canAcceptRequest(
       message: `rate limit reached: max ${settings.max_requests_per_hour_per_agent} requests per hour per agent (riprova più tardi)`,
     };
   }
-  // Il tetto di spesa si legge da SQLite, non dal contatore in memoria: così è
-  // davvero "oggi" e sopravvive ai riavvii del servizio. Vedi estimatedCostToday.
-  if (estimatedCostToday() >= settings.max_daily_estimated_cost_usd) {
+  // Il tetto di spesa si legge da SQLite, non dal contatore in memoria: così
+  // copre davvero il mese in corso e sopravvive ai riavvii del servizio.
+  // La spesa è in USD (listino del modello), il budget in euro: si converte qui.
+  if (estimatedCostEurThisMonth() >= settings.max_monthly_estimated_cost_eur) {
     return {
       ok: false,
       status: 429,
-      message: `estimated cost guardrail reached: $${settings.max_daily_estimated_cost_usd.toFixed(2)} today`,
+      message: `estimated cost guardrail reached: €${settings.max_monthly_estimated_cost_eur.toFixed(2)} this month`,
     };
   }
   return { ok: true };
+}
+
+/**
+ * Spesa stimata del mese in corso convertita in euro — la grandezza che il
+ * guardrail confronta col budget e che la dashboard mostra. Esportata perché i
+ * due DEVONO usare la stessa: prima divergevano e nessuno se ne accorgeva.
+ */
+export function estimatedCostEurThisMonth(now = new Date()): number {
+  return estimatedCostMonthToDate(now) / USD_PER_EUR;
 }

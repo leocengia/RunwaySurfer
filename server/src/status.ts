@@ -2,9 +2,14 @@
 // payload completo della dashboard (usato da /dashboard-data e dalla pagina HTML).
 import { MODELS } from './router.js';
 import { getProvider, ANTHROPIC_EGRESS, ASSUMED_OUTPUT_TOKENS } from './provider/index.js';
-import { analyticsSummary, estimatedCostToday, getSettings } from './db.js';
-import { metrics } from './metrics.js';
-import { PORT, ALLOWED_ORIGIN } from './config.js';
+import {
+  analyticsSummary,
+  estimatedCostMonthToDate,
+  estimatedCostToday,
+  getSettings,
+} from './db.js';
+import { estimatedCostEurThisMonth, metrics } from './metrics.js';
+import { PORT, ALLOWED_ORIGIN, USD_PER_EUR } from './config.js';
 
 export function extensionConfig() {
   const settings = getSettings();
@@ -17,7 +22,7 @@ export function extensionConfig() {
     maxPageTextChars: settings.max_page_text_chars,
     maxConcurrentRequests: settings.max_concurrent_requests,
     maxConcurrentPerAgent: settings.max_concurrent_per_agent,
-    maxDailyEstimatedCostUsd: settings.max_daily_estimated_cost_usd,
+    maxMonthlyEstimatedCostEur: settings.max_monthly_estimated_cost_eur,
     provider: getProvider().name,
     features: {
       visualTour: true,
@@ -63,11 +68,14 @@ export function dashboardData() {
       activeRequests: metrics.activeRequests,
       activeByAgent: metrics.activeByAgent,
       rejectedRequests: metrics.rejectedRequests,
-      maxDailyEstimatedCostUsd: settings.max_daily_estimated_cost_usd,
+      maxMonthlyEstimatedCostEur: settings.max_monthly_estimated_cost_eur,
       // Il valore APPLICATO dal guardrail: da SQLite, quindi sopravvive ai
       // riavvii. `metrics.totalEstimatedCostUsd` è invece solo il cumulato
       // dall'ultimo avvio del processo, utile come metrica live e nient'altro.
+      estimatedCostEurThisMonth: estimatedCostEurThisMonth(),
+      estimatedCostUsdThisMonth: estimatedCostMonthToDate(),
       estimatedCostTodayUsd: estimatedCostToday(),
+      usdPerEur: USD_PER_EUR,
     },
     settings,
     metrics,

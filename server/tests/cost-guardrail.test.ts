@@ -7,21 +7,25 @@
 // la fonte unica (`estimatedCostToday`) e il confine di giornata.
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  estimatedCostMonthToDate,
   estimatedCostToday,
   getSettings,
   initDb,
   insertRequestHistory,
+  startOfMonthIso,
   startOfTodayIso,
   updateSettings,
   type RequestHistoryInput,
 } from '../src/db.js';
 import {
   canAcceptRequest,
+  estimatedCostEurThisMonth,
   metrics,
   noteRequestForRateLimit,
   requestsInWindow,
   resetRateLimiter,
 } from '../src/metrics.js';
+import { USD_PER_EUR } from '../src/config.js';
 
 const AGENT = 'agente@example.com';
 const HOUR_MS = 60 * 60 * 1000;
@@ -58,40 +62,58 @@ beforeEach(() => {
   updateSettings({
     max_concurrent_requests: 30,
     max_concurrent_per_agent: 2,
-    max_daily_estimated_cost_usd: 50,
+    max_monthly_estimated_cost_eur: 70,
     max_requests_per_hour_per_agent: 30,
   });
 });
 
-describe('estimatedCostToday', () => {
-  it('somma le richieste di oggi', () => {
-    const before = estimatedCostToday();
+describe('estimatedCostMonthToDate', () => {
+  it('somma le richieste del mese', () => {
+    const before = estimatedCostMonthToDate();
     request(0.05);
     request(0.03);
-    expect(estimatedCostToday() - before).toBeCloseTo(0.08, 6);
+    expect(estimatedCostMonthToDate() - before).toBeCloseTo(0.08, 6);
   });
 
-  it('NON conta i giorni precedenti', () => {
+  it('NON conta i mesi precedenti', () => {
     request(1.5);
-    // Guardato da domani, tutto ciò che è stato inserito ora è "ieri". È il
-    // confine che rende il tetto giornaliero e non cumulativo: senza, dopo
-    // qualche settimana il budget di un giorno bloccherebbe tutti per sempre.
-    const tomorrow = new Date(Date.now() + 24 * HOUR_MS);
-    expect(estimatedCostToday(tomorrow)).toBe(0);
+    // Guardato dal mese prossimo, tutto ciò che è stato inserito ora è "il mese
+    // scorso". È il confine che rende il tetto mensile e non cumulativo: senza,
+    // dopo qualche mese il budget bloccherebbe tutti per sempre.
+    const nextMonth = new Date(Date.now() + 32 * 24 * HOUR_MS);
+    expect(estimatedCostMonthToDate(nextMonth)).toBe(0);
   });
 
   it('una richiesta respinta non muove il numero', () => {
     // Le richieste `rejected` hanno costo 0 e non devono contribuire al tetto:
     // altrimenti il primo 429 renderebbe più probabile il successivo.
     // (Il DB è condiviso fra i test di questo file: si misura la differenza.)
-    const before = estimatedCostToday();
+    const before = estimatedCostMonthToDate();
     request(0, { status: 'rejected', error: 'backend busy' });
-    expect(estimatedCostToday()).toBeCloseTo(before, 6);
+    expect(estimatedCostMonthToDate()).toBeCloseTo(before, 6);
   });
 
-  it('il confine di giornata è mezzanotte UTC', () => {
-    const iso = startOfTodayIso(new Date('2026-08-12T15:30:00.000Z'));
-    expect(iso).toBe('2026-08-12T00:00:00.000Z');
+  it('i confini di mese e giornata sono a mezzanotte UTC', () => {
+    expect(startOfMonthIso(new Date('2026-08-12T15:30:00.000Z'))).toBe('2026-08-01T00:00:00.000Z');
+    expect(startOfTodayIso(new Date('2026-08-12T15:30:00.000Z'))).toBe('2026-08-12T00:00:00.000Z');
+  });
+
+  it('il totale di oggi è un sottoinsieme di quello del mese', () => {
+    request(0.02);
+    expect(estimatedCostToday()).toBeLessThanOrEqual(estimatedCostMonthToDate());
+  });
+});
+
+describe('conversione euro', () => {
+  it('converte la spesa USD col cambio configurato', () => {
+    const usd = estimatedCostMonthToDate();
+    expect(estimatedCostEurThisMonth()).toBeCloseTo(usd / USD_PER_EUR, 8);
+  });
+
+  it('il cambio è > 1: un euro vale più di un dollaro', () => {
+    // Se qualcuno lo invertisse per sbaglio, il tetto salterebbe di ~10% nel
+    // verso sbagliato (più permissivo) senza che nulla si rompa.
+    expect(USD_PER_EUR).toBeGreaterThan(1);
   });
 });
 
@@ -101,20 +123,21 @@ describe('canAcceptRequest · tetto di spesa', () => {
     expect(canAcceptRequest(AGENT, getSettings())).toEqual({ ok: true });
   });
 
-  it('respinge con 429 quando la spesa di oggi ha raggiunto il tetto', () => {
-    updateSettings({ max_daily_estimated_cost_usd: 0.1 });
+  it('respinge con 429 quando la spesa del mese ha raggiunto il budget', () => {
+    updateSettings({ max_monthly_estimated_cost_eur: 0.1 });
     request(0.15);
     const verdict = canAcceptRequest(AGENT, getSettings());
     expect(verdict.ok).toBe(false);
     expect(!verdict.ok && verdict.status).toBe(429);
-    expect(!verdict.ok && verdict.message).toMatch(/today/);
+    expect(!verdict.ok && verdict.message).toMatch(/this month/);
+    expect(!verdict.ok && verdict.message).toContain('€');
   });
 
   it('il blocco SOPRAVVIVE al riavvio del processo', () => {
     // Simula il riavvio: le metriche in memoria si azzerano, SQLite no. Prima il
     // guardrail leggeva solo il contatore in RAM, quindi un riavvio sbloccava
-    // tutto e il tetto giornaliero era aggirabile con un restart.
-    updateSettings({ max_daily_estimated_cost_usd: 0.1 });
+    // tutto e il tetto era aggirabile con un restart.
+    updateSettings({ max_monthly_estimated_cost_eur: 0.1 });
     request(0.15);
     metrics.totalEstimatedCostUsd = 0;
     expect(canAcceptRequest(AGENT, getSettings()).ok).toBe(false);

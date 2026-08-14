@@ -20,9 +20,14 @@ const TOP_TOLERANCE = 2;
 const MIN_WIDTH_RATIO = 0.6;
 
 /**
- * Candidati noti del tema Salesforce Experience Cloud, dal più specifico al più
- * generico. Sono ipotesi: nessuno è stato confermato su una pagina reale, ed è
- * esattamente per questo che esiste il ripiego geometrico.
+ * Candidati del tema Salesforce Experience Cloud, dal più specifico al più
+ * generico.
+ *
+ * MISURATO sulla KB reale (pagina articolo, 2026-08-14): il primo candidato
+ * combacia — `[data-region-name="themeHeader"]`, altezza **64px**. Nella stessa
+ * pila esistono anche `.themeHeader forceCommunityThemeHeaderBase`, `.a11y-banner`
+ * e `.header`, tutti alti 64: qualunque di essi darebbe la stessa misura.
+ * I candidati successivi restano come rete se il tema viene ristilizzato.
  */
 const HEADER_SELECTORS = [
   '[data-region-name="themeHeader"]',
@@ -33,6 +38,9 @@ const HEADER_SELECTORS = [
   'header[role="banner"]',
 ];
 
+/** Altezza reale misurata sulla KB: è anche il fallback nel CSS. */
+export const MEASURED_KB_HEADER_HEIGHT = 64;
+
 function viewportWidth(): number {
   return window.innerWidth || 1024;
 }
@@ -40,7 +48,16 @@ function viewportWidth(): number {
 /** Una banda plausibile: attaccata in alto, larga, e di altezza da testata. */
 function isHeaderBand(el: Element): boolean {
   const rect = el.getBoundingClientRect();
-  if (rect.top > TOP_TOLERANCE || rect.top < -TOP_TOLERANCE) return false;
+  // Due modi di stare "in alto", e servono entrambi. L'header della KB reale è
+  // `position: static`, quindi scorrendo esce dal viewport (misurato: top -800
+  // dopo 800px di scroll): col solo controllo sul viewport la misura tornerebbe 0
+  // ogni volta che la sidebar si monta su una pagina già scrollata, e l'header
+  // collasserebbe al fallback. Il secondo controllo lo riconosce comunque, perché
+  // resta in cima al DOCUMENTO. Il primo serve invece a un header sticky, che
+  // resta in cima al viewport ma non a quello del documento.
+  const atViewportTop = Math.abs(rect.top) <= TOP_TOLERANCE;
+  const atDocumentTop = Math.abs(rect.top + window.scrollY) <= TOP_TOLERANCE;
+  if (!atViewportTop && !atDocumentTop) return false;
   if (rect.height < MIN_HEIGHT || rect.height > MAX_HEIGHT) return false;
   if (rect.width < viewportWidth() * MIN_WIDTH_RATIO) return false;
   // Un elemento invisibile occupa spazio nel layout ma non dipinge nulla.

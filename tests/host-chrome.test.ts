@@ -1,8 +1,10 @@
-// L'header del sito KB non è mai stato mappato (la recon ha catturato solo il
-// sottoalbero da [role="main"] in giù), quindi la misura è euristica. Questi test
-// fissano il contratto dell'euristica: cosa accetta, cosa scarta, e che senza
-// candidati ritorni 0 invece di un numero inventato — perché chi chiama usa 0 per
-// decidere di tenere il proprio default.
+// La misura dell'header del sito KB è euristica. Questi test fissano il contratto:
+// cosa accetta, cosa scarta, e che senza candidati ritorni 0 invece di un numero
+// inventato — perché chi chiama usa 0 per decidere di tenere il proprio default.
+//
+// Misurato poi sulla KB reale (pagina articolo, 2026-08-14):
+// `[data-region-name="themeHeader"]` alto 64px, `position: static` — quindi
+// scorrendo esce dal viewport. Da lì il caso "pagina già scrollata" qui sotto.
 import { afterEach, describe, expect, it } from 'vitest';
 import { findHostHeader, measureHostHeaderHeight, observeHostHeader } from '../lib/host-chrome';
 
@@ -45,8 +47,14 @@ function mount(html: string): HTMLElement {
   return document.body.firstElementChild as HTMLElement;
 }
 
+/** Simula una pagina scrollata: `scrollY` è ciò che l'euristica somma a `top`. */
+function scrollTo(y: number): void {
+  Object.defineProperty(window, 'scrollY', { value: y, configurable: true });
+}
+
 afterEach(() => {
   document.body.innerHTML = '';
+  scrollTo(0);
   delete (document as unknown as { elementsFromPoint?: unknown }).elementsFromPoint;
 });
 
@@ -76,6 +84,31 @@ describe('measureHostHeaderHeight', () => {
   it('scarta un elemento che non tocca il bordo alto', () => {
     fakeBand(mount('<div class="themeHeader"></div>'), { top: 300, height: 60 });
     expect(measureHostHeaderHeight()).toBe(0);
+  });
+
+  it('misura l’header anche su una pagina GIÀ SCROLLATA', () => {
+    // L'header della KB reale è `position: static`: dopo 800px di scroll il suo
+    // rect.top è -800 e non è più nel viewport. Ma resta in cima al DOCUMENTO, e
+    // la sua altezza è quella a cui allinearsi. Senza questo caso, una sidebar
+    // che si monta su una pagina già scrollata misurerebbe 0 e collasserebbe al
+    // fallback.
+    scrollTo(800);
+    fakeBand(mount('<div data-region-name="themeHeader"></div>'), { top: -800, height: 64 });
+    expect(measureHostHeaderHeight()).toBe(64);
+  });
+
+  it('su pagina scrollata NON confonde il contenuto con la testata', () => {
+    // Un elemento a metà articolo: né in cima al viewport né in cima al documento.
+    scrollTo(800);
+    fakeBand(mount('<div class="themeHeader"></div>'), { top: 40, height: 60 });
+    expect(measureHostHeaderHeight()).toBe(0);
+  });
+
+  it('un header sticky resta valido a pagina scrollata', () => {
+    // Caso opposto: resta a top 0 nel viewport ma non è in cima al documento.
+    scrollTo(800);
+    fakeBand(mount('<div class="themeHeader"></div>'), { top: 0, height: 56 });
+    expect(measureHostHeaderHeight()).toBe(56);
   });
 
   it('scarta un elemento troppo stretto (è un widget, non una banda)', () => {

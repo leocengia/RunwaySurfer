@@ -6,15 +6,16 @@ spiegazioni.
 
 **Da compilare al primo avvio** (queste informazioni non sono nel codice):
 
-| Voce                                    | Valore         |
-| --------------------------------------- | -------------- |
-| Macchina che ospita il servizio         | _da compilare_ |
-| Chi ha accesso amministrativo           | _da compilare_ |
-| Cartella di installazione               | _da compilare_ |
-| Cartella dei log                        | _da compilare_ |
-| Backup: dove e con che frequenza        | _da compilare_ |
-| Chi custodisce `ANTHROPIC_API_KEY`      | _da compilare_ |
-| Chi riceve le segnalazioni degli agenti | _da compilare_ |
+| Voce                                    | Valore                                                       |
+| --------------------------------------- | ------------------------------------------------------------ |
+| Macchina che ospita il servizio         | _in attesa del CED_                                          |
+| Chi ha accesso amministrativo           | _in attesa del CED_                                          |
+| Cartella di installazione               | _in attesa del CED_                                          |
+| Cartella dei log                        | _in attesa del CED_                                          |
+| Backup: dove e con che frequenza        | _in attesa del CED_                                          |
+| Chi custodisce `ANTHROPIC_API_KEY`      | _in attesa del CED_                                          |
+| Chi riceve le segnalazioni degli agenti | Leonardo Cengia — cengia.l@aviationsrl.it — +39 328 052 1769 |
+| Budget mensile concordato               | €70 (`MAX_MONTHLY_ESTIMATED_COST_EUR`)                       |
 
 ---
 
@@ -138,9 +139,11 @@ sono versionate (`PRAGMA user_version`) e si applicano da sé all'avvio.
 
 - **Provider** — deve dire `anthropic` e `Ready`. `Missing API key` significa che
   il servizio è partito in modalità finta: gli agenti ricevono risposte non reali.
-- **Cost guardrail** — spesa stimata **di oggi** (UTC) sul budget giornaliero. È
-  esattamente il numero che blocca le richieste: se la barra è piena, gli agenti
-  stanno ricevendo 429.
+- **Cost guardrail** — spesa stimata del **mese in corso** (UTC) sul budget in
+  euro. È esattamente il numero che blocca le richieste: se la barra è piena, gli
+  agenti stanno ricevendo 429 e lo resteranno **fino al primo del mese**, a meno
+  che il budget non venga alzato. La riga sotto la barra riporta anche il valore
+  in dollari e il cambio usato per la conversione.
 - **Total concurrency** — richieste in corso sul limite globale.
 - **Errori** fra i riquadri in alto — se sale, guarda **Recent requests**: la
   colonna dell'errore dice se è un problema di provider, di guardrail o di rete.
@@ -150,15 +153,25 @@ sono versionate (`PRAGMA user_version`) e si applicano da sé all'avvio.
 Scheda **Configurazione** → _Guardrail del backend_. Si applicano subito, senza
 riavvio. I due che contano:
 
-- **Daily cost USD** — riferimento: una domanda costa ~$0,02-0,09, quindi 50 ≈
-  600-1000 domande al giorno. Dieci agenti a 40 domande a testa sono ~$20.
+- **Budget mensile €** — con €70 e un costo medio di ~€0,05 per domanda sono
+  circa **1.400 domande al mese**. Su 10 agenti e 21 giorni lavorativi fanno
+  **~7 domande al giorno per agente**: è un budget stretto, e va tenuto
+  d'occhio nella prima settimana. Se il router sceglie spesso il modello
+  economico il numero raddoppia o triplica; se sceglie il più capace, si dimezza.
 - **Richieste/ora per agente** — 30 basta a una giornata pesante e ferma un ciclo
-  impazzito. Se un agente lo raggiunge spesso, prima di alzarlo guarda **Recent
-  requests**: di solito è la sidebar che ritenta, non un agente che lavora molto.
+  impazzito. Con un budget mensile stretto, però, il vincolo che si incontra
+  prima è il budget, non questo: se un agente lo raggiunge, guarda **Recent
+  requests** — di solito è la sidebar che ritenta, non un agente che lavora molto.
 
-Nota: il tetto di spesa si applica leggendo la somma reale da SQLite, quindi un
-riavvio del servizio **non** lo azzera. Se serve sbloccare subito, l'unica via è
-alzare la soglia.
+Due note sul budget:
+
+- Si applica leggendo la somma reale da SQLite, quindi un riavvio del servizio
+  **non** lo azzera. Se serve sbloccare subito, l'unica via è alzare la soglia.
+- Il confronto avviene convertendo la spesa (che il listino dei modelli esprime in
+  dollari) con un **cambio fisso**, `USD_PER_EUR` in `.env` (default 1.05). Va
+  bene per un tetto di spesa, non per la contabilità: se il cambio si muove del
+  10%, il tetto effettivo si muove del 10%. Vale la pena rivederlo una volta ogni
+  tanto.
 
 ---
 

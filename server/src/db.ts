@@ -97,7 +97,12 @@ export interface RequestHistoryInput {
 export interface SettingsRecord {
   max_concurrent_requests: number;
   max_concurrent_per_agent: number;
-  max_daily_estimated_cost_usd: number;
+  /**
+   * Budget del MESE in corso, in euro. Il listino del modello è in dollari
+   * (router.ts), quindi la spesa si accumula in USD e viene convertita al
+   * confronto con `USD_PER_EUR`: vedi canAcceptRequest.
+   */
+  max_monthly_estimated_cost_eur: number;
   /**
    * Richieste a pagamento per agente per ora. La concorrenza limita quante
    * partono INSIEME, non quante in sequenza: senza questo tetto un ciclo
@@ -115,7 +120,7 @@ export interface SettingsRecord {
 const DEFAULT_SETTINGS: SettingsRecord = {
   max_concurrent_requests: Number(process.env.MAX_CONCURRENT_REQUESTS ?? 30),
   max_concurrent_per_agent: Number(process.env.MAX_CONCURRENT_PER_AGENT ?? 2),
-  max_daily_estimated_cost_usd: Number(process.env.MAX_DAILY_ESTIMATED_COST_USD ?? 50),
+  max_monthly_estimated_cost_eur: Number(process.env.MAX_MONTHLY_ESTIMATED_COST_EUR ?? 70),
   max_requests_per_hour_per_agent: Number(process.env.MAX_REQUESTS_PER_HOUR_PER_AGENT ?? 30),
   max_request_pages: Number(process.env.MAX_REQUEST_PAGES ?? 4),
   max_request_links: Number(process.env.MAX_REQUEST_LINKS ?? 12),
@@ -301,8 +306,8 @@ export function getSettings(): SettingsRecord {
       values.max_concurrent_requests ?? DEFAULT_SETTINGS.max_concurrent_requests,
     max_concurrent_per_agent:
       values.max_concurrent_per_agent ?? DEFAULT_SETTINGS.max_concurrent_per_agent,
-    max_daily_estimated_cost_usd:
-      values.max_daily_estimated_cost_usd ?? DEFAULT_SETTINGS.max_daily_estimated_cost_usd,
+    max_monthly_estimated_cost_eur:
+      values.max_monthly_estimated_cost_eur ?? DEFAULT_SETTINGS.max_monthly_estimated_cost_eur,
     max_requests_per_hour_per_agent:
       values.max_requests_per_hour_per_agent ?? DEFAULT_SETTINGS.max_requests_per_hour_per_agent,
     max_request_pages: values.max_request_pages ?? DEFAULT_SETTINGS.max_request_pages,
@@ -633,26 +638,49 @@ export function startOfTodayIso(now = new Date()): string {
   ).toISOString();
 }
 
-/**
- * Costo stimato accumulato dall'inizio della giornata (UTC).
- *
- * È il numero che il guardrail deve applicare E che la dashboard deve mostrare.
- * Prima erano due valori diversi e nessuno dei due era "oggi": l'enforcement
- * guardava un contatore in memoria azzerato a ogni riavvio, la dashboard il
- * totale di sempre da SQLite. Con un provider a pagamento questo blocca tutti
- * per sempre oppure non scatta mai, e la dashboard non dice quale dei due.
- *
- * Fonte unica: la tabella `requests`, che sopravvive ai riavvii. `rejected` è
- * incluso solo se ha un costo (le richieste respinte hanno costo 0).
- */
-export function estimatedCostToday(now = new Date()): number {
+/** Inizio del mese corrente in UTC, in ISO. */
+export function startOfMonthIso(now = new Date()): string {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+}
+
+/** Somma dei costi stimati (USD) delle richieste create da `sinceIso` in poi. */
+function estimatedCostSince(sinceIso: string): number {
   const row = db
     .prepare(
       `SELECT COALESCE(SUM(estimated_cost_usd), 0) as cost
        FROM requests WHERE created_at >= ?`,
     )
-    .get(startOfTodayIso(now)) as { cost: number } | undefined;
+    .get(sinceIso) as { cost: number } | undefined;
   return row?.cost ?? 0;
+}
+
+/**
+ * Costo stimato (USD) di oggi. Informativo: lo mostra la dashboard accanto al
+ * mese, ma il tetto che blocca è quello mensile (vedi sotto).
+ */
+export function estimatedCostToday(now = new Date()): number {
+  return estimatedCostSince(startOfTodayIso(now));
+}
+
+/**
+ * Costo stimato (USD) dall'inizio del mese corrente (UTC).
+ *
+ * È il numero che il guardrail applica E che la dashboard mostra. Prima erano due
+ * valori diversi e nessuno dei due era un periodo definito: l'enforcement
+ * guardava un contatore in memoria azzerato a ogni riavvio, la dashboard il
+ * totale di sempre da SQLite. Con un provider a pagamento questo blocca tutti
+ * per sempre oppure non scatta mai, e la dashboard non dice quale dei due.
+ *
+ * Fonte unica: la tabella `requests`, che sopravvive ai riavvii. Le richieste
+ * respinte hanno costo 0, quindi un 429 non rende più probabile il successivo.
+ *
+ * ATTENZIONE alla retention: `pruneOldRequests` cancella lo storico oltre
+ * `retention_days` (default 90). Finché la retention resta ben sopra i 31 giorni
+ * il mese in corso è sempre integro; abbassarla sotto il mese falserebbe il
+ * tetto verso il basso, cioè renderebbe il guardrail più permissivo.
+ */
+export function estimatedCostMonthToDate(now = new Date()): number {
+  return estimatedCostSince(startOfMonthIso(now));
 }
 
 export function pruneOldRequests(retentionDays = getSettings().retention_days): number {

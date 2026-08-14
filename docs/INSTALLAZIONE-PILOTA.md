@@ -5,11 +5,14 @@ volta per macchina e richiede circa dieci minuti.
 
 **Prima di partire, procurati:**
 
-| Cosa                                  | Chi te lo dà                                         |
-| ------------------------------------- | ---------------------------------------------------- |
-| Il file `runway-surfer-extension.zip` | il referente tecnico (viene dalla CI, vedi in fondo) |
-| L'indirizzo `https://` del backend    | il referente tecnico                                 |
-| Utente e password dell'agente         | l'amministratore, dalla Control Dashboard            |
+| Cosa                                  | Chi te lo dà                                    |
+| ------------------------------------- | ----------------------------------------------- |
+| Il file `runway-surfer-extension.zip` | Leonardo Cengia (viene dalla CI, vedi in fondo) |
+| L'indirizzo `https://` del backend    | Leonardo Cengia                                 |
+| Utente e password dell'agente         | l'amministratore, dalla Control Dashboard       |
+
+**Referente per qualsiasi problema:** Leonardo Cengia —
+[cengia.l@aviationsrl.it](mailto:cengia.l@aviationsrl.it) — +39 328 052 1769.
 
 > **Un avvertimento che vale più di tutto il resto:** l'indirizzo del backend
 > deve iniziare per `https://`. Con un indirizzo `http://` l'estensione si
@@ -101,8 +104,10 @@ risolve con una riga di configurazione lato server.
 
 - **Come si apre e si chiude:** la sidebar si apre da sé sugli articoli; la `×`
   in alto la chiude e resta chiusa fino al prossimo articolo.
-- **A chi segnalare i problemi:** scrivi qui il nome e il contatto del referente
-  interno. È l'unica cosa che l'agente cercherà quando qualcosa non va.
+- **A chi segnalare i problemi:** Leonardo Cengia —
+  [cengia.l@aviationsrl.it](mailto:cengia.l@aviationsrl.it) — +39 328 052 1769.
+  È l'unica cosa che l'agente cercherà quando qualcosa non va: lasciagliela
+  scritta da qualche parte, non solo detta a voce.
 
 ---
 

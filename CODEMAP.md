@@ -381,11 +381,15 @@ Tre moduli piccoli che esistono per motivi operativi, non architetturali.
   termina il processo. Ogni handler async passa da qui, altrimenti l'error
   middleware in `app.ts` non vedrebbe nulla.
 
-Guardrail di spesa: la fonte unica è `estimatedCostToday()` in `server/src/db.ts`
-(somma da SQLite dall'inizio della giornata UTC). La applica `canAcceptRequest()`
-e la mostra la dashboard: prima erano due numeri diversi e nessuno dei due era
-"oggi". `metrics.totalEstimatedCostUsd` resta come metrica live dall'ultimo
-avvio e **non** è un guardrail.
+Guardrail di spesa: **budget mensile in euro** (`max_monthly_estimated_cost_eur`,
+default €70). La fonte unica è `estimatedCostMonthToDate()` in `server/src/db.ts`
+(somma da SQLite dall'inizio del mese UTC); `estimatedCostEurThisMonth()` in
+`metrics.ts` la converte con `USD_PER_EUR` — il listino dei modelli è in dollari,
+il budget in euro. Lo stesso valore lo applica `canAcceptRequest()` e lo mostra la
+dashboard: prima erano due numeri diversi e nessuno dei due copriva un periodo
+definito. `metrics.totalEstimatedCostUsd` resta come metrica live dall'ultimo
+avvio e **non** è un guardrail. Il cambio è fisso e documentato: va bene per un
+tetto di spesa, non per la contabilità.
 
 ## Configurazione del rilascio
 

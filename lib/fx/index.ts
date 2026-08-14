@@ -114,7 +114,7 @@ const FX_CSS = `
     top: 0;
     left: 0;
     right: var(--rs-fx-right, 0px);
-    height: var(--rs-host-header-h, 44px);
+    height: var(--rs-host-header-h, 64px);
     min-height: 44px;
     z-index: 2147483645;
     pointer-events: none;

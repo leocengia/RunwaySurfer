@@ -5,6 +5,7 @@ import { LOGO_SVG, THEME_CSS } from '../shared-assets.js';
 import { MODELS } from '../router.js';
 import {
   analyticsSummary,
+  estimatedCostMonthToDate,
   estimatedCostToday,
   getSettings,
   listRequests,
@@ -12,7 +13,8 @@ import {
   listUsers,
   sanitizeUser,
 } from '../db.js';
-import { metrics } from '../metrics.js';
+import { USD_PER_EUR } from '../config.js';
+import { estimatedCostEurThisMonth, metrics } from '../metrics.js';
 import { dashboardData } from '../status.js';
 import type { AuthContext } from '../auth.js';
 
@@ -135,6 +137,8 @@ export function renderDashboard(auth: AuthContext): string {
   };
   // Stessa funzione che applica il guardrail (metrics.canAcceptRequest): la card
   // deve mostrare il numero che blocca, non un totale storico che non c'entra.
+  const costEurThisMonth = estimatedCostEurThisMonth();
+  const costUsdThisMonth = estimatedCostMonthToDate();
   const costToday = estimatedCostToday();
   const readiness = data.aiReady ? 'Ready' : 'Missing API key';
   return `<!doctype html>
@@ -543,9 +547,9 @@ ${THEME_CSS}
       </div>
       <div class="card">
         <div class="label">Cost guardrail</div>
-        <div class="value">$${costToday.toFixed(4)} / $${settings.max_daily_estimated_cost_usd.toFixed(2)}</div>
-        <div class="meter"><i style="width:${percent(costToday, settings.max_daily_estimated_cost_usd)}%"></i></div>
-        <div class="sub">Spesa stimata di <strong>oggi</strong> (UTC) sul budget giornaliero: è lo stesso numero che blocca le richieste. Totale storico: $${summary.totals.estimatedCostUsd.toFixed(4)}.</div>
+        <div class="value">€${costEurThisMonth.toFixed(2)} / €${settings.max_monthly_estimated_cost_eur.toFixed(2)}</div>
+        <div class="meter"><i style="width:${percent(costEurThisMonth, settings.max_monthly_estimated_cost_eur)}%"></i></div>
+        <div class="sub">Spesa stimata del <strong>mese in corso</strong> (UTC) sul budget: è lo stesso numero che blocca le richieste. Oggi: $${costToday.toFixed(4)} · mese: $${costUsdThisMonth.toFixed(4)} · cambio usato: ${USD_PER_EUR} USD/EUR.</div>
       </div>
     </section>
     <section class="card" style="margin-top:12px">
@@ -678,7 +682,7 @@ ${THEME_CSS}
       <form id="settings-form" class="form-grid" style="margin-top:12px">
         <label class="form-row">Max concurrent<input name="max_concurrent_requests" type="number" value="${settings.max_concurrent_requests}" /></label>
         <label class="form-row">Per agent<input name="max_concurrent_per_agent" type="number" value="${settings.max_concurrent_per_agent}" /></label>
-        <label class="form-row">Daily cost USD<input name="max_daily_estimated_cost_usd" type="number" step="0.01" value="${settings.max_daily_estimated_cost_usd}" /></label>
+        <label class="form-row">Budget mensile €<input name="max_monthly_estimated_cost_eur" type="number" step="1" min="1" value="${settings.max_monthly_estimated_cost_eur}" /></label>
         <label class="form-row">Richieste/ora per agente<input name="max_requests_per_hour_per_agent" type="number" min="1" value="${settings.max_requests_per_hour_per_agent}" /></label>
         <label class="form-row">Max pages<input name="max_request_pages" type="number" value="${settings.max_request_pages}" /></label>
         <label class="form-row">Max links<input name="max_request_links" type="number" value="${settings.max_request_links}" /></label>

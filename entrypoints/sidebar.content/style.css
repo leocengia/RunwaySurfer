@@ -132,12 +132,13 @@
 /* --- Header --- */
 
 /* L'altezza segue la banda blu della KB, misurata a runtime e passata come
-   --rs-host-header-h (vedi lib/host-chrome.ts). Il fallback è l'altezza che il
-   contenuto produrrebbe da solo, quindi senza misura nulla peggiora. */
+   --rs-host-header-h (vedi lib/host-chrome.ts). Il fallback è 64px perché è
+   l'altezza REALE misurata sulla KB (pagina articolo, 2026-08-14): se la misura
+   non riesce, la sidebar resta comunque allineata invece di sbagliare di 8px. */
 .rs-header {
   position: relative;
   box-sizing: border-box;
-  min-height: var(--rs-host-header-h, 56px);
+  min-height: var(--rs-host-header-h, 64px);
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -354,11 +355,15 @@
 
 /* L'altezza la gestisce useAutoGrow leggendo scrollHeight: qui serve solo un
    pavimento, un tetto e nessun resize manuale (che combatterebbe con l'hook). */
+/* min-height a due righe: `useAutoGrow` dimensiona sul VALORE, e il segnaposto
+   non è un valore. Con una riga sola il placeholder d'esempio (che va a capo in
+   320px) veniva tagliato a metà dal bordo — visto sulla KB reale. Appena
+   l'agente scrive, l'auto-grow prende il comando come prima. */
 .rs-input {
   width: 100%;
   box-sizing: border-box;
   resize: none;
-  min-height: 44px;
+  min-height: 62px;
   max-height: 200px;
   flex-shrink: 0;
   overflow-y: hidden;

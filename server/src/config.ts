@@ -13,6 +13,18 @@ export const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN ?? '*';
 /** Limite difensivo sulla lunghezza della query accettata da /ask. */
 export const MAX_QUERY_CHARS = 1_000;
 
+/**
+ * Dollari per euro, usato SOLO per confrontare la spesa (che il listino esprime
+ * in USD) con il budget, che è espresso in euro.
+ *
+ * È un tasso fisso, non un cambio in tempo reale: va bene per un tetto di spesa
+ * — se il cambio si muove del 10%, il tetto effettivo si muove del 10% — e non va
+ * bene per la contabilità. Aggiornabile con la env `USD_PER_EUR` senza toccare il
+ * codice. Il default è volutamente basso: sottostimando il valore dell'euro il
+ * guardrail scatta un po' PRIMA, non dopo.
+ */
+export const USD_PER_EUR = Number(process.env.USD_PER_EUR ?? 1.05);
+
 /** Quante richieste recenti tenere nelle metriche live in memoria. */
 export const RECENT_REQUEST_LIMIT = 25;
 
