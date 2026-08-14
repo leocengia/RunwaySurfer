@@ -8,6 +8,8 @@ import {
   estimatedCostMonthToDate,
   estimatedCostToday,
   getSettings,
+  listFeedback,
+  listFlaggedRequests,
   listRequests,
   listTeams,
   listUsers,
@@ -120,6 +122,51 @@ function recentRows(): string {
     .join('');
 }
 
+/** 👍/👎 come pill leggibile anche in bianco e nero, non solo come emoji. */
+function ratingPill(rating: string): string {
+  return rating === 'up'
+    ? '<span class="pill ok-bg">👍 utile</span>'
+    : '<span class="pill warn-bg">👎 non utile</span>';
+}
+
+function feedbackRows(): string {
+  const rows = listFeedback({ limit: 30 });
+  if (!rows.length) {
+    return '<tr><td colspan="6">Nessun feedback ancora ricevuto</td></tr>';
+  }
+  return rows
+    .map(
+      (f) =>
+        `<tr><td>${escapeHtml(f.created_at.slice(0, 16).replace('T', ' '))}</td><td>${escapeHtml(
+          f.agent_id,
+        )}</td><td>${ratingPill(f.rating)}</td><td>${escapeHtml(f.query_preview ?? '—')}</td><td>${escapeHtml(
+          f.comment ?? '—',
+        )}</td><td>${escapeHtml(f.model ?? '—')}</td></tr>`,
+    )
+    .join('');
+}
+
+function flaggedRows(): string {
+  const rows = listFlaggedRequests({ limit: 30 });
+  if (!rows.length) {
+    return '<tr><td colspan="6">Nessuna richiesta segnalata</td></tr>';
+  }
+  return rows
+    .map((r) => {
+      const tipo =
+        r.flag === 'guasto'
+          ? '<span class="pill warn-bg">guasto</span>'
+          : '<span class="pill warn-bg">senza fonti</span>';
+      const detail = r.flag === 'guasto' ? (r.error ?? r.status) : `${r.pages_count} pagine lette`;
+      return `<tr><td>${escapeHtml(r.created_at.slice(0, 16).replace('T', ' '))}</td><td>${escapeHtml(
+        r.agent_id,
+      )}</td><td>${tipo}</td><td>${escapeHtml(r.query_preview)}</td><td>${escapeHtml(
+        r.model,
+      )}</td><td>${escapeHtml(detail)}</td></tr>`;
+    })
+    .join('');
+}
+
 export function renderDashboard(auth: AuthContext): string {
   const isAdmin = auth.user.role === 'admin';
   const data = dashboardData();
@@ -166,7 +213,7 @@ ${THEME_CSS}
       position: sticky;
       top: 0;
       z-index: 5;
-      padding: 22px 28px 0;
+      padding: 16px 28px;
       color: #fff;
       background: var(--rs-glass-primary);
       -webkit-backdrop-filter: var(--rs-glass-blur);
@@ -175,19 +222,21 @@ ${THEME_CSS}
       box-shadow: var(--rs-glass-sheen);
     }
 
-    /* --- Schede: diagnostica, utenti, configurazione --- */
+    /* --- Schede: in riga col marchio e con l'utente, non su una riga propria.
+       Non più "linguette" appoggiate al bordo giallo: in mezzo all'header sarebbe
+       una metafora sbagliata, quindi sono pillole. --- */
     .tabs {
-      max-width: 1100px;
-      margin: 18px auto 0;
       display: flex;
       gap: 4px;
       flex-wrap: wrap;
+      justify-content: center;
+      flex: 1 1 auto;
+      min-width: 0;
     }
     .tabs button {
       border: 1px solid transparent;
-      border-bottom: 0;
-      border-radius: var(--rs-r-sm) var(--rs-r-sm) 0 0;
-      padding: 9px 16px;
+      border-radius: var(--rs-r-pill);
+      padding: 8px 14px;
       background: rgba(255, 255, 255, 0.12);
       color: #fff;
       font-size: 13px;
@@ -211,8 +260,14 @@ ${THEME_CSS}
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
+      gap: 16px;
       flex-wrap: wrap;
+    }
+    /* Sotto i 1000px le tre zone non stanno in riga: le schede vanno a capo
+       occupando tutta la larghezza, invece di comprimersi fino a diventare
+       illeggibili. */
+    @media (max-width: 1000px) {
+      .tabs { order: 3; flex-basis: 100%; justify-content: flex-start; }
     }
     .brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
     .brand .mark {
@@ -259,6 +314,10 @@ ${THEME_CSS}
     .warn { color: var(--rs-warn); }
     .wide { grid-column: 1 / -1; }
     .split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+    /* Colonna di card impilate dentro un .split: due operazioni brevi accanto a
+       un form alto, invece di mezza riga vuota. align-content:start le tiene in
+       cima invece di stirarle per pareggiare l'altra colonna. */
+    .stack { display: grid; gap: 12px; align-content: start; }
     .meter {
       height: 10px;
       overflow: hidden;
@@ -513,21 +572,25 @@ ${THEME_CSS}
 </head>
 <body>
   <header>
+    <!-- Marchio, schede e utente sulla STESSA riga: le schede erano sotto, su una
+         riga propria, e con quattro voci l'intestazione occupava troppa altezza
+         verticale prima di arrivare ai dati. -->
     <div class="header-inner">
       <div class="brand">
         <img class="mark" src="${LOGO_MARK}" alt="" aria-hidden="true" />
         <h1>Runway Surfer<small>Control Dashboard</small></h1>
       </div>
+      <nav class="tabs" role="tablist" aria-label="Sezioni della dashboard">
+        <button type="button" role="tab" id="tab-diagnostica" data-tab="diagnostica" aria-controls="panel-diagnostica" aria-selected="true">Diagnostica</button>
+        <button type="button" role="tab" id="tab-feedback" data-tab="feedback" aria-controls="panel-feedback" aria-selected="false">Feedback</button>
+        <button type="button" role="tab" id="tab-utenti" data-tab="utenti" aria-controls="panel-utenti" aria-selected="false">Utenti</button>
+        <button type="button" role="tab" id="tab-configurazione" data-tab="configurazione" aria-controls="panel-configurazione" aria-selected="false">Configurazione</button>
+      </nav>
       <div class="whoami">
         <span>${escapeHtml(auth.user.name || auth.user.external_id)} <span class="role">(${escapeHtml(auth.user.role)})</span></span>
         <button id="logout-btn" type="button">Logout</button>
       </div>
     </div>
-    <nav class="tabs" role="tablist" aria-label="Sezioni della dashboard">
-      <button type="button" role="tab" id="tab-diagnostica" data-tab="diagnostica" aria-controls="panel-diagnostica" aria-selected="true">Diagnostica</button>
-      <button type="button" role="tab" id="tab-utenti" data-tab="utenti" aria-controls="panel-utenti" aria-selected="false">Utenti</button>
-      <button type="button" role="tab" id="tab-configurazione" data-tab="configurazione" aria-controls="panel-configurazione" aria-selected="false">Configurazione</button>
-    </nav>
   </header>
   <main>
   <div role="tabpanel" id="panel-diagnostica" aria-labelledby="tab-diagnostica">
@@ -621,6 +684,26 @@ ${THEME_CSS}
     </section>
   </div>
 
+  <div role="tabpanel" id="panel-feedback" aria-labelledby="tab-feedback" hidden>
+    <section class="card">
+      <div class="panel-head">
+        <div class="label">Feedback degli agenti</div>
+        <button id="feedback-refresh" type="button">Aggiorna</button>
+      </div>
+      <p style="color:var(--rs-muted);font-size:12.5px;margin:8px 0 0">Arriva dal pulsante <strong>Feedback</strong> nella sidebar. I commenti sono già ripuliti dai dati cliente nel browser dell'agente, prima dell'invio.</p>
+      <div class="table-wrap" style="margin-top:10px">
+        <table><thead><tr><th>Quando</th><th>Agente</th><th>Giudizio</th><th>Domanda</th><th>Commento</th><th>Modello</th></tr></thead><tbody id="feedback-body">${feedbackRows()}</tbody></table>
+      </div>
+    </section>
+    <section class="card" style="margin-top:12px">
+      <div class="label">Segnalate dal sistema</div>
+      <p style="color:var(--rs-muted);font-size:12.5px;margin:8px 0 0">Due categorie: <strong>guasto</strong> (errore del provider, timeout, richiesta respinta da un guardrail) e <strong>senza fonti</strong> — il modello ha risposto senza citare alcun articolo, che è il modo in cui dice di non aver trovato la risposta. La seconda è il segnale più utile per capire quali buchi ha la Knowledge Base.</p>
+      <div class="table-wrap" style="margin-top:10px">
+        <table><thead><tr><th>Quando</th><th>Agente</th><th>Tipo</th><th>Domanda</th><th>Modello</th><th>Dettaglio</th></tr></thead><tbody id="flagged-body">${flaggedRows()}</tbody></table>
+      </div>
+    </section>
+  </div>
+
   <div role="tabpanel" id="panel-utenti" aria-labelledby="tab-utenti" hidden>
     <section class="card">
       <div class="label">Utenti (<span id="users-count">${listUsers().length}</span>)</div>
@@ -636,14 +719,11 @@ ${THEME_CSS}
     </section>
     ${
       isAdmin
-        ? `<section class="split">
-      <div class="card">
-        <div class="label">Create team</div>
-        <form id="team-form" class="form-grid">
-          <label class="form-row">Name<input name="name" placeholder="T1 Support" required /></label>
-          <div class="form-row"><span>&nbsp;</span><button type="submit">Create team</button></div>
-        </form>
-      </div>
+        ? // Create user a SINISTRA (è il form alto, sette campi), e le due
+          // operazioni brevi impilate a destra. Prima "Create team" occupava
+          // mezza riga per un campo solo, e "Reset password" stava in un .split a
+          // due colonne lasciando l'altra metà vuota.
+          `<section class="split">
       <div class="card">
         <div class="label">Create user</div>
         <form id="user-form" class="form-grid">
@@ -657,18 +737,25 @@ ${THEME_CSS}
           <div class="form-row"><span>&nbsp;</span><button type="submit">Create user</button></div>
         </form>
         <p style="font-size:12px;color:var(--rs-muted);margin:10px 0 0">L'utente dovrà cambiare la password temporanea al primo login.
-        Gli utenti creati prima dell'introduzione del login non hanno password: usa il reset qui sotto per abilitarli.</p>
+        Gli utenti creati prima dell'introduzione del login non hanno password: usa il reset qui a fianco per abilitarli.</p>
       </div>
-    </section>
-    <section class="split">
-      <div class="card">
-        <div class="label">Reset user password</div>
-        <form id="reset-password-form" class="form-grid">
-          <label class="form-row">User ID<input name="userId" type="number" min="1" required /></label>
-          <label class="form-row">New temporary password<input name="tempPassword" type="password" minlength="8" required autocomplete="new-password" /></label>
-          <div class="form-row"><span>&nbsp;</span><button type="submit">Reset password</button></div>
-        </form>
-        <p style="font-size:12px;color:var(--rs-muted);margin:10px 0 0">Revoca tutte le sessioni attive dell'utente e forza il cambio password al prossimo login.</p>
+      <div class="stack">
+        <div class="card">
+          <div class="label">Create team</div>
+          <form id="team-form" class="form-grid">
+            <label class="form-row">Name<input name="name" placeholder="T1 Support" required /></label>
+            <div class="form-row"><span>&nbsp;</span><button type="submit">Create team</button></div>
+          </form>
+        </div>
+        <div class="card">
+          <div class="label">Reset user password</div>
+          <form id="reset-password-form" class="form-grid">
+            <label class="form-row">User ID<input name="userId" type="number" min="1" required /></label>
+            <label class="form-row">New temporary password<input name="tempPassword" type="password" minlength="8" required autocomplete="new-password" /></label>
+            <div class="form-row"><span>&nbsp;</span><button type="submit">Reset password</button></div>
+          </form>
+          <p style="font-size:12px;color:var(--rs-muted);margin:10px 0 0">Revoca tutte le sessioni attive dell'utente e forza il cambio password al prossimo login.</p>
+        </div>
       </div>
     </section>`
         : `<section class="card" style="margin-top:12px">
@@ -986,6 +1073,42 @@ ${THEME_CSS}
         document.getElementById('teams-count').textContent = String(teams.length);
       } catch (e) { /* le tabelle restano come erano */ }
     }
+
+    /**
+     * Ricarica feedback e segnalazioni. Una sola chiamata per entrambe: sono la
+     * stessa domanda ("cosa è andato storto?") vista da due lati, e mostrarne una
+     * aggiornata accanto a una vecchia sarebbe fuorviante.
+     */
+    async function refreshFeedback() {
+      try {
+        const res = await fetch('/feedback?limit=30');
+        if (!res.ok) return;
+        const body = await res.json();
+        const items = body.feedback || [];
+        const flagged = body.flagged || [];
+        const when = (v) => esc(String(v).slice(0, 16).replace('T', ' '));
+        const vote = (r) => r === 'up'
+          ? '<span class="pill ok-bg">👍 utile</span>'
+          : '<span class="pill warn-bg">👎 non utile</span>';
+
+        document.getElementById('feedback-body').innerHTML = items.length
+          ? items.map((f) =>
+              '<tr><td>' + when(f.created_at) + '</td><td>' + esc(f.agent_id) + '</td><td>' +
+              vote(f.rating) + '</td><td>' + esc(f.query_preview || '—') + '</td><td>' +
+              esc(f.comment || '—') + '</td><td>' + esc(f.model || '—') + '</td></tr>').join('')
+          : '<tr><td colspan="6">Nessun feedback ancora ricevuto</td></tr>';
+
+        document.getElementById('flagged-body').innerHTML = flagged.length
+          ? flagged.map((r) =>
+              '<tr><td>' + when(r.created_at) + '</td><td>' + esc(r.agent_id) + '</td><td>' +
+              '<span class="pill warn-bg">' + (r.flag === 'guasto' ? 'guasto' : 'senza fonti') + '</span>' +
+              '</td><td>' + esc(r.query_preview) + '</td><td>' + esc(r.model) + '</td><td>' +
+              esc(r.flag === 'guasto' ? (r.error || r.status) : (r.pages_count + ' pagine lette')) +
+              '</td></tr>').join('')
+          : '<tr><td colspan="6">Nessuna richiesta segnalata</td></tr>';
+      } catch (e) { /* le tabelle restano come erano */ }
+    }
+    document.getElementById('feedback-refresh')?.addEventListener('click', () => { void refreshFeedback(); });
 
     /** Submit con stato, toast, reset del form e refresh di ciò che è cambiato. */
     function wireForm(id, handler, options) {

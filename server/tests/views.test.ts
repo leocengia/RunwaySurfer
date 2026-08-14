@@ -147,29 +147,56 @@ describe('renderDashboard · schede', () => {
     lead = renderDashboard(authContext('team_lead'));
   });
 
-  it('espone tre schede con i ruoli ARIA corretti', () => {
+  it('espone quattro schede con i ruoli ARIA corretti', () => {
     // Solo il markup: lo script contiene querySelectorAll('[role="tab"]').
+    // Attenzione: /role="tab"/ matcha anche role="tablist", da cui il +1.
     const markup = admin.slice(0, admin.indexOf('<script>'));
     expect(markup).toContain('role="tablist"');
-    expect(markup.match(/role="tab"/g)).toHaveLength(3);
-    expect(markup.match(/role="tabpanel"/g)).toHaveLength(3);
-    for (const name of ['diagnostica', 'utenti', 'configurazione']) {
+    expect(markup.match(/role="tab"(?!list)/g)).toHaveLength(4);
+    expect(markup.match(/role="tabpanel"/g)).toHaveLength(4);
+    for (const name of ['diagnostica', 'feedback', 'utenti', 'configurazione']) {
       expect(markup).toContain(`data-tab="${name}"`);
       expect(markup).toContain(`id="panel-${name}"`);
     }
   });
 
+  it('le schede stanno in riga con marchio e utente, non su una riga propria', () => {
+    // La tablist è dentro .header-inner: con quattro voci una riga a sé sprecava
+    // altezza prima di arrivare ai dati.
+    const headerInner = admin.slice(
+      admin.indexOf('<div class="header-inner">'),
+      admin.indexOf('</header>'),
+    );
+    expect(headerInner).toContain('role="tablist"');
+    expect(headerInner).toContain('class="whoami"');
+  });
+
   it('apre su Diagnostica e tiene nascoste le altre', () => {
     expect(admin).toContain('id="tab-diagnostica" data-tab="diagnostica"');
     expect(admin).toMatch(/id="panel-diagnostica"[^>]*>/);
+    expect(admin).toMatch(/id="panel-feedback"[^>]*hidden/);
     expect(admin).toMatch(/id="panel-utenti"[^>]*hidden/);
     expect(admin).toMatch(/id="panel-configurazione"[^>]*hidden/);
+  });
+
+  it('la scheda Feedback mostra i feedback E le richieste segnalate', () => {
+    const panel = admin.slice(
+      admin.indexOf('id="panel-feedback"'),
+      admin.indexOf('id="panel-utenti"'),
+    );
+    expect(panel).toContain('Feedback degli agenti');
+    expect(panel).toContain('Segnalate dal sistema');
+    expect(panel).toContain('id="feedback-body"');
+    expect(panel).toContain('id="flagged-body"');
+    // Spiega le due categorie del flag automatico: senza, "senza fonti" non si
+    // capisce e la tabella non viene usata.
+    expect(panel).toContain('senza citare alcun articolo');
   });
 
   it('la diagnostica resta nella prima scheda', () => {
     const panel = admin.slice(
       admin.indexOf('id="panel-diagnostica"'),
-      admin.indexOf('id="panel-utenti"'),
+      admin.indexOf('id="panel-feedback"'),
     );
     for (const label of [
       'Provider',

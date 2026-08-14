@@ -21,15 +21,15 @@ export function ThreadView({ turns, pages, contextTurns }: ThreadViewProps) {
   const droppedCount = contextTurns ? Math.max(0, turns.length - contextTurns) : 0;
 
   return (
-    <section className="rs-thread" aria-label="Turni precedenti della conversazione">
+    <section className="rs-thread" aria-label="Domande precedenti della conversazione">
       {turns.map((turn, i) => (
         <details key={i} className="rs-turn">
           <summary>
             <span className="rs-turn-index">{i + 1}</span>
             <span className="rs-turn-query">{turn.query}</span>
             {i < droppedCount && (
-              <span className="rs-turn-stale" title="Fuori dal contesto rimandato al modello">
-                fuori contesto
+              <span className="rs-turn-stale" title="Fuori dalla memoria rimandata al modello">
+                fuori memoria
               </span>
             )}
           </summary>

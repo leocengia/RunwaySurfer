@@ -336,6 +336,136 @@
   font-weight: 600;
 }
 
+/* Il footer ha tre elementi, non due: nome a sinistra, azioni a destra. */
+.rs-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Azione secondaria: leggibile ma senza competere col pulsante di ricerca. */
+.rs-footer-link {
+  border: 1px solid transparent;
+  border-radius: var(--rs-r-sm);
+  padding: 4px 8px;
+  background: none;
+  color: var(--rs-primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background var(--rs-dur) var(--rs-ease),
+    border-color var(--rs-dur) var(--rs-ease);
+}
+
+.rs-footer-link:hover,
+.rs-footer-link[aria-expanded='true'] {
+  border-color: var(--rs-yellow-line);
+  background: var(--rs-yellow-soft);
+}
+
+.rs-footer-link:focus-visible {
+  outline: none;
+  box-shadow: var(--rs-focus-ring);
+}
+
+/* --- Pannello del feedback ---
+   Sta FUORI da .rs-body, sopra il footer: così non scorre via con una risposta
+   lunga proprio mentre l'agente vuole commentarla. */
+
+.rs-feedback {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--rs-glass-raised-border);
+  background: var(--rs-glass-raised);
+  -webkit-backdrop-filter: var(--rs-glass-blur);
+  backdrop-filter: var(--rs-glass-blur);
+  box-shadow: 0 -6px 18px rgba(0, 0, 153, 0.1);
+}
+
+.rs-feedback-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--rs-primary);
+  font-size: 13px;
+}
+
+.rs-feedback-close {
+  border: none;
+  background: none;
+  color: var(--rs-muted);
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.rs-feedback-close:hover {
+  color: var(--rs-primary);
+}
+
+.rs-feedback-ref {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--rs-muted);
+}
+
+.rs-feedback-ref em {
+  color: var(--rs-navy);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.rs-feedback-rating {
+  display: flex;
+  gap: 6px;
+}
+
+/* Bersagli grandi: due click e via, che è l'unico modo perché venga usato. */
+.rs-feedback-vote {
+  flex: 1 1 0;
+  padding: 9px 10px;
+  border: 1px solid var(--rs-line);
+  border-radius: var(--rs-r-md);
+  background: #fff;
+  color: var(--rs-navy);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    border-color var(--rs-dur) var(--rs-ease),
+    background var(--rs-dur) var(--rs-ease),
+    transform var(--rs-dur) var(--rs-ease);
+}
+
+.rs-feedback-vote:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--rs-yellow-line);
+}
+
+.rs-feedback-vote.is-on {
+  border-color: var(--rs-primary);
+  background: var(--rs-primary-soft);
+  box-shadow: var(--rs-focus-ring);
+}
+
+.rs-feedback-vote:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.rs-feedback-vote:focus-visible {
+  outline: none;
+  box-shadow: var(--rs-focus-ring);
+}
+
 .rs-provider-note {
   padding: 9px 10px;
   border: 1px solid rgba(216, 173, 0, 0.55);
@@ -395,12 +525,12 @@
   flex-wrap: wrap;
   gap: 4px;
   padding: 4px;
-  border: 1px solid var(--rs-glass-border);
+  border: 1px solid var(--rs-glass-raised-border);
   border-radius: var(--rs-r-md);
-  background: var(--rs-glass);
+  background: var(--rs-glass-raised);
   -webkit-backdrop-filter: var(--rs-glass-blur);
   backdrop-filter: var(--rs-glass-blur);
-  box-shadow: var(--rs-glass-edge);
+  box-shadow: var(--rs-glass-edge), var(--rs-glass-raised-shadow);
 }
 
 /* `flex: 1 1 auto` invece di una base fissa: "Analisi Articolo" è più larga
@@ -753,13 +883,13 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 8px 10px;
-  border: 1px solid var(--rs-glass-border);
+  padding: 9px 11px;
+  border: 1px solid var(--rs-glass-raised-border);
   border-radius: var(--rs-r-md);
-  background: var(--rs-glass);
+  background: var(--rs-glass-raised);
   -webkit-backdrop-filter: var(--rs-glass-blur);
   backdrop-filter: var(--rs-glass-blur);
-  box-shadow: var(--rs-glass-edge);
+  box-shadow: var(--rs-glass-edge), var(--rs-glass-raised-shadow);
   color: var(--rs-primary);
   font-size: 12px;
   font-weight: 700;
@@ -1068,7 +1198,10 @@
   font-weight: 700;
 }
 
-/* Fonti: solo il titolo, come chip di vetro cliccabile. */
+/* Fonti: solo il titolo, come chip di vetro cliccabile.
+   I titoli degli articoli KB sono lunghi ("Flight | Policies | ASC—Global—I-L"),
+   quindi il chip DEVE poter andare a capo: prima veniva troncato con i puntini e
+   l'agente non riusciva a distinguere due fonti che iniziano allo stesso modo. */
 .rs-sources {
   display: flex;
   flex-wrap: wrap;
@@ -1078,14 +1211,27 @@
   list-style: none;
 }
 
+/* Senza `min-width: 0` un <li> flex resta larghezza min-content: un titolo con
+   una parola lunga sfondava il pannello. `flex-basis: 100%` mette una fonte per
+   riga, che a 360px è l'unico modo di leggerle tutte. */
+.rs-sources > li {
+  min-width: 0;
+  max-width: 100%;
+  flex: 1 1 100%;
+}
+
 .rs-source {
   display: inline-flex;
-  align-items: center;
+  /* flex-start e non center: con due righe di titolo la freccia deve restare in
+     alto, allineata alla prima riga, non fluttuare a metà. */
+  align-items: flex-start;
   gap: 6px;
   max-width: 100%;
-  padding: 5px 10px;
+  padding: 6px 10px;
   border: 1px solid var(--rs-glass-border);
-  border-radius: var(--rs-r-pill);
+  /* Non più a pillola: un raggio da 999px su un chip a due righe fa una capsula
+     deforme. */
+  border-radius: var(--rs-r-md);
   background: var(--rs-glass-strong);
   -webkit-backdrop-filter: var(--rs-glass-blur);
   backdrop-filter: var(--rs-glass-blur);
@@ -1108,10 +1254,13 @@
     0 6px 16px rgba(0, 0, 153, 0.16);
 }
 
+/* `overflow-wrap: anywhere` e non `break-word`: i titoli KB contengono sequenze
+   senza spazi ("ASC—Global—I-L") che `break-word` non spezzerebbe. */
 .rs-source-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
 }
 
 /* Freccia "apre in una nuova scheda", disegnata in CSS. */
@@ -1120,6 +1269,8 @@
   flex-shrink: 0;
   width: 7px;
   height: 7px;
+  /* Allineata alla prima riga del titolo invece che al centro del chip. */
+  margin-top: 4px;
   border: solid currentColor;
   border-width: 1.6px 1.6px 0 0;
   transform: rotate(45deg);
@@ -1290,6 +1441,7 @@
   .rs-source,
   .rs-segmented,
   .rs-footer,
+  .rs-feedback,
   .rs-turn,
   .rs-switch-row,
   .rs-form {
@@ -1344,6 +1496,7 @@
   .rs-source,
   .rs-segmented,
   .rs-footer,
+  .rs-feedback,
   .rs-turn,
   .rs-switch-row,
   .rs-form,

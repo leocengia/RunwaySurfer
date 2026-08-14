@@ -2,7 +2,7 @@
 // richieste, analytics, settings, manutenzione e stato del proxy.
 import { Router, type Request, type Response } from 'express';
 import { asyncRoute } from '../http.js';
-import { truncate } from '../util.js';
+import { newRequestId, truncate } from '../util.js';
 import { PORT, ALLOWED_ORIGIN } from '../config.js';
 import { getProvider, ANTHROPIC_EGRESS } from '../provider/index.js';
 import { metrics } from '../metrics.js';
@@ -13,6 +13,9 @@ import {
   createUser,
   getRequest,
   getSettings,
+  insertFeedback,
+  listFeedback,
+  listFlaggedRequests,
   listRequests,
   listTeams,
   listUsers,
@@ -23,7 +26,13 @@ import {
   updateUser,
   type SettingsRecord,
 } from '../db.js';
-import { hashPassword, requireAuth, revokeAllUserSessions, validateNewPassword } from '../auth.js';
+import {
+  hashPassword,
+  requireAuth,
+  revokeAllUserSessions,
+  validateNewPassword,
+  type AuthContext,
+} from '../auth.js';
 
 export const adminRoutes = Router();
 
@@ -200,6 +209,53 @@ adminRoutes.get('/requests/:id', requireAuth('team_lead'), (req, res) => {
 
 adminRoutes.get('/analytics/summary', requireAuth('team_lead'), (_req, res) => {
   res.json(analyticsSummary());
+});
+
+/** Quanto di un commento libero si conserva. Un paragrafo basta; un romanzo no. */
+const MAX_FEEDBACK_COMMENT_CHARS = 600;
+
+/**
+ * Feedback di un agente su una risposta. `requireAuth('agent')` accetta sia il
+ * Bearer della sidebar sia il cookie della dashboard, quindi non serve una route
+ * separata per i due contesti.
+ *
+ * PRIVACY: il commento arriva GIÀ passato da scrubPii nel browser (lib/scrub.ts).
+ * Qui viene solo troncato, e NON finisce nei log — come per la query.
+ */
+adminRoutes.post('/feedback', requireAuth('agent'), (req, res) => {
+  const { user } = res.locals.auth as AuthContext;
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const rating = body.rating;
+  if (rating !== 'up' && rating !== 'down') {
+    res.status(400).json({ error: "invalid request: rating must be 'up' or 'down'" });
+    return;
+  }
+  const id = newRequestId();
+  insertFeedback({
+    id,
+    // Un feedback senza richiesta è legittimo: è la segnalazione generica.
+    requestId: typeof body.requestId === 'string' ? truncate(body.requestId, 64) : null,
+    userId: user.id,
+    agentId: user.external_id,
+    rating,
+    comment:
+      typeof body.comment === 'string' ? truncate(body.comment, MAX_FEEDBACK_COMMENT_CHARS) : null,
+    queryPreview: typeof body.query === 'string' ? truncate(body.query, 240) : null,
+    model: typeof body.model === 'string' ? truncate(body.model, 60) : null,
+    mode: typeof body.mode === 'string' ? truncate(body.mode, 20) : null,
+  });
+  // Nel log solo l'esito, mai il commento.
+  console.log(`[feedback:${id}] agent=${user.external_id} rating=${rating}`);
+  res.status(201).json({ ok: true, id });
+});
+
+/** Feedback degli agenti + richieste che il sistema segnala da sé. */
+adminRoutes.get('/feedback', requireAuth('team_lead'), (req, res) => {
+  const limit = Number((req.query.limit as string | undefined) ?? 50);
+  res.json({
+    feedback: listFeedback({ limit }),
+    flagged: listFlaggedRequests({ limit }),
+  });
 });
 
 adminRoutes.get('/settings', requireAuth('team_lead'), (_req, res) => {

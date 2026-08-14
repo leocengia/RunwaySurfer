@@ -143,3 +143,48 @@ export async function rankCandidates(
     return null;
   }
 }
+
+export interface FeedbackPayload {
+  rating: 'up' | 'down';
+  /** Id della richiesta cui si riferisce; assente per una segnalazione generica. */
+  requestId?: string;
+  /** Commento libero, GIÀ passato da scrubPii: vedi lib/scrub.ts. */
+  comment?: string;
+  query?: string;
+  model?: string;
+  mode?: string;
+}
+
+/** Scadenza corta: il feedback è un gesto secondario, non deve far aspettare. */
+const FEEDBACK_TIMEOUT_MS = 8_000;
+
+/**
+ * Invia un feedback dell'agente (POST /feedback).
+ *
+ * Ritorna `true` solo se il backend ha registrato. Non lancia mai: un feedback
+ * che non parte è un peccato, non un errore che deve interrompere il lavoro —
+ * l'agente è al telefono con un cliente.
+ */
+export async function sendFeedback(
+  proxyUrl: string,
+  payload: FeedbackPayload,
+  token?: string | null,
+): Promise<boolean> {
+  const deadline = withTimeout(FEEDBACK_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${proxyUrl.replace(/\/$/, '')}/feedback`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(payload),
+      signal: deadline.signal,
+    });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    deadline.dispose();
+  }
+}

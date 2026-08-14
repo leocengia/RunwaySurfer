@@ -2,6 +2,7 @@
 // modello, stima token/costo, guardrail e streaming SSE dell'outcome.
 import { Router, type Request, type Response } from 'express';
 import { asyncRoute } from '../http.js';
+import { countCitedSources } from '../outcome-audit.js';
 import type { AskRequest, AskEvent, AiPlan, AskTurn, ScheduleChangeRequest } from '../types.js';
 import { chooseModel, estimateTokens, estimateCostUsd } from '../router.js';
 import {
@@ -204,7 +205,12 @@ const handleAsk = async (req: Request, res: Response): Promise<void> => {
   const estimatedOutputTokens = Math.max(ASSUMED_OUTPUT_TOKENS, maxOutputTokens(generateInput));
   const estimatedCostUsd = estimateCostUsd(spec, estimatedInputTokens, estimatedOutputTokens);
 
+  // Per-request usage log (cost visibility for the CED / FinOps).
+  // Generato PRIMA del plan: l'id viaggia nel plan fino alla sidebar, che lo
+  // riusa per legare un eventuale feedback dell'agente a questa richiesta.
+  const requestId = newRequestId();
   const plan: AiPlan = {
+    requestId,
     model: spec.id,
     routingReason: reason,
     estimatedInputTokens,
@@ -216,8 +222,6 @@ const handleAsk = async (req: Request, res: Response): Promise<void> => {
     historyTurnsUsed: request.history?.length ?? 0,
   };
 
-  // Per-request usage log (cost visibility for the CED / FinOps).
-  const requestId = newRequestId();
   const startedAt = Date.now();
   // Increment the live counter and release it in the finally below, so a throw
   // during SSE setup (e.g. flushHeaders/write on an already-closed socket) can
@@ -282,10 +286,18 @@ const handleAsk = async (req: Request, res: Response): Promise<void> => {
     };
 
     send({ type: 'plan', plan });
+    // La risposta si accumula per la SOLA durata dello stream, per contare le
+    // fonti citate (vedi outcome-audit.ts). In tabella finisce il numero, non il
+    // testo: la riga di audit resta privacy-minimised. Il tetto è 1400 token,
+    // quindi questa stringa non supera i ~6 KB.
+    let answer = '';
     try {
       const { usage } = await provider.streamOutcome(
         { ...request, model: spec.id },
-        (text) => send({ type: 'delta', text }),
+        (text) => {
+          answer += text;
+          send({ type: 'delta', text });
+        },
         ac.signal,
       );
       if (ac.signal.aborted) {
@@ -312,6 +324,9 @@ const handleAsk = async (req: Request, res: Response): Promise<void> => {
           // Token reali dal provider (mock: undefined → resta solo la stima).
           actualInputTokens: usage?.inputTokens ?? null,
           actualOutputTokens: usage?.outputTokens ?? null,
+          // 0 qui significa «il modello non ha citato nessun articolo»: è così che
+          // dice di non aver trovato la risposta, e la dashboard lo segnala.
+          citedSources: countCitedSources(answer),
         });
       }
     } catch (e) {

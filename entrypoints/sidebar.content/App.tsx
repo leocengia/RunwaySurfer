@@ -17,7 +17,7 @@ import {
 import { readIndexOnlyArticles } from '../../lib/nav';
 import { isOffTopic } from '../../lib/off-topic';
 import { linkIdentity } from '../../lib/site-profile';
-import { streamAsk, rankCandidates, BACKEND_UNREACHABLE } from '../../lib/client';
+import { streamAsk, rankCandidates, sendFeedback, BACKEND_UNREACHABLE } from '../../lib/client';
 import { redactionNotice, scrubPii } from '../../lib/scrub';
 import { getProxyUrl } from '../../lib/messaging';
 import { clearToken, fetchMe, getToken, logout, type AuthUser } from '../../lib/auth';
@@ -42,6 +42,7 @@ import {
   ScheduleChangeForm,
   type FormDraft,
 } from './ScheduleChangeForm';
+import { FeedbackPanel } from './FeedbackPanel';
 import { ThreadView } from './ThreadView';
 import { TourTimeline } from './TourTimeline';
 import { useAutoGrow } from './useAutoGrow';
@@ -61,7 +62,7 @@ type AuthPhase = 'checking' | 'offline' | 'loggedOut' | 'mustChange' | 'in';
 const MODES: ReadonlyArray<{ value: Mode; label: string; hint: string }> = [
   { value: 'visual', label: 'Immersiva', hint: 'Tour visivo automatico sulle pagine collegate' },
   { value: 'follow', label: 'Background', hint: 'Legge le pagine collegate in background' },
-  { value: 'single', label: 'Analisi Articolo', hint: 'Legge solo la pagina corrente' },
+  { value: 'single', label: 'Articolo', hint: 'Legge solo la pagina corrente' },
 ];
 
 /** Override manuale dell'altezza banda, se l'euristica sbaglia sulla KB reale.
@@ -124,10 +125,10 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   const [me, setMe] = useState<AuthUser | null>(null);
   const [query, setQuery] = useState('');
-  // Default single-page: sulla KB Salesforce (client-rendered) le altre modalità
-  // non possono leggere altre pagine via fetch (vedi hasRenderedContent), e la
-  // pagina corrente è la più economica in token.
-  const [mode, setMode] = useState<Mode>('single');
+  // Default Immersiva: è la modalità che mostra all'agente COME si è arrivati alla
+  // risposta, e dopo la Fase A un follow-up non rifà la camminata quando la pagina
+  // aperta basta già. Le altre due restano un click di distanza.
+  const [mode, setMode] = useState<Mode>('visual');
   const [status, setStatus] = useState<Status>('idle');
   const [plan, setPlan] = useState<AiPlan | null>(null);
   const [outcome, setOutcome] = useState('');
@@ -158,6 +159,13 @@ export default function App() {
    * durante il pilota, non all'agente al telefono.
    */
   const [debug, setDebug] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  /**
+   * Domanda dell'ultima risposta completata: serve al pannello del feedback per
+   * far riconoscere all'agente di cosa sta parlando. Distinta da `query`, che
+   * l'agente può già aver riscritto per la domanda successiva.
+   */
+  const [lastAnsweredQuery, setLastAnsweredQuery] = useState('');
   const queryRef = useRef<HTMLTextAreaElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   // `runAsk` è memoizzato su [] e viene passato a useTourDriver: leggere lo
@@ -450,6 +458,7 @@ export default function App() {
       // non è stato interrotto, così un abort non inquina il contesto successivo.
       if (accumulatedOutcome.trim() && !controller.signal.aborted) {
         setThread((prev) => [...prev, { query: q.trim(), answer: accumulatedOutcome }]);
+        setLastAnsweredQuery(q.trim());
       }
       return { outcome: accumulatedOutcome, plan: receivedPlan, failed: streamFailed };
     },
@@ -730,6 +739,30 @@ export default function App() {
     });
   }, [run]);
 
+  /**
+   * Invia il feedback. `false` se non è partito: il pannello lo dice e resta
+   * aperto, ma l'errore NON interrompe nulla — l'agente è al telefono.
+   */
+  const submitFeedback = useCallback(
+    async (rating: 'up' | 'down', comment: string): Promise<boolean> => {
+      const proxyUrl = await getProxyUrl();
+      const token = await getToken();
+      return sendFeedback(
+        proxyUrl,
+        {
+          rating,
+          requestId: plan?.requestId,
+          comment: comment || undefined,
+          query: lastAnsweredQuery || undefined,
+          model: plan?.model,
+          mode,
+        },
+        token,
+      );
+    },
+    [lastAnsweredQuery, mode, plan],
+  );
+
   // Unico punto di stop del tour: il pulsante nella timeline. (Prima esisteva
   // anche nel banner della pagina host, che parlava a React via evento DOM.)
   // `setStopping` dà il riscontro immediato al click, mentre l'abort vero
@@ -859,7 +892,7 @@ export default function App() {
         {authPhase === 'in' && (
           <>
             <span className="rs-label" id="rs-mode-label">
-              Modalità
+              Modalità di ricerca
             </span>
             <div className="rs-segmented" role="radiogroup" aria-labelledby="rs-mode-label">
               {MODES.map((m) => (
@@ -977,11 +1010,11 @@ export default function App() {
                 </div>
                 {plan.historyTurnsUsed ? (
                   <div className="rs-plan-row">
-                    <span>Contesto</span>
+                    <span>Memoria</span>
                     <strong>
                       {plan.historyTurnsUsed === 1
-                        ? '1 turno precedente'
-                        : `${plan.historyTurnsUsed} turni precedenti`}
+                        ? '1 domanda precedente'
+                        : `${plan.historyTurnsUsed} domande precedenti`}
                     </strong>
                   </div>
                 ) : null}
@@ -1060,21 +1093,40 @@ export default function App() {
       {/* Fuori da .rs-body, così resta ancorato in basso invece di scorrere via
           insieme a una risposta lunga. */}
       {authPhase === 'in' && (
-        <footer className="rs-footer">
-          <span className="rs-footer-user" title={me?.username}>
-            {me?.name || me?.username}
-          </span>
-          <button
-            className="rs-logout"
-            type="button"
-            onClick={() => {
-              void resetSession();
-              void doLogout();
-            }}
-          >
-            Logout
-          </button>
-        </footer>
+        <>
+          {feedbackOpen && (
+            <FeedbackPanel
+              context={{ query: lastAnsweredQuery, requestId: plan?.requestId }}
+              onClose={() => setFeedbackOpen(false)}
+              onSend={submitFeedback}
+            />
+          )}
+          <footer className="rs-footer">
+            <span className="rs-footer-user" title={me?.username}>
+              {me?.name || me?.username}
+            </span>
+            <div className="rs-footer-actions">
+              <button
+                className="rs-footer-link"
+                type="button"
+                aria-expanded={feedbackOpen}
+                onClick={() => setFeedbackOpen((open) => !open)}
+              >
+                Feedback
+              </button>
+              <button
+                className="rs-logout"
+                type="button"
+                onClick={() => {
+                  void resetSession();
+                  void doLogout();
+                }}
+              >
+                Logout
+              </button>
+            </div>
+          </footer>
+        </>
       )}
     </div>
   );

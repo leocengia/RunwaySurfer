@@ -67,6 +67,35 @@ export interface RequestHistoryRecord {
   sources_json: string;
   // 'ask' = sintesi risposta; 'rank' = rerank/selezione candidati (Fase reranker).
   kind: string;
+  /** Fonti citate dal modello. `null` = non misurato (righe storiche, rank, errori). */
+  cited_sources: number | null;
+}
+
+export type FeedbackRating = 'up' | 'down';
+
+export interface FeedbackRecord {
+  id: string;
+  created_at: string;
+  request_id: string | null;
+  user_id: number | null;
+  agent_id: string;
+  rating: FeedbackRating;
+  comment: string | null;
+  query_preview: string | null;
+  model: string | null;
+  mode: string | null;
+}
+
+export interface FeedbackInput {
+  id: string;
+  requestId?: string | null;
+  userId: number | null;
+  agentId: string;
+  rating: FeedbackRating;
+  comment?: string | null;
+  queryPreview?: string | null;
+  model?: string | null;
+  mode?: string | null;
 }
 
 export interface RequestHistoryInput {
@@ -92,6 +121,11 @@ export interface RequestHistoryInput {
   sources: unknown[];
   /** 'ask' (sintesi, default) o 'rank' (rerank candidati). */
   kind?: 'ask' | 'rank';
+  /**
+   * Fonti citate dal MODELLO nella risposta (vedi outcome-audit.ts). `null` quando
+   * non è misurabile — richiesta respinta, errore, o rerank.
+   */
+  citedSources?: number | null;
 }
 
 export interface SettingsRecord {
@@ -206,7 +240,12 @@ export function initDb(): void {
       error TEXT,
       selected_links_json TEXT NOT NULL,
       sources_json TEXT NOT NULL,
-      kind TEXT NOT NULL DEFAULT 'ask'
+      kind TEXT NOT NULL DEFAULT 'ask',
+      -- Quante fonti il MODELLO ha citato (≠ pagine fornite, che stanno in
+      -- sources_json). 0 su una risposta 'ok' = «non l'ho trovato in KB»: è la
+      -- regola con cui la dashboard segnala i buchi della Knowledge Base.
+      -- NULL sulle righe scritte prima di questa colonna e sulle 'rank'.
+      cited_sources INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS settings (
@@ -215,6 +254,27 @@ export function initDb(): void {
       updated_at TEXT NOT NULL
     );
 
+    -- Feedback degli agenti sulle risposte. Tabella a parte e non colonne su
+    -- requests: un feedback può arrivare molto dopo la richiesta, può mancare
+    -- del tutto, e una segnalazione generica ("la sidebar non si apre") non ha
+    -- nessuna richiesta a cui agganciarsi — da qui request_id nullable.
+    CREATE TABLE IF NOT EXISTS feedback (
+      id TEXT PRIMARY KEY,
+      created_at TEXT NOT NULL,
+      request_id TEXT,
+      user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      agent_id TEXT NOT NULL,
+      rating TEXT NOT NULL CHECK (rating IN ('up', 'down')),
+      -- Già passato da scrubPii nel browser dell'agente, poi troncato qui.
+      comment TEXT,
+      query_preview TEXT,
+      model TEXT,
+      mode TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at);
+    CREATE INDEX IF NOT EXISTS idx_feedback_request ON feedback(request_id);
+    CREATE INDEX IF NOT EXISTS idx_requests_cited_sources ON requests(cited_sources);
     CREATE INDEX IF NOT EXISTS idx_requests_created_at ON requests(created_at);
     CREATE INDEX IF NOT EXISTS idx_requests_agent ON requests(agent_id);
     CREATE INDEX IF NOT EXISTS idx_requests_user ON requests(user_id);
@@ -284,6 +344,20 @@ function migrate(): void {
         db.exec("ALTER TABLE requests ADD COLUMN kind TEXT NOT NULL DEFAULT 'ask'");
       }
       db.pragma('user_version = 3');
+    })();
+  }
+  if (version < 4) {
+    db.transaction(() => {
+      const columns = (db.pragma('table_info(requests)') as Array<{ name: string }>).map(
+        (c) => c.name,
+      );
+      // Nullable e senza backfill: per le richieste già archiviate non sappiamo
+      // quante fonti fossero citate, e NULL dice esattamente questo. La dashboard
+      // segnala `= 0`, non `IS NULL`, quindi lo storico non produce falsi allarmi.
+      if (!columns.includes('cited_sources')) {
+        db.exec('ALTER TABLE requests ADD COLUMN cited_sources INTEGER');
+      }
+      db.pragma('user_version = 4');
     })();
   }
 }
@@ -529,8 +603,8 @@ export function insertRequestHistory(input: RequestHistoryInput): void {
       provider, model, pages_count, links_count, estimated_input_tokens,
       estimated_output_tokens, estimated_cost_usd, actual_input_tokens,
       actual_output_tokens, duration_ms, status, error,
-      selected_links_json, sources_json, kind
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      selected_links_json, sources_json, kind, cited_sources
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     input.id,
     now(),
@@ -554,7 +628,59 @@ export function insertRequestHistory(input: RequestHistoryInput): void {
     json(input.selectedLinks),
     json(input.sources),
     input.kind ?? 'ask',
+    input.citedSources ?? null,
   );
+}
+
+export function insertFeedback(input: FeedbackInput): void {
+  db.prepare(
+    `INSERT INTO feedback (
+      id, created_at, request_id, user_id, agent_id, rating, comment,
+      query_preview, model, mode
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    input.id,
+    now(),
+    input.requestId ?? null,
+    input.userId,
+    input.agentId,
+    input.rating,
+    input.comment ?? null,
+    input.queryPreview ?? null,
+    input.model ?? null,
+    input.mode ?? null,
+  );
+}
+
+export function listFeedback(filters: { limit?: number } = {}): FeedbackRecord[] {
+  const limit = Math.min(Math.max(filters.limit ?? 50, 1), 500);
+  return db
+    .prepare('SELECT * FROM feedback ORDER BY created_at DESC LIMIT ?')
+    .all(limit) as FeedbackRecord[];
+}
+
+/**
+ * Richieste che il SISTEMA segnala da sé, in due categorie:
+ *  - 'guasto'  → status 'error' o 'rejected': un fallimento tecnico;
+ *  - 'nofonti' → risposta riuscita in cui il modello non ha citato alcun articolo,
+ *                cioè il modo in cui dice «non l'ho trovato nella KB».
+ *
+ * `cited_sources = 0` e non `IS NULL`: NULL sono le righe archiviate prima che la
+ * colonna esistesse, e non devono comparire come segnalazioni.
+ */
+export function listFlaggedRequests(
+  filters: { limit?: number } = {},
+): Array<RequestHistoryRecord & { flag: 'guasto' | 'nofonti' }> {
+  const limit = Math.min(Math.max(filters.limit ?? 50, 1), 500);
+  return db
+    .prepare(
+      `SELECT *, CASE WHEN status IN ('error','rejected') THEN 'guasto' ELSE 'nofonti' END AS flag
+       FROM requests
+       WHERE kind = 'ask'
+         AND (status IN ('error','rejected') OR (status = 'ok' AND cited_sources = 0))
+       ORDER BY created_at DESC LIMIT ?`,
+    )
+    .all(limit) as Array<RequestHistoryRecord & { flag: 'guasto' | 'nofonti' }>;
 }
 
 export function listRequests(filters: {

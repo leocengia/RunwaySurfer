@@ -101,6 +101,13 @@ export interface RankResponse {
  * cost model and the network egress explicit.
  */
 export interface AiPlan {
+  /**
+   * Id della richiesta lato server. Serve a legare un feedback dell'agente alla
+   * riga di audit corrispondente: senza, «questa risposta è sbagliata» non è
+   * ricollegabile a nulla (la tabella `requests` è privacy-minimised e non
+   * conserva il testo della risposta).
+   */
+  requestId: string;
   /** Model chosen by the difficulty router. */
   model: string;
   /** Why the router picked this model (heuristic explanation). */
