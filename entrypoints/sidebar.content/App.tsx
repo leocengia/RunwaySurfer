@@ -18,7 +18,9 @@ import { readIndexOnlyArticles } from '../../lib/nav';
 import { isOffTopic } from '../../lib/off-topic';
 import { linkIdentity } from '../../lib/site-profile';
 import { streamAsk, rankCandidates, sendFeedback, BACKEND_UNREACHABLE } from '../../lib/client';
+import { assessQuery } from '../../lib/query-quality';
 import { redactionNotice, scrubPii } from '../../lib/scrub';
+import { parseSources } from '../../lib/sources';
 import { getProxyUrl } from '../../lib/messaging';
 import { clearToken, fetchMe, getToken, logout, type AuthUser } from '../../lib/auth';
 import type { AiPlan, AskTurn, KbLink, KbPage, ScheduleChangeRequest } from '../../lib/outcome';
@@ -66,7 +68,8 @@ const MODES: ReadonlyArray<{ value: Mode; label: string; hint: string }> = [
 ];
 
 /** Override manuale dell'altezza banda, se l'euristica sbaglia sulla KB reale.
- *  Il default vive nel CSS (`var(--rs-host-header-h, 56px)`), non qui. */
+ *  Il default vive nel CSS (`var(--rs-host-header-h, 64px)`), non qui: 64px è
+ *  l'altezza misurata sulla KB reale. */
 const HOST_HEADER_OVERRIDE_KEY = 'rs:hostHeaderHeight';
 
 /** Diagnostica estesa nel pannello risposta: per noi durante il pilota. */
@@ -596,6 +599,13 @@ export default function App() {
     const { text: safeQuery, redacted } = scrubPii(query.trim());
     setRedaction(redactionNotice(redacted));
 
+    // Suggerimento, NON blocco: una domanda senza termini di contenuto oggi
+    // partirebbe comunque e la risposta si appoggerebbe alla pagina aperta per
+    // caso, senza che nessuno lo dica. L'agente resta liberissimo di procedere:
+    // a volte sa lui cosa sta cercando.
+    const assessment = assessQuery(safeQuery);
+    if (assessment.vague && !formReady) setNotice(assessment.hint);
+
     // Guardia sessione: se la pagina corrente è la login KB (SSO scaduto) niente
     // è leggibile, nemmeno gli altri articoli (serve la stessa sessione).
     const unreadable = detectUnreadablePage();
@@ -1055,8 +1065,32 @@ export default function App() {
                 {notice}
               </div>
             )}
+            {/* Città non riconosciute nella coppia: il backend le calcolava già e
+                nessuno le mostrava, così un refuso passava per un itinerario
+                valido. */}
+            {plan?.itineraryUnresolved?.length ? (
+              <div className="rs-notice" role="status">
+                Non ho riconosciuto come città:{' '}
+                <strong>{plan.itineraryUnresolved.join(', ')}</strong>. Controlla la scrittura,
+                oppure usa i codici (es. MIL-PAR).
+              </div>
+            ) : null}
 
             <ThreadView turns={thread} pages={pagesUsed} contextTurns={plan?.historyTurnsUsed} />
+
+            {/* Una risposta senza fonti citate è il modo in cui il modello dice
+                «non l'ho trovato nella KB» — ma senza questo avviso veniva resa
+                identica a una risposta piena, e l'unico indizio era l'assenza dei
+                chip in fondo. Si mostra a stream CONCLUSO: durante la generazione
+                la sezione Fonti non è ancora arrivata. */}
+            {status === 'done' &&
+              outcome.trim() &&
+              parseSources(outcome, pagesUsed).length === 0 && (
+                <div className="rs-notice" role="status">
+                  <strong>Nessuna fonte citata.</strong> Il modello non ha trovato la risposta negli
+                  articoli letti: prova a riformulare, o cerca con un altro termine.
+                </div>
+              )}
 
             {outcome && (
               <article className="rs-outcome">

@@ -3,6 +3,7 @@
 import { Router, type Request, type Response } from 'express';
 import { asyncRoute } from '../http.js';
 import { countCitedSources } from '../outcome-audit.js';
+import { parseCityPair } from '../itinerary.js';
 import type { AskRequest, AskEvent, AiPlan, AskTurn, ScheduleChangeRequest } from '../types.js';
 import { chooseModel, estimateTokens, estimateCostUsd } from '../router.js';
 import {
@@ -220,6 +221,9 @@ const handleAsk = async (req: Request, res: Response): Promise<void> => {
     provider: provider.name,
     // Post-taglio: è il numero di turni davvero in contesto, non quello inviato.
     historyTurnsUsed: request.history?.length ?? 0,
+    // Le città non riconosciute arrivano fino alla sidebar: l'agente deve poter
+    // correggere un refuso invece di ricevere una risposta su una tratta inventata.
+    itineraryUnresolved: request.form ? parseCityPair(request.form.cityPair).unresolved : undefined,
   };
 
   const startedAt = Date.now();

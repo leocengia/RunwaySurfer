@@ -38,6 +38,11 @@ export function ScheduleChangeForm({ draft, onChange, disabled }: ScheduleChange
 
   const toggleSection = (label: string) => {
     const has = draft.sections.includes(label);
+    // L'ULTIMA casella non si può togliere. Con `sections: []` il server tratta la
+    // lista come "non richiesto" e ricade sulle sezioni standard
+    // (Procedura/Eccezioni/Risposta): una richiesta Schedule Change riceverebbe in
+    // silenzio una risposta di forma completamente diversa da quella attesa.
+    if (has && draft.sections.length === 1) return;
     patch({
       sections: has
         ? draft.sections.filter((s) => s !== label)
@@ -126,16 +131,24 @@ export function ScheduleChangeForm({ draft, onChange, disabled }: ScheduleChange
 
       <fieldset className="rs-form-sections" disabled={disabled}>
         <legend className="rs-form-label">Da includere nella risposta</legend>
-        {SCHEDULE_CHANGE_FIELDS.map((field) => (
-          <label key={field.id} className="rs-check">
-            <input
-              type="checkbox"
-              checked={draft.sections.includes(field.label)}
-              onChange={() => toggleSection(field.label)}
-            />
-            <span>{field.label}</span>
-          </label>
-        ))}
+        {SCHEDULE_CHANGE_FIELDS.map((field) => {
+          const checked = draft.sections.includes(field.label);
+          const isLast = checked && draft.sections.length === 1;
+          return (
+            <label key={field.id} className="rs-check">
+              <input
+                type="checkbox"
+                checked={checked}
+                // L'ultima resta bloccata: senza almeno un campo la risposta
+                // cambierebbe forma senza dirlo (vedi toggleSection).
+                disabled={isLast}
+                title={isLast ? 'Almeno un campo deve restare selezionato' : undefined}
+                onChange={() => toggleSection(field.label)}
+              />
+              <span>{field.label}</span>
+            </label>
+          );
+        })}
       </fieldset>
     </div>
   );

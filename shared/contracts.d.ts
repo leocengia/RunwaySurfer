@@ -125,6 +125,13 @@ export interface AiPlan {
    * serve alla sidebar per dire quali turni sono ancora contesto e quali no.
    */
   historyTurnsUsed?: number;
+  /**
+   * Parti della coppia di città che il backend NON ha riconosciuto (Schedule
+   * Change). Prima `parseCityPair` le calcolava e nessuno le leggeva:
+   * «Vattelapesca-Parigi» diventava «(Vattelapesca-PAR)» e l'agente non sapeva
+   * che metà itinerario non era stata interpretata.
+   */
+  itineraryUnresolved?: string[];
 }
 
 /**

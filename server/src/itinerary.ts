@@ -90,15 +90,27 @@ export interface CityPair {
   unresolved: string[];
 }
 
-/** Un token già in forma di codice città/aeroporto: 3 lettere. */
-function isIataCode(token: string): boolean {
+/** Forma di un codice città/aeroporto: 3 lettere. NON garantisce che esista. */
+function looksLikeIataCode(token: string): boolean {
   return /^[a-z]{3}$/i.test(token);
 }
+
+/** I codici che il seed conosce, per distinguere una sigla vera da un refuso. */
+const KNOWN_CODES = new Set(Object.values(CITY_CODES));
 
 function resolveOne(raw: string): { value: string; resolved: boolean } {
   const token = raw.trim();
   if (!token) return { value: '', resolved: false };
-  if (isIataCode(token)) return { value: token.toUpperCase(), resolved: true };
+  if (looksLikeIataCode(token)) {
+    const code = token.toUpperCase();
+    // La forma da sola non basta: "MIL" è un codice, "XYZ" e un refuso di tre
+    // lettere hanno la stessa forma. Marcare `resolved: true` su qualunque
+    // tripletta significava promuovere un errore di battitura a codice IATA
+    // valido, con l'agente convinto di aver scritto un itinerario corretto.
+    // Il seed non è completo, quindi il codice si tiene comunque (maiuscolo,
+    // pronto per la ricerca) ma solo quelli noti risultano risolti.
+    return { value: code, resolved: KNOWN_CODES.has(code) };
+  }
   const key = token.toLowerCase().replace(/\s+/g, ' ');
   const code = CITY_CODES[key] ?? CITY_CODES[key.replace(/\s+/g, '')];
   return code ? { value: code, resolved: true } : { value: token, resolved: false };

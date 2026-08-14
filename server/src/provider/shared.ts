@@ -209,8 +209,17 @@ export function buildUserContent(input: GenerateInput): string {
       `Impacted Itinerary (City Pair): ${cityPair}`,
       `Flight Type: ${f.flightType}`,
       `Original flight date: ${f.originalDate}`,
-      '',
     );
+    // Dirlo al modello invece di far finta che la normalizzazione sia riuscita:
+    // "Vattelapesca-PAR" sembra un itinerario valido, e senza questa riga la
+    // risposta verrebbe costruita su una tratta che non esiste.
+    if (pair.unresolved.length) {
+      parts.push(
+        `NOTA: non è stato possibile riconoscere come città: ${pair.unresolved.join(', ')}. ` +
+          'Trattali come testo libero e, se sono ambigui, dillo nella risposta.',
+      );
+    }
+    parts.push('');
   }
 
   parts.push(

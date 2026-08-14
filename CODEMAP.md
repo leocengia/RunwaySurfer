@@ -391,6 +391,33 @@ definito. `metrics.totalEstimatedCostUsd` resta come metrica live dall'ultimo
 avvio e **non** è un guardrail. Il cambio è fisso e documentato: va bene per un
 tetto di spesa, non per la contabilità.
 
+## Feedback e qualità della risposta
+
+Il canale che dice se il prodotto funziona davvero, che i test non possono dare.
+
+- `entrypoints/sidebar.content/FeedbackPanel.tsx` — 👍/👎 + commento opzionale dal
+  footer. Il commento passa da `scrubPii` come la query: è testo libero scritto al
+  telefono, il posto più probabile in cui finisca un dato del cliente. Un invio
+  fallito non interrompe nulla.
+- `server/src/outcome-audit.ts` — `countCitedSources()`. Esiste perché il dato non
+  era ricavabile: `requests.sources_json` contiene le pagine **fornite** al modello,
+  non quelle citate, e il server non conserva il testo della risposta. Si contano gli
+  URL distinti sotto `## Fonti` mentre lo stream passa e si salva **solo il numero**
+  in `requests.cited_sources` (migrazione `user_version` 4, nullable: NULL = «non
+  misurato», e la dashboard segnala `= 0`, non NULL).
+- `listFlaggedRequests()` in `server/src/db.ts` — due regole: `status` error/rejected
+  = guasto tecnico; `status='ok' AND cited_sources=0` = il modello non ha citato
+  nulla, cioè il modo in cui dice «non l'ho trovato». Il secondo è il segnale più
+  utile per capire quali buchi ha la KB.
+- `lib/query-quality.ts` — `assessQuery()` suggerisce, non blocca. Copre il buco per
+  cui `"e poi?"` partiva senza avvisi: `pageCoverage` scarta le parole sotto 4
+  lettere, quindi ritornava 1 (copertura massima), `isOffTopic` diceva no e la
+  risposta si appoggiava alla pagina aperta per caso — col router che la
+  classificava `simple`, assegnandole il modello meno capace.
+- `AiPlan.requestId` (`shared/contracts.d.ts`) esiste solo per legare un feedback
+  alla riga di audit. Va generato **prima** della costruzione del plan in
+  `routes/ask.ts`.
+
 ## Configurazione del rilascio
 
 - `wxt.config.ts` contiene la chiave **pubblica** dell'estensione: l'ID è fisso

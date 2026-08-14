@@ -60,4 +60,18 @@ describe('parseCityPair', () => {
   it('regge una tratta con scalo', () => {
     expect(parseCityPair('MIL-FRA-NYC').normalized).toBe('MIL-FRA-NYC');
   });
+
+  it('un refuso di tre lettere NON è un codice risolto', () => {
+    // Prima qualunque tripletta veniva marcata `resolved: true`: un errore di
+    // battitura si travestiva da codice IATA valido e nessuno lo segnalava.
+    const out = parseCityPair('MLI-PAR');
+    // Il valore si tiene comunque (il seed non è una tabella IATA completa)…
+    expect(out.normalized).toBe('MLI-PAR');
+    // …ma risulta NON risolto, quindi arriva all'agente come da controllare.
+    expect(out.unresolved).toEqual(['MLI']);
+  });
+
+  it('un codice noto resta risolto', () => {
+    expect(parseCityPair('mil-par').unresolved).toEqual([]);
+  });
 });
