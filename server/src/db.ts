@@ -274,7 +274,10 @@ export function initDb(): void {
 
     CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at);
     CREATE INDEX IF NOT EXISTS idx_feedback_request ON feedback(request_id);
-    CREATE INDEX IF NOT EXISTS idx_requests_cited_sources ON requests(cited_sources);
+    -- NIENTE indici su colonne aggiunte da una migrazione, qui. Questo blocco gira
+    -- PRIMA di migrate(): su un database che esiste già la CREATE TABLE non fa
+    -- nulla, la colonna non c'è ancora, e l'indice fallirebbe al boot. L'indice su
+    -- cited_sources sta nel blocco della migrazione 4, dopo la sua ALTER.
     CREATE INDEX IF NOT EXISTS idx_requests_created_at ON requests(created_at);
     CREATE INDEX IF NOT EXISTS idx_requests_agent ON requests(agent_id);
     CREATE INDEX IF NOT EXISTS idx_requests_user ON requests(user_id);
@@ -357,6 +360,9 @@ function migrate(): void {
       if (!columns.includes('cited_sources')) {
         db.exec('ALTER TABLE requests ADD COLUMN cited_sources INTEGER');
       }
+      // L'indice va QUI e non nel blocco di initDb: lì girerebbe prima di questa
+      // ALTER e su un DB esistente il boot fallirebbe con "no such column".
+      db.exec('CREATE INDEX IF NOT EXISTS idx_requests_cited_sources ON requests(cited_sources)');
       db.pragma('user_version = 4');
     })();
   }
