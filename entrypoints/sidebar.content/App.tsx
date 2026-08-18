@@ -10,6 +10,7 @@ import { detectUnreadablePage, extractCurrentPage, extractInternalLinks } from '
 import {
   MAX_FOLLOW,
   pickCandidatesWithKbIndex,
+  retrievalEvidence,
   shallowFollow,
   shortlistCandidates,
   resolveFollowLinks,
@@ -603,7 +604,10 @@ export default function App() {
     // partirebbe comunque e la risposta si appoggerebbe alla pagina aperta per
     // caso, senza che nessuno lo dica. L'agente resta liberissimo di procedere:
     // a volte sa lui cosa sta cercando.
-    const assessment = assessQuery(safeQuery);
+    // L'evidenza è calcolata sul solo indice KB (nessun link di pagina): la
+    // domanda a cui rispondere è «la KB ha qualcosa per questi termini?», e va
+    // posta QUI, prima di qualunque lettura e prima di spendere una chiamata.
+    const assessment = assessQuery(safeQuery, retrievalEvidence([], safeQuery));
     if (assessment.vague && !formReady) setNotice(assessment.hint);
 
     // Guardia sessione: se la pagina corrente è la login KB (SSO scaduto) niente

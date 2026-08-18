@@ -24,6 +24,38 @@ describe('matchedKeywords', () => {
       'rimborso',
     ]);
   });
+
+  it('resta sottostringa per default: `policies` copre una query su `polic`', () => {
+    expect(matchedKeywords('Refund policies', ['polic'])).toEqual(['polic']);
+  });
+
+  describe('con termini ancorati (acronimi)', () => {
+    const anchored = new Set(['asc', 'ndc']);
+
+    it('un acronimo matcha come parola intera', () => {
+      expect(matchedKeywords('Flight ASC Farelogix Rebook a flight', ['asc'], anchored)).toEqual([
+        'asc',
+      ]);
+    });
+
+    it('e NON come sottostringa: sono tre falsi positivi reali dell’indice', () => {
+      for (const label of [
+        'Madagascar Nationwide Civil Unrest September 2025',
+        'Billing Charge TAAP Agency Service Charge TASC',
+        'Vuelo Reservar Politica de mascotas global',
+      ]) {
+        expect(matchedKeywords(label, ['asc'], anchored)).toEqual([]);
+      }
+    });
+
+    it('i termini NON ancorati restano sottostringa nella stessa chiamata', () => {
+      // `refund` non è nell'insieme ancorato: continua a matchare dentro `refunds`.
+      expect(matchedKeywords('Cancel NDC refunds', ['ndc', 'refund'], anchored)).toEqual([
+        'ndc',
+        'refund',
+      ]);
+    });
+  });
 });
 
 describe('countKeywords', () => {

@@ -111,6 +111,36 @@ describe('indice KB reale (asset bundle-ato)', () => {
     }
   });
 
+  it('ripara le label con mojibake SENZA toccare URL e slug', async () => {
+    // `Compensation Combine credit couponsâ HCOM` nasce da un em-dash che
+    // Salesforce ha mal codificato nello slug stesso: l'URL reale contiene
+    // `%C3%A2`, quindi è corretto così com'è e riscriverlo romperebbe il link.
+    // Si pulisce solo la label, che è ciò che finisce nello scoring, nel prompt
+    // del reranker e sotto gli occhi dell'agente.
+    const { kbIndexAsLinks, cleanKbLabel } = await import('../lib/kb-index');
+    expect(cleanKbLabel('Compensation Combine credit couponsâ HCOM')).toBe(
+      'Compensation Combine credit coupons HCOM',
+    );
+    // `â œHojas` è una virgoletta curva mal decodificata: via entrambi i pezzi.
+    expect(cleanKbLabel('Official Complaint Forms â œHojas de Reclamacionesâ Spain')).toBe(
+      'Official Complaint Forms Hojas de Reclamaciones Spain',
+    );
+
+    const links = kbIndexAsLinks();
+    expect(links.filter((l) => l.text.includes('â'))).toEqual([]);
+    // Gli URL, invece, quel carattere lo conservano: sono gli indirizzi veri.
+    expect(links.some((l) => l.url.includes('%C3%A2'))).toBe(true);
+  });
+
+  it('non tocca gli accenti legittimi delle label non inglesi', async () => {
+    // Nell'indice ci sono slug francesi/spagnoli/CJK: `é` (28 occorrenze), `í`,
+    // `ü`. La pulizia del mojibake non deve toccarli.
+    const { cleanKbLabel } = await import('../lib/kb-index');
+    expect(cleanKbLabel('Vuelo Reservar Política de mascotas global')).toBe(
+      'Vuelo Reservar Política de mascotas global',
+    );
+  });
+
   it('una query IT su una pagina fuori tema pesca un articolo refund dalla KB reale', async () => {
     const { pickCandidatesWithKbIndex } = await import('../lib/crawl');
     // Pagina corrente senza link pertinenti: il candidato viene solo dall'indice.

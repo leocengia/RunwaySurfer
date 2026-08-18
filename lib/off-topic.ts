@@ -11,7 +11,7 @@
 //
 // Logica pura, nessun DOM: testabile offline.
 import { pickRelevantLinks } from './crawl';
-import { expandQueryTerms } from './kb-vocab';
+import { expandTerm } from './kb-vocab';
 import type { KbLink, KbPage } from './outcome';
 
 /**
@@ -40,25 +40,30 @@ function baseTerms(query: string): string[] {
  * Quanta parte della domanda compare nel titolo o nel testo della pagina. Non
  * misura la qualità della risposta: solo se l'argomento è lo stesso.
  *
- * Il denominatore sono le parole che l'agente ha DAVVERO scritto. Le espansioni
- * cross-lingua valgono come credito ma non come termini obbligatori: contarle nel
- * denominatore farebbe risultare fuori tema anche una domanda perfettamente in
- * tema, perché `expandQueryTerms` genera molti sinonimi EN che nel testo non
- * compaiono. Servono però come credito, dato che la KB è in inglese e "rimborso"
- * può comparire solo come "refund".
+ * Il denominatore sono le parole che l'agente ha DAVVERO scritto. Un termine
+ * conta come coperto se compare nella pagina, oppure se compare una delle SUE
+ * espansioni — dato che la KB è in inglese e "rimborso" può apparire solo come
+ * "refund".
+ *
+ * «Delle sue» è la parte importante, e prima non era così: il credito si
+ * calcolava sull'unione delle espansioni di tutta la query e si accreditava a
+ * qualunque termine ancora scoperto. Bastava quindi che la pagina contenesse una
+ * parola legata a UNA parola della domanda perché risultassero coperte anche le
+ * altre. Il caso concreto: la domanda «regole franchigia baggage allowance» su
+ * un articolo intitolato «Refund policy» — il credito di `regole`→`policies`
+ * copriva i termini sui bagagli, e la domanda risultava in tema. Ora ogni
+ * termine risponde solo per sé (vedi `expandTerm`).
  */
 export function pageCoverage(page: Pick<KbPage, 'title' | 'text'>, query: string): number {
   const base = baseTerms(query);
   if (!base.length) return 1; // niente su cui giudicare: non allargare
   const haystack = `${page.title} ${page.text}`.toLowerCase();
-  const direct = base.filter((term) => haystack.includes(term)).length;
-  if (direct === base.length) return 1;
-
-  const expansions = expandQueryTerms(query, base).filter((t) => t.length >= 4);
-  const expansionHits = expansions.filter((term) => haystack.includes(term)).length;
-  // Il credito non può superare i termini ancora scoperti: mai oltre 1.
-  const credited = Math.min(expansionHits, base.length - direct);
-  return (direct + credited) / base.length;
+  const covered = base.filter(
+    (term) =>
+      haystack.includes(term) ||
+      expandTerm(term).some((expansion) => haystack.includes(expansion)),
+  );
+  return covered.length / base.length;
 }
 
 /**

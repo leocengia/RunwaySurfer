@@ -27,6 +27,29 @@ interface KbIndexFile {
 
 const index = indexData as KbIndexFile;
 
+/**
+ * Ripara le label con mojibake (14 articoli). `Compensation Combine credit
+ * couponsâ HCOM` nasce da un em-dash che **Salesforce** ha mal codificato quando
+ * ha creato lo slug: l'URL reale contiene `%C3%A2`, quindi `u` e `s` sono
+ * corretti così come sono e NON vanno toccati — riscriverli romperebbe il link.
+ * Si pulisce solo la label, che è ciò che finisce nello scoring, nel prompt del
+ * reranker e sotto gli occhi dell'agente.
+ *
+ * `â` in questa KB è sempre un separatore (em-dash o virgoletta curva) mal
+ * decodificato, e `œ` il resto di una virgoletta di apertura (`â œHojas`) —
+ * quindi diventano spazio. Se un giorno la KB avesse uno slug francese con una
+ * `â` legittima, il costo è una lettera in meno in una label: mai un URL rotto.
+ *
+ * Allineata a `cleanLabel` in docs/build-kb-index.mjs, così una rigenerazione
+ * dell'asset produce label già pulite.
+ */
+export function cleanKbLabel(raw: string): string {
+  return raw
+    .replace(/â\s*œ?/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /** Numero di articoli nell'indice (0 se l'asset è il placeholder). */
 export function kbIndexSize(): number {
   return index.articles.length;
@@ -44,5 +67,8 @@ export function kbIndexSize(): number {
  * puntano alla variante inglese, non a quella tedesca/coreana della sitemap.
  */
 export function kbIndexAsLinks(): KbLink[] {
-  return index.articles.map((a) => ({ url: withRetrievalLanguage(a.u), text: a.l }));
+  return index.articles.map((a) => ({
+    url: withRetrievalLanguage(a.u),
+    text: cleanKbLabel(a.l),
+  }));
 }

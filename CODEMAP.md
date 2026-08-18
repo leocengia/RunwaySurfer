@@ -164,7 +164,21 @@ Segue alcuni link collegati.
 Punti importanti:
 
 - `MAX_FOLLOW = 3`: massimo pagine collegate lette.
+- `SHORTLIST_SIZE = 40`: candidati inviati al reranker. È il tetto che il backend
+  già accettava (`MAX_RANK_CANDIDATES`); il client ne mandava 30 e quei 10 posti
+  erano sprecati.
+- `planQuery()`: tutto ciò che dipende dalla sola query, calcolato **una volta**
+  invece che per ognuno dei 2964 candidati. Tiene separate le parole scritte
+  dall'agente dai sinonimi che iniettiamo noi, perché pesano diversamente: un hit
+  su una nostra espansione vale 3 contro i 5 di una parola vera. Pesarli uguale
+  seppelliva `asc queues asc` sotto i 21 articoli che scrivono «airline schedule
+  change» per esteso — cioè sotto l'espansione di ASC stesso. Il ponte IT→EN non
+  ne soffre: in una query tutta italiana ogni match è un'espansione, quindi la
+  scala è uniforme.
 - `pickRelevantLinks()`: sceglie i link piu rilevanti.
+- `shortlistCandidates()`: la shortlist ampia per il reranker, senza i gate di
+  `dynamicSelection` — qui il prefiltro deve garantire il **recall**, non scegliere.
+- `retrievalEvidence()`: quanti candidati e con che punteggio, per `assessQuery()`.
 - `fetchPage()`: scarica la pagina con `credentials: 'include'`.
 - `shallowFollow()`: esegue il mini-crawl a un livello.
 
@@ -348,6 +362,19 @@ Un solo posto per ciò che serve a più superfici. Il server non può importarli
 ## Ricerca su tutta la KB e fuori tema
 
 - `lib/kb-index.json` + `lib/kb-index.ts` — indice statico di tutti gli articoli.
+  `cleanKbLabel()` ripara le 14 label con mojibake **senza toccare URL e slug**:
+  quella `â` è un em-dash che Salesforce ha mal codificato nello slug stesso, e
+  l'URL reale contiene `%C3%A2`. Riscriverlo romperebbe il link.
+- `lib/kb-ranges.ts` — la KB archivia i vettori per **intervallo alfabetico**
+  (`Global airline schedule change policies I L`), e il nome cercato non compare
+  nel titolo: 48 articoli in 21 famiglie. `parseKbRange()` scompone la label in
+  famiglia + estremi (scartando gli intervalli discendenti, che sono i due falsi
+  positivi reali dell'indice: «only U S» e «team S O»); `nameInitials()` ricava
+  l'iniziale del nome cercato — anche da un codice vettore, `TK` → *turkish* →
+  `T` — e `rangeInitialBoost()` premia il fratello che la copre. Additivo: nessun
+  candidato può uscire dalla shortlist per colpa sua, quindi il caso peggiore è
+  il comportamento precedente. Conta soprattutto sul percorso **locale**, quando
+  `/rank` scade e non c'è alcuna AI a scegliere il fratello giusto.
 - `lib/off-topic.ts` — `isOffTopic()`: la domanda c'entra con la pagina aperta? Due
   segnali, entrambi necessari: bassa copertura dei termini **e** un candidato che
   batte la pagina secondo lo stesso scorer. Serve a evitare la risposta
@@ -414,6 +441,15 @@ Il canale che dice se il prodotto funziona davvero, che i test non possono dare.
   lettere, quindi ritornava 1 (copertura massima), `isOffTopic` diceva no e la
   risposta si appoggiava alla pagina aperta per caso — col router che la
   classificava `simple`, assegnandole il modello meno capace.
+  Giudica sull'**evidenza del prefiltro** (`retrievalEvidence()` in
+  `lib/crawl.ts`), non contando le parole: la versione a conteggio dava il
+  verdetto rovesciato sulle query vere — segnalava `relocation`, che di candidati
+  ne ha 323, e taceva su `booking refund`, che ne ha 479. Segnala due casi solo,
+  quelli che l'evidenza sostiene: zero candidati, e nessun titolo che contenga i
+  termini (il caso dei refusi, `SAFTY` arriva a 4 su una soglia di 5). Non prova
+  a segnalare `tier`, che è un disallineamento di significato — l'agente intende
+  i livelli fedeltà, la KB l'escalation interna — e che dall'evidenza appare
+  identico a `ndc`, che invece è preciso.
 - `AiPlan.requestId` (`shared/contracts.d.ts`) esiste solo per legare un feedback
   alla riga di audit. Va generato **prima** della costruzione del plan in
   `routes/ask.ts`.
