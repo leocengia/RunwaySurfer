@@ -361,6 +361,16 @@ Un solo posto per ciò che serve a più superfici. Il server non può importarli
 
 ## Ricerca su tutta la KB e fuori tema
 
+- `tests/fixtures/survey-queries-2026-08.json` — le 27 query reali del sondaggio
+  agenti, **verbatim e con i refusi**, versionate perché l'`.xlsx` vive fuori dal
+  repo. Fonte unica per `docs/build-eval-report.mts` e per i goldens.
+  `docs/survey-agenti-2026-08.md` racconta i numeri e le cinque cause.
+- `docs/build-eval-report.mts` → `docs/EVAL-DA-ETICHETTARE.md`. Si esegue con
+  `npx vite-node docs/build-eval-report.mts` (non `node`: serve lo scorer vero, che
+  è TypeScript — un report generato da una copia della logica mentirebbe;
+  `vite-node` arriva con vitest, quindi non aggiunge dipendenze). Le spunte del
+  documento diventano goldens `curated`, e `tests/rank-eval.test.ts` inizia a dare
+  `recall@40` sulle query vere invece che su 3 casi.
 - `lib/kb-index.json` + `lib/kb-index.ts` — indice statico di tutti gli articoli.
   `cleanKbLabel()` ripara le 14 label con mojibake **senza toccare URL e slug**:
   quella `â` è un em-dash che Salesforce ha mal codificato nello slug stesso, e

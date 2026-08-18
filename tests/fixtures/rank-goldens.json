@@ -1,6 +1,7 @@
 {
-  "schema": "rs-rank-goldens/1",
+  "schema": "rs-rank-goldens/2",
   "note": "curated = casi reali (editati a mano); bootstrap = generato da build-rank-goldens.mjs",
+  "schemaNote": "Ogni golden ha `query` e almeno una risposta attesa: `expectedUrl` (una) oppure `expectedUrls` (più di una, per le richieste di elenco esaustivo — una risposta sola non basta a coprirle). Se ci sono entrambi, `expectedUrl` conta come primo elemento. Campo `note` opzionale per registrare perché una query è difficile. Le query del sondaggio agenti stanno in survey-queries-2026-08.json e vanno etichettate con docs/build-eval-report.mts.",
   "curated": [
     {
       "query": "quanto costa il bagaglio in aereo",
