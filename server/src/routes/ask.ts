@@ -4,7 +4,14 @@ import { Router, type Request, type Response } from 'express';
 import { asyncRoute } from '../http.js';
 import { countCitedSources } from '../outcome-audit.js';
 import { parseCityPair } from '../itinerary.js';
-import type { AskRequest, AskEvent, AiPlan, AskTurn, ScheduleChangeRequest } from '../types.js';
+import type {
+  AnswerLanguage,
+  AskRequest,
+  AskEvent,
+  AiPlan,
+  AskTurn,
+  ScheduleChangeRequest,
+} from '../types.js';
 import { chooseModel, estimateTokens, estimateCostUsd } from '../router.js';
 import {
   getProvider,
@@ -44,6 +51,12 @@ const REQUEST_TYPES: ScheduleChangeRequest['requestType'][] = [
   'Name Correction',
 ];
 const FLIGHT_TYPES: ScheduleChangeRequest['flightType'][] = ['Online', 'Codeshare'];
+/**
+ * Lingue ammesse per la risposta. WHITELIST e non troncamento, per la stessa
+ * ragione di `requestType`: il valore finisce dentro le istruzioni di sistema, e
+ * una stringa libera lì sarebbe una via d'ingresso per l'injection.
+ */
+const ANSWER_LANGUAGES: AnswerLanguage[] = ['it', 'en'];
 const SECTION_LABELS = new Set(SCHEDULE_CHANGE_FIELDS.map((f) => f.label));
 
 /**
@@ -125,6 +138,8 @@ export function sanitizeRequest(body: Partial<AskRequest>, settings: SettingsRec
     links: links.filter((link) => link.url && link.text),
     history: sanitizeHistory(body.history, settings.max_history_turns),
     form: sanitizeForm(body.form),
+    // Assente o non riconosciuta → italiano, cioè il comportamento di prima.
+    language: ANSWER_LANGUAGES.find((l) => l === body.language) ?? 'it',
   };
 }
 
@@ -296,7 +311,7 @@ const handleAsk = async (req: Request, res: Response): Promise<void> => {
     // quindi questa stringa non supera i ~6 KB.
     let answer = '';
     try {
-      const { usage } = await provider.streamOutcome(
+      const { usage, truncated } = await provider.streamOutcome(
         { ...request, model: spec.id },
         (text) => {
           answer += text;
@@ -318,7 +333,7 @@ const handleAsk = async (req: Request, res: Response): Promise<void> => {
           error: message,
         });
       } else {
-        send({ type: 'done' });
+        send({ type: 'done', truncated });
         recordMetric({ ...metricBase, ms: Date.now() - startedAt, ok: true });
         persistRequest({
           ...historyBase,
@@ -331,6 +346,9 @@ const handleAsk = async (req: Request, res: Response): Promise<void> => {
           // 0 qui significa «il modello non ha citato nessun articolo»: è così che
           // dice di non aver trovato la risposta, e la dashboard lo segnala.
           citedSources: countCitedSources(answer),
+          // Registrato perché una risposta tagliata è un difetto misurabile: se
+          // capita spesso, il tetto è troppo basso e la dashboard lo mostra.
+          truncated: truncated ? 1 : 0,
         });
       }
     } catch (e) {

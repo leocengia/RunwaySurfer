@@ -7,9 +7,13 @@
     "concordare sono un bug garantito.",
     "Consumato dall'estensione con un import diretto (lib/outcome.ts) e dal server",
     "con una lettura da disco (server/src/shared-assets.ts), perché server/tsconfig",
-    "ha rootDir: src e non può importare fuori da lì."
+    "ha rootDir: src e non può importare fuori da lì.",
+    "Giro 4: via «Risposta suggerita al cliente». Nel sondaggio agenti nessuno dei",
+    "nove l'ha chiesta — servono la procedura (7 su 9) e il link (3 su 9) — e",
+    "occupava budget di output fra la procedura e le fonti, cioè fra le due cose",
+    "che servono davvero."
   ],
-  "standard": ["Procedura", "Eccezioni", "Risposta suggerita al cliente"],
+  "standard": ["Procedura", "Eccezioni"],
   "sources": "Fonti",
   "scheduleChangeFields": [
     { "id": "booking-class", "label": "Booking class" },

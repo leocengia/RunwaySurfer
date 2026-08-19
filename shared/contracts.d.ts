@@ -61,6 +61,16 @@ export interface ScheduleChangeRequest {
   sections: string[];
 }
 
+/**
+ * Lingua in cui l'AI scrive la risposta. Insieme CHIUSO di due valori, e non una
+ * stringa libera, perché finisce dentro le istruzioni di sistema: il server la
+ * valida contro questa stessa lista (vedi la sanificazione in routes/ask.ts).
+ *
+ * Nel sondaggio agenti 3 su 9 cercano in inglese, e il prompt diceva «Rispondi in
+ * italiano» hardcoded, senza alcun override.
+ */
+export type AnswerLanguage = 'it' | 'en';
+
 /** Payload the sidebar/background sends to the backend `POST /ask`. */
 export interface AskRequest {
   query: string;
@@ -70,6 +80,8 @@ export interface AskRequest {
   history?: AskTurn[];
   /** Presente quando l'agente ha compilato il form invece del prompt libero. */
   form?: ScheduleChangeRequest;
+  /** Lingua della risposta scelta dall'agente. Assente = italiano, com'era prima. */
+  language?: AnswerLanguage;
 }
 
 /**
@@ -146,6 +158,9 @@ export interface AiPlan {
 export type AskEvent =
   | { type: 'plan'; plan: AiPlan }
   | { type: 'delta'; text: string }
-  | { type: 'done' }
+  // `truncated` = la risposta ha raggiunto il tetto di output ed è stata tagliata.
+  // Opzionale perché il campo è nato dopo: un backend più vecchio non lo manda e
+  // la sidebar lo tratta come "non tagliata", cioè il comportamento precedente.
+  | { type: 'done'; truncated?: boolean }
   | { type: 'error'; message: string }
   | { type: 'auth-required' };

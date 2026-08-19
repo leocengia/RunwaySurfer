@@ -41,9 +41,6 @@ function mockSection(name: string, input: GenerateInput): string[] {
       'Casi particolari e condizioni segnalate nelle pagine collegate verrebbero elencati qui.',
     ];
   }
-  if (name === 'Risposta suggerita al cliente') {
-    return [`"Gentile cliente, riguardo a «${input.query}» possiamo procedere come segue…"`];
-  }
   // Sezione richiesta dal form Schedule Change: nessun testo precotto.
   return [`[SIMULATO] Qui il provider reale riporterebbe «${name}» come risulta dalla KB.`];
 }

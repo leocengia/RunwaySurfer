@@ -73,6 +73,16 @@ export function usageFromMessage(message: {
   return { inputTokens, outputTokens };
 }
 
+/**
+ * La risposta è stata tagliata dal tetto di output? Solo `max_tokens` conta come
+ * taglio: `end_turn` è una risposta finita, `refusal` è un rifiuto (che ha già la
+ * sua strada), e un valore sconosciuto non va interpretato come guasto. Pura, per
+ * i test.
+ */
+export function truncatedFromMessage(message: { stop_reason?: string | null }): boolean {
+  return message.stop_reason === 'max_tokens';
+}
+
 export class AnthropicProvider implements AiProvider {
   readonly name = 'anthropic' as const;
   private client = new Anthropic(); // reads ANTHROPIC_API_KEY from env
@@ -112,7 +122,10 @@ export class AnthropicProvider implements AiProvider {
     // per persistere i conteggi esatti accanto alle stime. Se l'SDK non lo
     // espone, usageFromMessage ritorna undefined e si tengono le stime.
     const finalMessage = await stream.finalMessage();
-    return { usage: usageFromMessage(finalMessage) };
+    return {
+      usage: usageFromMessage(finalMessage),
+      truncated: truncatedFromMessage(finalMessage),
+    };
   }
 
   /**

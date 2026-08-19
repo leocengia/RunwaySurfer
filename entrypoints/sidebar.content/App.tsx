@@ -24,7 +24,14 @@ import { redactionNotice, scrubPii } from '../../lib/scrub';
 import { parseSources } from '../../lib/sources';
 import { getProxyUrl } from '../../lib/messaging';
 import { clearToken, fetchMe, getToken, logout, type AuthUser } from '../../lib/auth';
-import type { AiPlan, AskTurn, KbLink, KbPage, ScheduleChangeRequest } from '../../lib/outcome';
+import type {
+  AiPlan,
+  AnswerLanguage,
+  AskTurn,
+  KbLink,
+  KbPage,
+  ScheduleChangeRequest,
+} from '../../lib/outcome';
 import {
   clearTour,
   clearTourResult,
@@ -67,6 +74,16 @@ const MODES: ReadonlyArray<{ value: Mode; label: string; hint: string }> = [
   { value: 'follow', label: 'Background', hint: 'Legge le pagine collegate in background' },
   { value: 'single', label: 'Articolo', hint: 'Legge solo la pagina corrente' },
 ];
+
+/** Lingua della risposta: due pillole sulla riga dell'etichetta della modalità.
+ *  Default italiano, cioè il comportamento che c'era prima del selettore. */
+const LANGUAGES: ReadonlyArray<{ value: AnswerLanguage; label: string; hint: string }> = [
+  { value: 'it', label: 'IT', hint: 'Rispondi in italiano' },
+  { value: 'en', label: 'EN', hint: 'Answer in English' },
+];
+
+/** Lingua scelta, ricordata per agente come la larghezza della sidebar. */
+const LANGUAGE_KEY = 'rs:answerLanguage';
 
 /** Override manuale dell'altezza banda, se l'euristica sbaglia sulla KB reale.
  *  Il default vive nel CSS (`var(--rs-host-header-h, 64px)`), non qui: 64px è
@@ -144,6 +161,12 @@ export default function App() {
    * stessa ricerca (dato rimosso E ricerca allargata) e non devono sovrascriversi.
    */
   const [redaction, setRedaction] = useState('');
+  /** La risposta è stata tagliata dal tetto di output (evento `done`). */
+  const [truncated, setTruncated] = useState(false);
+  /** L'elenco degli articoli letti è aperto sotto la riga «Fonti lette». */
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  /** Lingua della risposta. Non si azzera fra le ricerche: è una preferenza. */
+  const [language, setLanguage] = useState<AnswerLanguage>('it');
   const [pagesUsed, setPagesUsed] = useState<KbPage[]>([]);
   const [tour, setTour] = useState<TourState | null>(null);
   /** Turni conclusi della conversazione: restano a schermo e tornano al modello. */
@@ -176,6 +199,9 @@ export default function App() {
   // storico da un ref evita che la sua identità cambi a ogni turno, cosa che
   // ricreerebbe il driver del tour a metà cammino.
   const threadRef = useRef<AskTurn[]>([]);
+  // Stessa ragione: `runAsk` è memoizzato su [] e la lingua può cambiare fra un
+  // turno e l'altro. Metterla nelle dipendenze ricreerebbe il driver del tour.
+  const languageRef = useRef<AnswerLanguage>('it');
   const tourAbortRef = useRef(false);
   const drivingRef = useRef(false);
   // Live sidebar geometry for the tour banner (driveTour must not re-create
@@ -240,10 +266,16 @@ export default function App() {
     let cancelled = false;
     (async () => {
       try {
-        const stored = await browser.storage.local.get(SIDEBAR_WIDTH_KEY);
+        const stored = await browser.storage.local.get([SIDEBAR_WIDTH_KEY, LANGUAGE_KEY]);
         const width = stored[SIDEBAR_WIDTH_KEY];
         if (!cancelled && typeof width === 'number') {
           setSidebarWidth(clampSidebarWidth(width));
+        }
+        // Whitelist anche in lettura: storage.local è scrivibile da chiunque
+        // abbia accesso al profilo, e questo valore finisce nel prompt di sistema.
+        const stored_lang = stored[LANGUAGE_KEY];
+        if (!cancelled && LANGUAGES.some((l) => l.value === stored_lang)) {
+          setLanguage(stored_lang as AnswerLanguage);
         }
       } catch {
         /* keep default */
@@ -277,6 +309,10 @@ export default function App() {
   useEffect(() => {
     threadRef.current = thread;
   }, [thread]);
+
+  useEffect(() => {
+    languageRef.current = language;
+  }, [language]);
 
   // Misura la banda blu della KB e la tiene aggiornata. L'header della sidebar e
   // la barra del tour si allineano a questo valore: senza, la sidebar è più bassa
@@ -422,7 +458,14 @@ export default function App() {
       let streamFailed = false;
       await streamAsk(
         proxyUrl,
-        { query: q.trim(), pages, links: linksOverride, history: threadRef.current, form },
+        {
+          query: q.trim(),
+          pages,
+          links: linksOverride,
+          history: threadRef.current,
+          form,
+          language: languageRef.current,
+        },
         (event) => {
           switch (event.type) {
             case 'plan':
@@ -437,6 +480,9 @@ export default function App() {
               setTourDetail(`ricevuti ${accumulatedOutcome.length} caratteri...`);
               break;
             case 'done':
+              // Un backend più vecchio non manda il campo: `?? false` mantiene
+              // il comportamento precedente invece di mostrare un avviso a caso.
+              setTruncated(event.truncated ?? false);
               setStatus('done');
               break;
             case 'error':
@@ -530,6 +576,20 @@ export default function App() {
    * la modalità Background, la richiesta strutturata e l'allargamento automatico
    * quando la pagina aperta non c'entra con la domanda.
    */
+  /**
+   * Cambia la lingua della risposta e la ricorda. La scrittura è best-effort come
+   * per la larghezza della sidebar: se storage.local non è disponibile la scelta
+   * vale per questa sessione, che è meglio di un errore in faccia all'agente.
+   */
+  const selectLanguage = useCallback(async (value: AnswerLanguage) => {
+    setLanguage(value);
+    try {
+      await browser.storage.local.set({ [LANGUAGE_KEY]: value });
+    } catch {
+      /* best-effort */
+    }
+  }, []);
+
   const searchWholeKb = useCallback(
     async (
       searchQuery: string,
@@ -905,9 +965,38 @@ export default function App() {
         {authPhase === 'mustChange' && <ChangePasswordForm onChanged={onLoggedIn} />}
         {authPhase === 'in' && (
           <>
-            <span className="rs-label" id="rs-mode-label">
-              Modalità di ricerca
-            </span>
+            {/* La riga dell'etichetta aveva spazio vuoto a destra, e la lingua
+                della risposta è una scelta binaria: le due pillole ci stanno
+                dentro a costo verticale ZERO. Tre agenti su nove cercano in
+                inglese, e il prompt di sistema era «Rispondi in italiano»
+                hardcoded, senza override nemmeno manuale. */}
+            <div className="rs-label-row">
+              <span className="rs-label" id="rs-mode-label">
+                Modalità di ricerca
+              </span>
+              <div
+                className="rs-lang"
+                role="radiogroup"
+                aria-label="Lingua della risposta"
+                title="Lingua in cui l’AI scrive la risposta"
+              >
+                {LANGUAGES.map((l) => (
+                  <button
+                    key={l.value}
+                    className={`rs-lang-pill${language === l.value ? ' is-active' : ''}`}
+                    type="button"
+                    role="radio"
+                    aria-checked={language === l.value}
+                    aria-label={l.hint}
+                    disabled={busy}
+                    title={l.hint}
+                    onClick={() => void selectLanguage(l.value)}
+                  >
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="rs-segmented" role="radiogroup" aria-labelledby="rs-mode-label">
               {MODES.map((m) => (
                 <button
@@ -1016,12 +1105,51 @@ export default function App() {
                 completo torna a schermo solo con `rs:debug` in storage. */}
             {plan && (
               <div className="rs-plan" title="Come è stata costruita questa risposta">
-                <div className="rs-plan-row">
-                  <span>Fonti lette</span>
-                  <strong>
-                    {pagesUsed.length === 1 ? '1 articolo' : `${pagesUsed.length} articoli`}
-                  </strong>
-                </div>
+                {/* Tre agenti su nove hanno detto che il LINK è ciò che serve di
+                    più, e prima era a 2-4 schermate di distanza: questa riga
+                    diceva «Fonti lette: 3 articoli» senza un solo link, e
+                    l'elenco stava in fondo, dentro un <details> chiuso. Ora si
+                    apre qui, in cima. Nessun elemento nuovo, nessuna altezza in
+                    più quando è chiuso. */}
+                {pagesUsed.length > 0 ? (
+                  <button
+                    className="rs-plan-row rs-plan-row-button"
+                    type="button"
+                    aria-expanded={sourcesOpen}
+                    onClick={() => setSourcesOpen((open) => !open)}
+                    title={sourcesOpen ? 'Nascondi gli articoli letti' : 'Mostra gli articoli letti'}
+                  >
+                    <span>Fonti lette</span>
+                    <strong>
+                      {pagesUsed.length === 1 ? '1 articolo' : `${pagesUsed.length} articoli`}
+                      <span aria-hidden="true" className="rs-plan-caret">
+                        {sourcesOpen ? '▾' : '▸'}
+                      </span>
+                    </strong>
+                  </button>
+                ) : (
+                  <div className="rs-plan-row">
+                    <span>Fonti lette</span>
+                    <strong>nessun articolo</strong>
+                  </div>
+                )}
+                {sourcesOpen && pagesUsed.length > 0 && (
+                  <ul className="rs-plan-sources">
+                    {pagesUsed.map((p) => (
+                      <li key={p.url}>
+                        <a
+                          className="rs-page-link"
+                          href={p.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {p.title}
+                        </a>{' '}
+                        <span className={`rs-badge rs-${p.origin}`}>{p.origin}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {plan.historyTurnsUsed ? (
                   <div className="rs-plan-row">
                     <span>Memoria</span>
@@ -1096,34 +1224,27 @@ export default function App() {
                 </div>
               )}
 
+            {/* La risposta ha raggiunto il tetto di output. Senza questo avviso
+                un elenco troncato a metà sembrava un elenco completo: il segnale
+                (`stop_reason`) arrivava dal provider e veniva buttato. */}
+            {truncated && status === 'done' && (
+              <div className="rs-notice" role="status">
+                <strong>Risposta incompleta.</strong> Era troppo lunga per il limite di una singola
+                risposta e si interrompe qui. Chiedi il pezzo che ti manca — per esempio un solo
+                vettore, o una sola casistica alla volta.
+              </div>
+            )}
+
             {outcome && (
               <article className="rs-outcome">
                 <OutcomeView outcome={outcome} pages={pagesUsed} />
               </article>
             )}
 
-            {pagesUsed.length > 0 && (
-              <details className="rs-pages">
-                <summary>
-                  {pagesUsed.length === 1 ? '1 pagina letta' : `${pagesUsed.length} pagine lette`}
-                </summary>
-                <ul>
-                  {pagesUsed.map((p) => (
-                    <li key={p.url}>
-                      <span className={`rs-badge rs-${p.origin}`}>{p.origin}</span>{' '}
-                      <a
-                        className="rs-page-link"
-                        href={p.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {p.title}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            )}
+            {/* L'elenco delle pagine lette stava QUI, in fondo e dentro un
+                <details> chiuso: ora è in cima, nella riga «Fonti lette» del
+                pannello. Tenerne due copie voleva dire due posti da aggiornare e
+                una schermata in più da scorrere. */}
           </>
         )}
       </div>

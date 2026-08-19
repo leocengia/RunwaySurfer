@@ -294,7 +294,12 @@ Contiene prompt e interfaccia provider.
 Punti importanti:
 
 - `buildSystemPrompt(options)`: istruzioni al modello. Condizionale: cambia con le
-  sezioni richieste dal form, e aggiunge righe quando c'è uno storico.
+  sezioni richieste dal form, aggiunge righe quando c'è uno storico, e la PRIMA
+  riga cambia con `options.language` (`LANGUAGE_INSTRUCTION`). Solo quella riga:
+  il resto del prompt resta in italiano perché è testo nostro, non la risposta.
+  Il valore passa da una **whitelist** in `routes/ask.ts` (`ANSWER_LANGUAGES`),
+  come `requestType`: finisce dentro le istruzioni di sistema, quindi una stringa
+  libera dell'agente lì sarebbe una via d'ingresso per l'injection.
 - `buildUserContent()`: impacchetta storico, form, query, pagine KB e link in un
   **singolo messaggio utente**, non in un array `messages[]` — così la stima di
   costo in `routes/ask.ts`, che misura il prompt renderizzato, resta esatta senza
@@ -302,7 +307,14 @@ Punti importanti:
 - `outcomeSections(requested?)`: le sezioni della risposta. I titoli vengono da
   `shared/sections.json` (unica fonte, letta anche dall'estensione): le fonti sono
   sempre ultime e mai opzionali, perché la sidebar ci aggancia i chip cliccabili.
+  Sono **tre** (Procedura → Eccezioni → Fonti): «Risposta suggerita al cliente» è
+  uscita nel Giro 4, perché nel sondaggio nessuno dei nove l'ha chiesta e occupava
+  budget fra la procedura e il link, cioè fra le due cose che servono davvero.
 - `maxOutputTokens()`: budget di output, cresce con pagine e sezioni richieste.
+  Il tetto sale da 1400 a 2400 token quando la domanda chiede un ELENCO
+  (`LIST_QUERY`): tre delle 27 query del sondaggio sono di quel tipo, e con 3
+  pagine il budget si fermava a 680 — le troncava a metà elenco. Raddoppia anche
+  la base, altrimenti il margine in più non verrebbe mai raggiunto.
 - `systemPromptOptionsFor()`: un solo punto che deriva le opzioni dalla richiesta,
   così stima e chiamata reale non possono costruire prompt diversi.
 - `ASSUMED_OUTPUT_TOKENS`, `ANTHROPIC_EGRESS`.
@@ -337,6 +349,12 @@ ANTHROPIC_API_KEY=...
 Qui si modificano:
 
 - `max_tokens` (delegato a `maxOutputTokens()`);
+- `truncatedFromMessage()`: la risposta è stata tagliata? Solo `stop_reason ===
+  'max_tokens'` conta come taglio (`end_turn` è finita, `refusal` ha già la sua
+  strada, un valore sconosciuto non va letto come guasto). Il segnale c'era già
+  gratis nel messaggio finale dell'SDK e veniva buttato: da qui va nell'evento
+  `done`, che fa dire alla sidebar «risposta incompleta», e nella colonna
+  `truncated` di `requests` per poterlo contare;
 - parametri SDK;
 - streaming reale;
 - eventuali opzioni modello;

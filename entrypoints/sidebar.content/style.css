@@ -483,6 +483,70 @@
   font-weight: 750;
 }
 
+/* L'etichetta della modalità occupava una riga con metà larghezza vuota a
+   destra: le due pillole della lingua ci entrano senza aggiungere una riga.
+   `baseline` e non `center` perché l'etichetta è più alta delle pillole e
+   allinearle al centro le faceva sembrare fuori asse. */
+.rs-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* Stesso linguaggio visivo del segmented control accanto, in miniatura: due
+   valori non giustificano un secondo stile, e vanno letti come lo stesso tipo di
+   scelta. */
+.rs-lang {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--rs-glass-raised-border);
+  border-radius: var(--rs-r-pill);
+  background: var(--rs-glass-raised);
+}
+
+.rs-lang-pill {
+  min-width: 24px;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--rs-r-pill);
+  background: transparent;
+  color: var(--rs-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  transition:
+    background var(--rs-dur) var(--rs-ease),
+    box-shadow var(--rs-dur) var(--rs-ease);
+}
+
+.rs-lang-pill:hover:not(:disabled):not(.is-active) {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.rs-lang-pill:focus-visible {
+  outline: none;
+  box-shadow: var(--rs-focus-ring);
+}
+
+.rs-lang-pill.is-active {
+  border-color: var(--rs-yellow-line);
+  background: linear-gradient(180deg, var(--rs-yellow-hi), var(--rs-yellow));
+  color: var(--rs-navy);
+}
+
+.rs-lang:has(.rs-lang-pill:disabled) {
+  opacity: 0.62;
+}
+
+.rs-lang-pill:disabled {
+  cursor: not-allowed;
+}
+
 /* L'altezza la gestisce useAutoGrow leggendo scrollHeight: qui serve solo un
    pavimento, un tetto e nessun resize manuale (che combatterebbe con l'hook). */
 /* min-height a due righe: `useAutoGrow` dimensiona sul VALORE, e il segnaposto
@@ -855,6 +919,50 @@
 
 .rs-plan-row code {
   font-size: 11px;
+}
+
+/* La riga «Fonti lette» è un bottone: apre l'elenco degli articoli letti dove
+   l'agente sta già guardando. È un <button> e non un <details> perché deve stare
+   nel flusso delle altre righe del pannello, con la stessa geometria — quindi si
+   azzerano gli stili nativi del bottone e si eredita la tipografia. */
+.rs-plan-row-button {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rs-plan-row-button:hover strong {
+  color: var(--rs-primary);
+}
+
+.rs-plan-row-button:focus-visible {
+  outline: 2px solid var(--rs-primary);
+  outline-offset: 2px;
+  border-radius: var(--rs-r-sm);
+}
+
+.rs-plan-caret {
+  margin-left: 5px;
+  color: var(--rs-muted);
+  font-size: 9px;
+}
+
+.rs-plan-sources {
+  margin: 6px 0 0;
+  padding-left: 14px;
+  font-size: 12px;
+}
+
+.rs-plan-sources li {
+  margin-bottom: 3px;
+  /* I titoli degli articoli KB sono lunghi e non hanno spazi utili dove andare a
+     capo: senza questo escono dai 320px della sidebar. */
+  overflow-wrap: anywhere;
 }
 
 .rs-plan-reason {

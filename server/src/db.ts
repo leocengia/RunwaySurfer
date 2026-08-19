@@ -69,6 +69,8 @@ export interface RequestHistoryRecord {
   kind: string;
   /** Fonti citate dal modello. `null` = non misurato (righe storiche, rank, errori). */
   cited_sources: number | null;
+  /** 1 = risposta tagliata dal tetto di output. `null` = non misurato. */
+  truncated: number | null;
 }
 
 export type FeedbackRating = 'up' | 'down';
@@ -126,6 +128,11 @@ export interface RequestHistoryInput {
    * non è misurabile — richiesta respinta, errore, o rerank.
    */
   citedSources?: number | null;
+  /**
+   * 1 se la risposta ha raggiunto `max_tokens` ed è stata tagliata, 0 se completa.
+   * `null` quando non è misurabile (errore, respinta, rerank).
+   */
+  truncated?: number | null;
 }
 
 export interface SettingsRecord {
@@ -245,7 +252,11 @@ export function initDb(): void {
       -- sources_json). 0 su una risposta 'ok' = «non l'ho trovato in KB»: è la
       -- regola con cui la dashboard segnala i buchi della Knowledge Base.
       -- NULL sulle righe scritte prima di questa colonna e sulle 'rank'.
-      cited_sources INTEGER
+      cited_sources INTEGER,
+      -- 1 = la risposta ha raggiunto max_tokens ed e' stata tagliata. Serve a
+      -- capire se il tetto di output e' troppo basso: se capita spesso, va alzato.
+      -- NULL sulle righe scritte prima di questa colonna, sulle 'rank' e sugli errori.
+      truncated INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS settings (
@@ -364,6 +375,21 @@ function migrate(): void {
       // ALTER e su un DB esistente il boot fallirebbe con "no such column".
       db.exec('CREATE INDEX IF NOT EXISTS idx_requests_cited_sources ON requests(cited_sources)');
       db.pragma('user_version = 4');
+    })();
+  }
+  if (version < 5) {
+    db.transaction(() => {
+      const columns = (db.pragma('table_info(requests)') as Array<{ name: string }>).map(
+        (c) => c.name,
+      );
+      // La risposta ha raggiunto il tetto di output ed è stata tagliata. Come
+      // cited_sources: nullable e senza backfill, perché delle righe archiviate
+      // non lo sappiamo. Nessun indice — non si filtra su questa colonna, si
+      // conta, e un indice su un booleano quasi sempre 0 non aiuterebbe.
+      if (!columns.includes('truncated')) {
+        db.exec('ALTER TABLE requests ADD COLUMN truncated INTEGER');
+      }
+      db.pragma('user_version = 5');
     })();
   }
 }
@@ -609,8 +635,8 @@ export function insertRequestHistory(input: RequestHistoryInput): void {
       provider, model, pages_count, links_count, estimated_input_tokens,
       estimated_output_tokens, estimated_cost_usd, actual_input_tokens,
       actual_output_tokens, duration_ms, status, error,
-      selected_links_json, sources_json, kind, cited_sources
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      selected_links_json, sources_json, kind, cited_sources, truncated
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     input.id,
     now(),
@@ -635,6 +661,7 @@ export function insertRequestHistory(input: RequestHistoryInput): void {
     json(input.sources),
     input.kind ?? 'ask',
     input.citedSources ?? null,
+    input.truncated ?? null,
   );
 }
 

@@ -107,19 +107,26 @@ function buildLegacyDatabase(): void {
   legacy.close();
 }
 
+/**
+ * La versione di schema che `migrate()` deve raggiungere. Sta qui e non sparsa nei
+ * test: quando si aggiunge una migrazione, questo numero è l'unica riga da
+ * toccare, e il test fallisce subito se `migrate()` si ferma prima.
+ */
+const SCHEMA_VERSION = 5;
+
 buildLegacyDatabase();
 const { db, initDb, listFlaggedRequests, listUsers } = await import('../src/db.js');
 
-describe('aggiornamento di un database esistente (v3 → v4)', () => {
+describe('aggiornamento di un database esistente (v3 → v5)', () => {
   it('non lancia al boot', () => {
     // È letteralmente il guasto osservato: initDb() moriva con
     // "no such column: cited_sources" prima di arrivare a migrate().
     expect(() => initDb()).not.toThrow();
   });
 
-  it('porta user_version a 4', () => {
+  it('porta user_version all’ultima versione', () => {
     initDb();
-    expect(db.pragma('user_version', { simple: true })).toBe(4);
+    expect(db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
   });
 
   it('aggiunge la colonna cited_sources e il suo indice', () => {
@@ -164,9 +171,22 @@ describe('aggiornamento di un database esistente (v3 → v4)', () => {
     expect(listFlaggedRequests({ limit: 100 }).some((r) => r.id === 'req-storica')).toBe(false);
   });
 
+  it('aggiunge la colonna truncated (migrazione 5)', () => {
+    initDb();
+    const columns = (db.pragma('table_info(requests)') as Array<{ name: string }>).map(
+      (c) => c.name,
+    );
+    expect(columns).toContain('truncated');
+    // Nessun backfill: di una richiesta archiviata non sappiamo se fosse tagliata.
+    const row = db.prepare('SELECT truncated FROM requests WHERE id = ?').get('req-storica') as {
+      truncated: number | null;
+    };
+    expect(row.truncated).toBeNull();
+  });
+
   it('è idempotente: un secondo avvio non cambia nulla', () => {
     initDb();
     initDb();
-    expect(db.pragma('user_version', { simple: true })).toBe(4);
+    expect(db.pragma('user_version', { simple: true })).toBe(SCHEMA_VERSION);
   });
 });
