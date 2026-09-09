@@ -5,5 +5,14 @@
     "paths": {
       "@/*": ["./*"]
     }
-  }
+  },
+  // .wxt/tsconfig.json (generato, non tracciato) ha "include": ["../**/*"], cioè
+  // tutto il repo. "exclude" qui SOSTITUISCE quello ereditato (non si somma),
+  // quindi va ripetuto anche .output. Senza server/, questo programma include
+  // anche server/src e server/tests, che dipendono da pacchetti presenti solo
+  // in server/node_modules: in CI i due progetti si installano in job separati,
+  // quindi tsc qui fallisce con "Cannot find module 'express'" e simili — un
+  // errore che in locale non si vede perché server/node_modules capita di
+  // esistere comunque sul disco.
+  "exclude": ["node_modules", ".output", "server"]
 }
