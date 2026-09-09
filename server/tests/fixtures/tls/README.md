@@ -20,9 +20,9 @@ questa stessa coppia iniettando `now`, quindi non serve una fixture scaduta.
 
 ## Coppie presenti
 
-| File | Uso |
-|---|---|
-| `test-only.crt` / `test-only.key` | Coppia principale. CN=`localhost`, SAN `DNS:localhost` + `IP:127.0.0.1`, EC P-256. |
+| File                                              | Uso                                                                                                                                                                                                                                                                   |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `test-only.crt` / `test-only.key`                 | Coppia principale. CN=`localhost`, SAN `DNS:localhost` + `IP:127.0.0.1`, EC P-256.                                                                                                                                                                                    |
 | `test-only-renewed.crt` / `test-only-renewed.key` | Seconda coppia, CN=`localhost-renewed`, per simulare un rinnovo nei test del reloader. Serve anche a comporre una coppia NON abbinata (`test-only.crt` + `test-only-renewed.key`), che è il difetto reale quando un rinnovo scrive il certificato prima della chiave. |
 
 ## Comando usato

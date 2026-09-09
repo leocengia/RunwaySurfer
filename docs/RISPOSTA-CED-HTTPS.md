@@ -12,14 +12,14 @@ frattempo per non farvi perdere tempo su domande a cui potevamo rispondere noi.
 
 ## 1. Cosa è chiuso
 
-| Punto | Deciso | Stato lato nostro |
-| --- | --- | --- |
-| Reverse proxy | Nessuno | ✅ Il TLS è terminato direttamente dal processo Node. Implementato. |
-| Buffering delle risposte | Non serve senza proxy | ✅ Confermato. Vedi però la nota sull'**egress** al punto 6. |
-| Rinnovo automatico, fuori dall'applicativo | Sì | ✅ L'applicativo legge due file PEM e li ricarica da sé; il rinnovo lo fa un job di sistema vostro. Nessuna dipendenza dall'applicativo. |
-| Dimensionamento | 10 GB disco / 3 GB RAM | ✅ Va bene. Aggiungiamo due precisazioni al punto 5. |
-| Sistema operativo | A nostra scelta | ✅ **Debian o Ubuntu LTS.** Motivi al punto 4. |
-| Record DNS dopo l'installazione | Sì | ✅ Nessun problema: possiamo installare e collaudare **prima** che il record esista (punto 7). |
+| Punto                                      | Deciso                 | Stato lato nostro                                                                                                                        |
+| ------------------------------------------ | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Reverse proxy                              | Nessuno                | ✅ Il TLS è terminato direttamente dal processo Node. Implementato.                                                                      |
+| Buffering delle risposte                   | Non serve senza proxy  | ✅ Confermato. Vedi però la nota sull'**egress** al punto 6.                                                                             |
+| Rinnovo automatico, fuori dall'applicativo | Sì                     | ✅ L'applicativo legge due file PEM e li ricarica da sé; il rinnovo lo fa un job di sistema vostro. Nessuna dipendenza dall'applicativo. |
+| Dimensionamento                            | 10 GB disco / 3 GB RAM | ✅ Va bene. Aggiungiamo due precisazioni al punto 5.                                                                                     |
+| Sistema operativo                          | A nostra scelta        | ✅ **Debian o Ubuntu LTS.** Motivi al punto 4.                                                                                           |
+| Record DNS dopo l'installazione            | Sì                     | ✅ Nessun problema: possiamo installare e collaudare **prima** che il record esista (punto 7).                                           |
 
 Sul rinnovo, il contratto preciso: voi ci mettete due file in una cartella
 (`/etc/runwaysurfer/tls/`), il vostro job li aggiorna quando vuole, e il servizio
@@ -38,11 +38,11 @@ Avete chiesto un **certificato gratuito** (tipo Let's Encrypt) e un servizio
 raggiungibile **solo da LAN e VPN**. Una CA pubblica, prima di emettere, deve
 verificare che il richiedente controlli davvero il nome. Ha tre modi:
 
-| Metodo | Come funziona | Utilizzabile qui? |
-| --- | --- | --- |
-| HTTP-01 | La CA si collega dall'Internet pubblico a `http://<hostname>` sulla **porta 80** | ❌ Il record A punterà a un indirizzo privato, e non vogliamo (né voi né noi) inbound da Internet |
-| TLS-ALPN-01 | Come sopra, sulla **porta 443** | ❌ Stesso motivo. In più richiederebbe che la logica di rinnovo stia *dentro* l'applicativo, l'opposto di quanto avete chiesto |
-| **DNS-01** | La CA legge un record **TXT** su `_acme-challenge.<hostname>` nella zona DNS **pubblica** di `aviationsrl.it`. Non si collega mai all'host | ✅ **L'unica strada** |
+| Metodo      | Come funziona                                                                                                                              | Utilizzabile qui?                                                                                                              |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| HTTP-01     | La CA si collega dall'Internet pubblico a `http://<hostname>` sulla **porta 80**                                                           | ❌ Il record A punterà a un indirizzo privato, e non vogliamo (né voi né noi) inbound da Internet                              |
+| TLS-ALPN-01 | Come sopra, sulla **porta 443**                                                                                                            | ❌ Stesso motivo. In più richiederebbe che la logica di rinnovo stia _dentro_ l'applicativo, l'opposto di quanto avete chiesto |
+| **DNS-01**  | La CA legge un record **TXT** su `_acme-challenge.<hostname>` nella zona DNS **pubblica** di `aviationsrl.it`. Non si collega mai all'host | ✅ **L'unica strada**                                                                                                          |
 
 Due conseguenze, una buona e una da concordare.
 
@@ -134,24 +134,24 @@ chiuso. Nei log **non c'è il testo delle domande degli agenti**, per scelta.
 
 ### In ingresso al server
 
-| Porta | Da | Note |
-| --- | --- | --- |
-| **TCP 443** | Subnet delle postazioni + pool VPN | È anche la porta della console di amministrazione: è lo stesso servizio, non c'è una porta separata. Se l'accesso amministrativo va limitato, si fa con una ACL sull'indirizzo di origine. |
-| TCP 80 *(facoltativa)* | Stesse origini | Solo per un redirect verso https, comodità per chi apre la console da un vecchio segnalibro. |
-| SSH | Sola subnet amministrativa | |
+| Porta                  | Da                                 | Note                                                                                                                                                                                       |
+| ---------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **TCP 443**            | Subnet delle postazioni + pool VPN | È anche la porta della console di amministrazione: è lo stesso servizio, non c'è una porta separata. Se l'accesso amministrativo va limitato, si fa con una ACL sull'indirizzo di origine. |
+| TCP 80 _(facoltativa)_ | Stesse origini                     | Solo per un redirect verso https, comodità per chi apre la console da un vecchio segnalibro.                                                                                               |
+| SSH                    | Sola subnet amministrativa         |                                                                                                                                                                                            |
 
 > **Nessun inbound da Internet, su nessuna porta.** In particolare la porta 80
 > **non** serve al rinnovo del certificato: usiamo la validazione DNS.
 
 ### In uscita dal server
 
-| Destinazione | Porta | Quando |
-| --- | --- | --- |
-| `api.anthropic.com` | 443 | Solo con il provider reale attivo. **Da consentire per nome, non per indirizzo IP**: l'host è dietro una CDN e gli indirizzi cambiano senza preavviso. |
-| Endpoint Let's Encrypt | 443 | Rinnovo del certificato |
-| API DNS della zona di appoggio | 443 | Rinnovo del certificato |
-| DNS | 53 udp+tcp | **Anche verso i nameserver pubblici** — vedi punto 8, è importante |
-| NTP | 123 udp | Uno scarto d'orologio rompe sia TLS sia il rinnovo |
+| Destinazione                   | Porta      | Quando                                                                                                                                                 |
+| ------------------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `api.anthropic.com`            | 443        | Solo con il provider reale attivo. **Da consentire per nome, non per indirizzo IP**: l'host è dietro una CDN e gli indirizzi cambiano senza preavviso. |
+| Endpoint Let's Encrypt         | 443        | Rinnovo del certificato                                                                                                                                |
+| API DNS della zona di appoggio | 443        | Rinnovo del certificato                                                                                                                                |
+| DNS                            | 53 udp+tcp | **Anche verso i nameserver pubblici** — vedi punto 8, è importante                                                                                     |
+| NTP                            | 123 udp    | Uno scarto d'orologio rompe sia TLS sia il rinnovo                                                                                                     |
 
 ### Dalle postazioni
 
@@ -209,7 +209,7 @@ esista. Quindi possiamo installare e collaudare tutto prima del vostro ticket DN
 9. Passaggio al provider reale, dopo la regola di uscita e la consegna della
    chiave.
 10. **Prova del rinnovo.** È il passo che si salta sempre: forziamo un rinnovo
-    anticipato e verifichiamo che il certificato *servito* sia cambiato **senza
+    anticipato e verifichiamo che il certificato _servito_ sia cambiato **senza
     riavvio del servizio**.
 
 ---
@@ -221,9 +221,9 @@ dall'esterno e da una postazione aziendale. Tre risultati, e uno è importante.
 
 **Nessun record CAA sul dominio.** Né su `aviationsrl.it` né sul TLD `.it`.
 Significa che non c'è nulla che impedisca l'emissione di un certificato gratuito.
-Era la domanda che poteva bloccare tutto in partenza, ed è chiusa. *(Se in futuro
+Era la domanda che poteva bloccare tutto in partenza, ed è chiusa. _(Se in futuro
 aggiungete un CAA, va incluso `letsencrypt.org` o il servizio si ferma al rinnovo
-successivo — vale la pena saperlo.)*
+successivo — vale la pena saperlo.)_
 
 **La zona pubblica è su nameserver KPNQwest, il sito è su Aruba.**
 `aviationsrl.it` è servito da `ns.kpnqwest.it` e `ns2.kpnqwest.it`, mentre
@@ -308,7 +308,7 @@ interviene chi conosce la procedura.
 In quel caso le alternative, in ordine di preferenza:
 
 1. **CA interna.** Vale la pena una seconda verifica: «non ne abbiamo una»
-   significa *non esiste* o *non vogliamo attivarla*? Siete un ambiente Active
+   significa _non esiste_ o _non vogliamo attivarla_? Siete un ambiente Active
    Directory, e la parte difficile — distribuire la CA radice come attendibile su
    tutte le postazioni via GPO — nella vostra infrastruttura è già risolta. Da lì
    il certificato è un template e cinque minuti, con validità di 1–2 anni, zero
@@ -326,7 +326,7 @@ In quel caso le alternative, in ordine di preferenza:
 
 Una **wildcard `*.aviationsrl.it`** già in uso per il sito pubblico sarebbe
 un'altra via, e avrebbe un vantaggio: l'hostname interno non finirebbe nei
-registri pubblici. Ma metterebbe la chiave privata di *tutto* il dominio su un
+registri pubblici. Ma metterebbe la chiave privata di _tutto_ il dominio su un
 server applicativo interno, e la distribuzione andrebbe automatizzata comunque,
 altrimenti è la stessa trappola manuale spostata di posto. La segnaliamo per
 completezza; se la valutate, va con il vostro benestare esplicito.

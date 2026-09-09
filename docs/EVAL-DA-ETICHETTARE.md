@@ -17,7 +17,7 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
 
 ## 1. devo cercare la policy di emirates
 
-*id `r2-g` · lingua it · 389 candidati*
+_id `r2-g` · lingua it · 389 candidati_
 
 - [ ] **Car Cancel Waiver policy**
       <br>punteggio 14 — 1 hit testo, 1 hit URL, car+policy intent
@@ -38,13 +38,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 11.8 — 2 hit su sinonimi, policy intent, intervallo alfabetico
       <br>`https://traveler.my.site.com/Runway/s/article/Airline-tax-and-refund-policies-A-H?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 2. posso riproteggere il cliente per un volo LH la prossima settimana?
 
-*id `r2-h` · lingua it · 939 candidati*
+_id `r2-h` · lingua it · 939 candidati_
 
 - [ ] **Flight ASC Major airline schedule change NL POSa**
       <br>punteggio 22.2 — 8 hit su sinonimi, flight intent
@@ -65,13 +65,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 22.2 — 8 hit su sinonimi, flight intent
       <br>`https://traveler.my.site.com/Runway/s/article/Flight-Sabre-Airline-schedule-change?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 3. posso procedere con il rimborso totale con i segmenti in TK?
 
-*id `r2-i` · lingua it · 213 candidati*
+_id `r2-i` · lingua it · 213 candidati_
 
 - [ ] **Flight Error LCC LCC combined one way fare with missing segments**
       <br>punteggio 12.6 — 4 hit su sinonimi, segment intent
@@ -92,13 +92,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 7.8 — 2 hit su sinonimi, refund intent
       <br>`https://traveler.my.site.com/Runway/s/article/Airline-Refund-Checks-Process-1694551469712?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 4. trasferire a relocation
 
-*id `r3-g` · lingua it · 335 candidati*
+_id `r3-g` · lingua it · 335 candidati_
 
 - [ ] **AMER Airline schedule change policies K Z**
       <br>punteggio 13.6 — 4 hit su sinonimi, intervallo alfabetico
@@ -119,13 +119,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 11 — 1 hit testo, 1 hit URL, relocation intent
       <br>`https://traveler.my.site.com/Runway/s/article/Billing-Charge-Create-a-WEX-Card-Relocations?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 5. policy schedule change riprotezione lufthansa
 
-*id `r3-h` · lingua mixed · 485 candidati*
+_id `r3-h` · lingua mixed · 485 candidati_
 
 - [ ] **AMER Airline schedule change policies K Z**
       <br>punteggio 33.8 — 2 hit testo, 2 hit URL, change+schedule+policy intent, intervallo alfabetico
@@ -146,13 +146,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 29.8 — 2 hit testo, 2 hit URL, change+schedule+policy intent
       <br>`https://traveler.my.site.com/Runway/s/article/EMEA-Airline-schedule-change-policies-1694551028974?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 6. se un cliente hotels.com usa il coupon ha diritto all'accumulo della notte per tier?
 
-*id `r3-i` · lingua it · 372 candidati*
+_id `r3-i` · lingua it · 372 candidati_
 
 > Fuori perimetro dichiarato: «tier» in accezione loyalty. I 30 label con «tier» sono tutti escalation interna.
 
@@ -175,13 +175,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 23.8 — 2 hit testo, 2 hit URL, lodging intent
       <br>`https://traveler.my.site.com/Runway/s/article/Handle-questions-and-concerns-on-Hotelscom-promotional-or-marketing-coupons-1694551042331?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 7. cercami policy compagnia lufthansa per cancellazione volo involontaria
 
-*id `r4-g` · lingua it · 937 candidati*
+_id `r4-g` · lingua it · 937 candidati_
 
 - [ ] **Flight Cancel Korea 91 day flight cancellation policy KR POSa**
       <br>punteggio 31.4 — 1 hit testo, 1 hit URL, cancel+flight+policy intent
@@ -202,13 +202,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 23.6 — 1 hit testo, 1 hit URL, flight+policy intent
       <br>`https://traveler.my.site.com/Runway/s/article/Flight-Airline-contact-policy-for-APAC-EMEA?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 8. dimmi tutte le casistiche di riprotezione per volo cancellato da lufthansa
 
-*id `r4-h` · lingua it · 1034 candidati*
+_id `r4-h` · lingua it · 1034 candidati_
 
 > Richiesta di elenco esaustivo: candidata al taglio della risposta (Fase C4).
 
@@ -231,13 +231,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 25.2 — 8 hit su sinonimi, cancel+flight intent
       <br>`https://traveler.my.site.com/Runway/s/article/Cancel-or-change-Car-reservations-affected-by-airline-schedule-changes-1694551249830?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 9. elencami tutte le regole dei punti cash hotels.com
 
-*id `r4-i` · lingua it · 456 candidati*
+_id `r4-i` · lingua it · 456 candidati_
 
 > Richiesta di elenco esaustivo.
 
@@ -260,13 +260,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 23.8 — 2 hit testo, 2 hit URL, lodging intent
       <br>`https://traveler.my.site.com/Runway/s/article/Loyalty-Hotels-com-Rewards-with-Hotels-comCash-Compare-with-the-previous-program?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 10. quali sono tutti motivi di relocation?
 
-*id `r5-g` · lingua it · 341 candidati*
+_id `r5-g` · lingua it · 341 candidati_
 
 - [ ] **Lodging Relocation Cancel for Any Reason CFAR assurance B2B WLT Rapid API US POSa**
       <br>punteggio 18.8 — 1 hit testo, 1 hit URL, relocation+reason intent
@@ -287,13 +287,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 11 — 1 hit testo, 1 hit URL, relocation intent
       <br>`https://traveler.my.site.com/Runway/s/article/Billing-Charge-Create-a-WEX-Card-Relocations?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 11. che volo posso scegliere a seguito di un asc lhg?
 
-*id `r5-h` · lingua it · 903 candidati*
+_id `r5-h` · lingua it · 903 candidati_
 
 - [ ] **Flight ASC Major airline schedule change NL POSa**
       <br>punteggio 30.2 — 1 hit testo, 1 hit URL, flight intent
@@ -314,13 +314,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 25.4 — 1 hit testo, 1 hit URL, flight intent
       <br>`https://traveler.my.site.com/Runway/s/article/Flight-ASC-Schedule-change-for-NDC-booking?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 12. mi spieghi chiaramente la policy asc lh?
 
-*id `r5-i` · lingua it · 567 candidati*
+_id `r5-i` · lingua it · 567 candidati_
 
 - [ ] **AMER Airline schedule change policies c j**
       <br>punteggio 26.2 — 8 hit su sinonimi, policy intent, intervallo alfabetico
@@ -341,13 +341,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 25.4 — 1 hit testo, 1 hit URL, policy intent
       <br>`https://traveler.my.site.com/Runway/s/article/Lufthansa-LH-airline-policies-1694551662004?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 13. policy compagnie emea
 
-*id `r6-g` · lingua mixed · 240 candidati*
+_id `r6-g` · lingua mixed · 240 candidati_
 
 - [ ] **EMEA flexibility policy for packages during crisis events**
       <br>punteggio 19 — 2 hit testo, 2 hit URL, policy intent
@@ -368,13 +368,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 15.8 — 1 hit testo, 1 hit URL, policy intent
       <br>`https://traveler.my.site.com/Runway/s/article/Voli-Centro-regolamenti-delle-compagnie-aeree?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 14. contatti autonoleggio
 
-*id `r6-h` · lingua it · 344 candidati*
+_id `r6-h` · lingua it · 344 candidati_
 
 - [ ] **Car rental companies contact information A D**
       <br>punteggio 19.6 — 4 hit su sinonimi, car+contact intent, intervallo alfabetico
@@ -395,13 +395,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 15.6 — 4 hit su sinonimi, car+contact intent
       <br>`https://traveler.my.site.com/Runway/s/article/Car-Contacts-K-Q?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 15. compensazioni per reclami
 
-*id `r6-i` · lingua it · 99 candidati*
+_id `r6-i` · lingua it · 99 candidati_
 
 - [ ] **Compensation Lodging Complaints Global 41156**
       <br>punteggio 20.4 — 6 hit su sinonimi, escalate+compensation intent
@@ -422,13 +422,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 12.6 — 4 hit su sinonimi, escalate intent
       <br>`https://traveler.my.site.com/Runway/s/article/Contact-Complaints-hub?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 16. ndc
 
-*id `r7-g` · lingua en · 19 candidati*
+_id `r7-g` · lingua en · 19 candidati_
 
 - [ ] **Air Canada NDC Processes**
       <br>punteggio 8 — 1 hit testo, 1 hit URL
@@ -449,13 +449,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 8 — 1 hit testo, 1 hit URL
       <br>`https://traveler.my.site.com/Runway/s/article/Flight-Cancel-Cancel-British-Airways-BA-NDC-booking-Global?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 17. ndc emea
 
-*id `r7-h` · lingua en · 71 candidati*
+_id `r7-h` · lingua en · 71 candidati_
 
 - [ ] **Flight Reference NDC contact numbers and IATAs EMEA**
       <br>punteggio 16 — 2 hit testo, 2 hit URL
@@ -476,13 +476,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 8 — 1 hit testo, 1 hit URL
       <br>`https://traveler.my.site.com/Runway/s/article/Billing-Refund-Process-an-ELV-refund-using-WorldPay-EMEA?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 18. ndc refund
 
-*id `r7-i` · lingua en · 207 candidati*
+_id `r7-i` · lingua en · 207 candidati_
 
 - [ ] **Billing Refund How to use Farelogix NDC BSP Refunds**
       <br>punteggio 19 — 2 hit testo, 2 hit URL, refund intent
@@ -503,13 +503,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 11 — 1 hit testo, 1 hit URL, refund intent
       <br>`https://traveler.my.site.com/Runway/s/article/Airline-tax-and-refund-policies-I-Z?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 19. ASC lufthansa policy
 
-*id `r8-g` · lingua en · 562 candidati*
+_id `r8-g` · lingua en · 562 candidati_
 
 - [ ] **AMER Airline schedule change policies K Z**
       <br>punteggio 26.2 — 8 hit su sinonimi, policy intent, intervallo alfabetico
@@ -530,13 +530,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 22.4 — 1 hit testo, 1 hit URL
       <br>`https://traveler.my.site.com/Runway/s/article/Flight-ASC-Schedule-changes-in-United-Airlines-Farelogix-Global?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 20. WAIVER CODE FRO REFUND DUE TO ASC
 
-*id `r8-h` · lingua en · 660 candidati*
+_id `r8-h` · lingua en · 660 candidati_
 
 > Refuso: FRO per FOR.
 
@@ -559,13 +559,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 22.4 — 1 hit testo, 1 hit URL
       <br>`https://traveler.my.site.com/Runway/s/article/Flight-ASC-Work-the-airline-schedule-change-ASC-queue?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 21. HEALTH AND SAFTY COMPLAIN HOW TO SOLVE
 
-*id `r8-i` · lingua en · 104 candidati*
+_id `r8-i` · lingua en · 104 candidati_
 
 > Refuso: SAFTY per SAFETY.
 
@@ -588,13 +588,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 8 — 1 hit testo, 1 hit URL
       <br>`https://traveler.my.site.com/Runway/s/article/APAC-Resolve-a-rejected-split-ticket-1694551178008?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 22. pacchetti eu
 
-*id `r9-g` · lingua it · 72 candidati*
+_id `r9-g` · lingua it · 72 candidati_
 
 - [ ] **Pre bundled packages**
       <br>punteggio 17.4 — 6 hit su sinonimi, package intent
@@ -615,13 +615,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 12.6 — 4 hit su sinonimi, package intent
       <br>`https://traveler.my.site.com/Runway/s/article/Offer-booking-options-for-multi-destination-packages-1694551220283?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 23. EU package bookings
 
-*id `r9-h` · lingua en · 367 candidati*
+_id `r9-h` · lingua en · 367 candidati_
 
 - [ ] **Handle EU package bookings**
       <br>punteggio 39.6 — 2 hit testo, 2 hit URL, book+package intent, frase query vicina
@@ -642,13 +642,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 23.6 — 1 hit testo, 1 hit URL, book+package intent
       <br>`https://traveler.my.site.com/Runway/s/article/Package-3PP-Cancel-a-3PP-booking?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 24. EU package bookings
 
-*id `r9-i` · lingua en · 367 candidati*
+_id `r9-i` · lingua en · 367 candidati_
 
 > Duplicato di r9-h nel sondaggio: 27 risposte, 26 query distinte.
 
@@ -671,13 +671,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 23.6 — 1 hit testo, 1 hit URL, book+package intent
       <br>`https://traveler.my.site.com/Runway/s/article/Package-3PP-Cancel-a-3PP-booking?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 25. se la piscina dell'hotel è chiusa posso trasferire a relocation?
 
-*id `r10-g` · lingua it · 552 candidati*
+_id `r10-g` · lingua it · 552 candidati_
 
 - [ ] **B2B Affiliate After hours support for Amadeus relocations and hotel reconfirmations**
       <br>punteggio 22 — 2 hit testo, 2 hit URL, relocation+lodging intent
@@ -698,13 +698,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 20.6 — 1 hit testo, 1 hit URL, lodging intent
       <br>`https://traveler.my.site.com/Runway/s/article/Expedia-Rewards-and-Hotels-com-Rewards-Complex-Lodging-scenarios-1694551652475?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 26. posso rimborsare i posti a sedere con lufthansa per volo cancellato?
 
-*id `r10-h` · lingua it · 970 candidati*
+_id `r10-h` · lingua it · 970 candidati_
 
 - [ ] **Volo Prenotazione Politica sulle richieste di posti a sedere Globale**
       <br>punteggio 30 — 3 hit testo, 3 hit URL, flight+seat intent
@@ -725,13 +725,13 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 23.4 — 6 hit su sinonimi, refund+cancel+flight intent
       <br>`https://traveler.my.site.com/Runway/s/article/Billing-Refund-Refund-a-canceled-flight-with-Expedia-Group-Discounted-Fares-Global?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
 ## 27. se lufthansa modifica il numero di volo è considerato major schedule change?
 
-*id `r10-i` · lingua it · 902 candidati*
+_id `r10-i` · lingua it · 902 candidati_
 
 - [ ] **Flight ASC Major airline schedule change NL POSa**
       <br>punteggio 42.6 — 3 hit testo, 3 hit URL, change+flight+schedule intent
@@ -752,7 +752,7 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
       <br>punteggio 34.6 — 2 hit testo, 2 hit URL, change+flight+schedule intent
       <br>`https://traveler.my.site.com/Runway/s/article/Flight-ASC-Work-the-airline-schedule-change-ASC-queue?language=en_US`
 
-- [ ] Altro: 
+- [ ] Altro:
 
 ---
 
@@ -760,35 +760,34 @@ Non serve che sia perfetto o completo. Anche solo metà delle domande etichettat
 
 Numeri del prefiltro locale sull'indice bundle-ato (6 candidati mostrati su 40 inviati al reranker). `punteggio max` sotto 5 significa che nessun **titolo** contiene i termini della domanda.
 
-| # | id | candidati | punteggio max | avviso |
-| --- | --- | --- | --- | --- |
-| 1 | `r2-g` | 389 | 14 | — |
-| 2 | `r2-h` | 939 | 22.2 | — |
-| 3 | `r2-i` | 213 | 12.6 | — |
-| 4 | `r3-g` | 335 | 13.6 | — |
-| 5 | `r3-h` | 485 | 33.8 | — |
-| 6 | `r3-i` | 372 | 23.8 | — |
-| 7 | `r4-g` | 937 | 31.4 | — |
-| 8 | `r4-h` | 1034 | 33 | — |
-| 9 | `r4-i` | 456 | 23.8 | — |
-| 10 | `r5-g` | 341 | 18.8 | — |
-| 11 | `r5-h` | 903 | 30.2 | — |
-| 12 | `r5-i` | 567 | 26.2 | — |
-| 13 | `r6-g` | 240 | 19 | — |
-| 14 | `r6-h` | 344 | 19.6 | — |
-| 15 | `r6-i` | 99 | 20.4 | — |
-| 16 | `r7-g` | 19 | 8 | — |
-| 17 | `r7-h` | 71 | 16 | — |
-| 18 | `r7-i` | 207 | 19 | — |
-| 19 | `r8-g` | 562 | 26.2 | — |
-| 20 | `r8-h` | 660 | 24 | — |
-| 21 | `r8-i` | 104 | 16 | — |
-| 22 | `r9-g` | 72 | 17.4 | — |
-| 23 | `r9-h` | 367 | 39.6 | — |
-| 24 | `r9-i` | 367 | 39.6 | — |
-| 25 | `r10-g` | 552 | 22 | — |
-| 26 | `r10-h` | 970 | 30 | — |
-| 27 | `r10-i` | 902 | 42.6 | — |
+| #   | id      | candidati | punteggio max | avviso |
+| --- | ------- | --------- | ------------- | ------ |
+| 1   | `r2-g`  | 389       | 14            | —      |
+| 2   | `r2-h`  | 939       | 22.2          | —      |
+| 3   | `r2-i`  | 213       | 12.6          | —      |
+| 4   | `r3-g`  | 335       | 13.6          | —      |
+| 5   | `r3-h`  | 485       | 33.8          | —      |
+| 6   | `r3-i`  | 372       | 23.8          | —      |
+| 7   | `r4-g`  | 937       | 31.4          | —      |
+| 8   | `r4-h`  | 1034      | 33            | —      |
+| 9   | `r4-i`  | 456       | 23.8          | —      |
+| 10  | `r5-g`  | 341       | 18.8          | —      |
+| 11  | `r5-h`  | 903       | 30.2          | —      |
+| 12  | `r5-i`  | 567       | 26.2          | —      |
+| 13  | `r6-g`  | 240       | 19            | —      |
+| 14  | `r6-h`  | 344       | 19.6          | —      |
+| 15  | `r6-i`  | 99        | 20.4          | —      |
+| 16  | `r7-g`  | 19        | 8             | —      |
+| 17  | `r7-h`  | 71        | 16            | —      |
+| 18  | `r7-i`  | 207       | 19            | —      |
+| 19  | `r8-g`  | 562       | 26.2          | —      |
+| 20  | `r8-h`  | 660       | 24            | —      |
+| 21  | `r8-i`  | 104       | 16            | —      |
+| 22  | `r9-g`  | 72        | 17.4          | —      |
+| 23  | `r9-h`  | 367       | 39.6          | —      |
+| 24  | `r9-i`  | 367       | 39.6          | —      |
+| 25  | `r10-g` | 552       | 22            | —      |
+| 26  | `r10-h` | 970       | 30            | —      |
+| 27  | `r10-i` | 902       | 42.6          | —      |
 
 Su 27 domande, 0 vengono segnalate all'agente come inutilizzabili prima di spendere una chiamata.
-

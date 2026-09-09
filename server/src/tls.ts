@@ -117,9 +117,7 @@ export function loadTlsMaterial(paths: TlsPaths): TlsMaterial {
     // esattamente la foglia la cui scadenza ci interessa. Non è un difetto.
     x509 = new X509Certificate(cert);
   } catch (e) {
-    throw new Error(
-      `Il certificato TLS non è un PEM valido (${paths.certPath}): ${String(e)}.`,
-    );
+    throw new Error(`Il certificato TLS non è un PEM valido (${paths.certPath}): ${String(e)}.`);
   }
 
   // L'unico modo economico di intercettare una chiave che non corrisponde al

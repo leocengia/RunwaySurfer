@@ -141,15 +141,15 @@ colpo a «sei aggiornata, e stai parlando con il backend giusto?».
 
 ## Se qualcosa non funziona
 
-| Cosa vedi                                               | Cosa significa                                                       | Cosa fare                                                                         |
-| ------------------------------------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| «Backend non raggiungibile» con il pulsante **Riprova** | il servizio non risponde, ma la sessione dell'agente è ancora valida | verifica la rete o la VPN, poi premi Riprova. Non serve rifare il login           |
-| Il form di login ricompare da solo                      | la sessione è scaduta o è stata revocata                             | rifai l'accesso                                                                   |
-| «Nessuna risposta dal servizio» nel test di connessione | indirizzo sbagliato, servizio spento o rete assente                  | ricontrolla l'indirizzo carattere per carattere, poi chiedi conferma al referente |
-| La sidebar non compare                                  | non sei su un articolo, oppure l'estensione è disattivata            | apri un articolo; controlla l'interruttore su `chrome://extensions`               |
-| «Sembra la pagina di login della KB»                    | la sessione della Knowledge Base è scaduta                           | rientra nella KB e riprova                                                        |
-| La risposta arriva tutta insieme dopo una lunga attesa  | buffering del proxy lato server                                      | segnalalo: è una configurazione del server, non della postazione                  |
-| «Backend non raggiungibile» su **tutte** le postazioni, **ma il test di connessione riesce** | `ALLOWED_ORIGIN` sul server non include l'origin della KB | è una riga di configurazione del server, non un problema di rete: vedi «Perché l'ID è fisso» più sotto |
+| Cosa vedi                                                                                    | Cosa significa                                                       | Cosa fare                                                                                              |
+| -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| «Backend non raggiungibile» con il pulsante **Riprova**                                      | il servizio non risponde, ma la sessione dell'agente è ancora valida | verifica la rete o la VPN, poi premi Riprova. Non serve rifare il login                                |
+| Il form di login ricompare da solo                                                           | la sessione è scaduta o è stata revocata                             | rifai l'accesso                                                                                        |
+| «Nessuna risposta dal servizio» nel test di connessione                                      | indirizzo sbagliato, servizio spento o rete assente                  | ricontrolla l'indirizzo carattere per carattere, poi chiedi conferma al referente                      |
+| La sidebar non compare                                                                       | non sei su un articolo, oppure l'estensione è disattivata            | apri un articolo; controlla l'interruttore su `chrome://extensions`                                    |
+| «Sembra la pagina di login della KB»                                                         | la sessione della Knowledge Base è scaduta                           | rientra nella KB e riprova                                                                             |
+| La risposta arriva tutta insieme dopo una lunga attesa                                       | buffering del proxy lato server                                      | segnalalo: è una configurazione del server, non della postazione                                       |
+| «Backend non raggiungibile» su **tutte** le postazioni, **ma il test di connessione riesce** | `ALLOWED_ORIGIN` sul server non include l'origin della KB            | è una riga di configurazione del server, non un problema di rete: vedi «Perché l'ID è fisso» più sotto |
 
 Quando segnali un problema, riporta **il testo esatto** del messaggio che vedi:
 i messaggi sono scritti per essere diversi l'uno dall'altro proprio per far

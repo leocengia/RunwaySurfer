@@ -14,9 +14,9 @@ spiegazioni.
 | Cartella dei log                        | _in attesa del CED_                                          |
 | Backup: dove e con che frequenza        | _in attesa del CED_                                          |
 | Chi custodisce `ANTHROPIC_API_KEY`      | _in attesa del CED_                                          |
-| Hostname pubblicato                     | `runway-surfer.aviationsrl.it` _(grafia da confermare)_       |
+| Hostname pubblicato                     | `runway-surfer.aviationsrl.it` _(grafia da confermare)_      |
 | Scadenza del certificato TLS            | _da compilare alla prima emissione_                          |
-| Chi rinnova il certificato              | automatico (certbot) — referente: _in attesa del CED_         |
+| Chi rinnova il certificato              | automatico (certbot) — referente: _in attesa del CED_        |
 | Chi riceve le segnalazioni degli agenti | Leonardo Cengia — cengia.l@aviationsrl.it — +39 328 052 1769 |
 | Budget mensile concordato               | €70 (`MAX_MONTHLY_ESTIMATED_COST_EUR`)                       |
 
@@ -175,12 +175,12 @@ Un comando, un argomento. Verifica il pacchetto, fa il backup del database,
 scambia la release, riavvia e controlla che il servizio risponda **con la
 versione attesa**; se non ci riesce, torna da sé alla release precedente.
 
-| Comando | Cosa fa |
-| --- | --- |
-| `sudo runwaysurfer-update <pacchetto>` | aggiorna |
-| `sudo runwaysurfer-update --dry-run <pacchetto>` | **solo controlli, non tocca niente** |
-| `sudo runwaysurfer-update --list` | release presenti, quella attiva, quella in esecuzione, schema del database |
-| `sudo runwaysurfer-update --activate <id>` | torna a una release precedente |
+| Comando                                          | Cosa fa                                                                    |
+| ------------------------------------------------ | -------------------------------------------------------------------------- |
+| `sudo runwaysurfer-update <pacchetto>`           | aggiorna                                                                   |
+| `sudo runwaysurfer-update --dry-run <pacchetto>` | **solo controlli, non tocca niente**                                       |
+| `sudo runwaysurfer-update --list`                | release presenti, quella attiva, quella in esecuzione, schema del database |
+| `sudo runwaysurfer-update --activate <id>`       | torna a una release precedente                                             |
 
 Da dove viene il pacchetto: artifact `runway-surfer-server-bundle` di ogni
 esecuzione della CI (`.github/workflows/ci.yml`), **insieme al suo file
@@ -222,7 +222,7 @@ unico: non esiste il gradino inverso. Se l'aggiornamento aveva migrato lo schema
 la release precedente si rifiuta di partire (lo dice con una riga `[db]`, ed è
 voluto: partire su uno schema sconosciuto corromperebbe i dati in silenzio). In
 quel caso lo script **non fa il rollback da solo** e stampa i comandi da eseguire
-— codice *e* database — avvisando che si perdono i dati scritti dopo il backup.
+— codice _e_ database — avvisando che si perdono i dati scritti dopo il backup.
 Quella è una decisione da prendere con il referente, non da eseguire di corsa.
 
 Lo script dice in anticipo quando un aggiornamento migrerà lo schema: la riga
@@ -233,7 +233,7 @@ Lo script dice in anticipo quando un aggiornamento migrerà lo schema: la riga
 
 Sessioni, storico, tetto di spesa e impostazioni stanno in SQLite e
 sopravvivono: **gli agenti non devono rifare il login.** Si azzerano le metriche
-live della dashboard, la lista *Recent requests*, il contatore orario per agente
+live della dashboard, la lista _Recent requests_, il contatore orario per agente
 e i tentativi di login falliti. E **gli stream `/ask` aperti in quel momento
 vengono interrotti**: un agente che stava leggendo una risposta la vede troncata.
 Per questo un aggiornamento va fatto fuori dalle ore di punta, o accettando quel
@@ -263,7 +263,7 @@ scelta si trasforma in un servizio spento.
 ### Configurazione minima per il provider reale
 
 In **`/etc/runwaysurfer/runwaysurfer.env`** — non in `server/.env`, che è il
-modello di *sviluppo*. Il modello di produzione è
+modello di _sviluppo_. Il modello di produzione è
 `server/deploy/runwaysurfer.env.example`, e viaggia dentro il pacchetto.
 
 > **Mai lasciare una chiave a `VAR=` vuoto.** `EnvironmentFile=` di systemd
@@ -403,7 +403,7 @@ da conoscere:
 | `[maintenance]`              | passata giornaliera di retention                                       |
 | `[config]`                   | problema di configurazione all'avvio (blocca l'avvio)                  |
 | `[tls]`                      | certificato caricato o ricaricato, e avvisi di scadenza                |
-| `[db]`                       | database scritto da una build più recente: **blocca l'avvio**           |
+| `[db]`                       | database scritto da una build più recente: **blocca l'avvio**          |
 | `[auth]`                     | bootstrap del primo amministratore                                     |
 
 La prima riga di log dopo l'avvio è la più informativa del sistema:

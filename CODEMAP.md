@@ -354,7 +354,7 @@ Qui si modificano:
 
 - `max_tokens` (delegato a `maxOutputTokens()`);
 - `truncatedFromMessage()`: la risposta è stata tagliata? Solo `stop_reason ===
-  'max_tokens'` conta come taglio (`end_turn` è finita, `refusal` ha già la sua
+'max_tokens'` conta come taglio (`end_turn` è finita, `refusal` ha già la sua
   strada, un valore sconosciuto non va letto come guasto). Il segnale c'era già
   gratis nel messaggio finale dell'SDK e veniva buttato: da qui va nell'evento
   `done`, che fa dire alla sidebar «risposta incompleta», e nella colonna
@@ -402,7 +402,7 @@ Un solo posto per ciò che serve a più superfici. Il server non può importarli
   nel titolo: 48 articoli in 21 famiglie. `parseKbRange()` scompone la label in
   famiglia + estremi (scartando gli intervalli discendenti, che sono i due falsi
   positivi reali dell'indice: «only U S» e «team S O»); `nameInitials()` ricava
-  l'iniziale del nome cercato — anche da un codice vettore, `TK` → *turkish* →
+  l'iniziale del nome cercato — anche da un codice vettore, `TK` → _turkish_ →
   `T` — e `rangeInitialBoost()` premia il fratello che la copre. Additivo: nessun
   candidato può uscire dalla shortlist per colpa sua, quindi il caso peggiore è
   il comportamento precedente. Conta soprattutto sul percorso **locale**, quando

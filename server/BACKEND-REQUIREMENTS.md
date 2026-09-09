@@ -18,12 +18,12 @@ Un **proxy** in Node.js che:
 
 ## Risorse di calcolo
 
-| Voce    | Minimo tecnico                                  | Richiesto al CED (30 agenti)                                     |
-| ------- | ----------------------------------------------- | ---------------------------------------------------------------- |
-| CPU     | 1 vCPU                                          | **2 vCPU** — I/O bound, ma `better-sqlite3` è sincrono: la seconda CPU tiene backup e antivirus fuori dall'event loop |
-| RAM     | 256–512 MB (misurato: 60–120 MB RSS)            | **2–3 GB** — sovrabbondante di proposito, non è la risorsa critica |
-| Disco   | ~5 GB (OS + runtime + DB)                       | **10–20 GB**, con la rotazione dei log configurata a livello OS   |
-| Runtime | Node.js **esattamente 22.x** (vedi `.nvmrc`) | **Ubuntu 24.04 LTS** con systemd (`deploy/runwaysurfer.service`) |
+| Voce    | Minimo tecnico                               | Richiesto al CED (30 agenti)                                                                                          |
+| ------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| CPU     | 1 vCPU                                       | **2 vCPU** — I/O bound, ma `better-sqlite3` è sincrono: la seconda CPU tiene backup e antivirus fuori dall'event loop |
+| RAM     | 256–512 MB (misurato: 60–120 MB RSS)         | **2–3 GB** — sovrabbondante di proposito, non è la risorsa critica                                                    |
+| Disco   | ~5 GB (OS + runtime + DB)                    | **10–20 GB**, con la rotazione dei log configurata a livello OS                                                       |
+| Runtime | Node.js **esattamente 22.x** (vedi `.nvmrc`) | **Ubuntu 24.04 LTS** con systemd (`deploy/runwaysurfer.service`)                                                      |
 
 **Il disco è la risorsa che può fermare il servizio, non la RAM.** Il database ha
 una retention automatica (90 giorni), i log **no**: l'applicativo scrive su
@@ -49,13 +49,13 @@ prova e produzione allineate la questione non si pone.
 
 ## Rete
 
-| Direzione             | Requisito                                                                                                                                    |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Direzione             | Requisito                                                                                                                                                                                                                                                                                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Inbound**           | **TCP 443** dalle subnet delle postazioni e dal pool VPN. Il TLS è terminato **direttamente da Node**, senza reverse proxy. La 443 serve anche alla Control Dashboard: è lo stesso servizio, non c'è una porta di amministrazione separata. Facoltativa la **TCP 80** solo per il redirect 301 (`HTTP_REDIRECT_PORT`). **Nessun inbound da Internet.** |
-| **Outbound (egress)** | **HTTPS verso `api.anthropic.com:443`** — SOLO con provider reale; in demo nessun egress. Da consentire **per hostname**: l'host è dietro CDN e un'allowlist di indirizzi IP si rompe senza preavviso. |
-| **Outbound (ACME)**   | HTTPS verso gli endpoint Let's Encrypt e verso l'API DNS usata per la validazione; **DNS 53 udp/tcp anche verso i nameserver autoritativi** del dominio (un resolver interno con una copia split-horizon della zona farebbe fallire il controllo di propagazione); **NTP 123/udp** — lo scarto d'orologio rompe sia TLS sia ACME. |
-| Dalle postazioni      | solo `<hostname>:443` e la KB. **`api.anthropic.com` non serve su nessuna postazione**: la chiave API non lascia il server. |
-| CORS                  | `Access-Control-Allow-Origin` = origin dell'estensione (in demo `*`)                                                                         |
+| **Outbound (egress)** | **HTTPS verso `api.anthropic.com:443`** — SOLO con provider reale; in demo nessun egress. Da consentire **per hostname**: l'host è dietro CDN e un'allowlist di indirizzi IP si rompe senza preavviso.                                                                                                                                                 |
+| **Outbound (ACME)**   | HTTPS verso gli endpoint Let's Encrypt e verso l'API DNS usata per la validazione; **DNS 53 udp/tcp anche verso i nameserver autoritativi** del dominio (un resolver interno con una copia split-horizon della zona farebbe fallire il controllo di propagazione); **NTP 123/udp** — lo scarto d'orologio rompe sia TLS sia ACME.                      |
+| Dalle postazioni      | solo `<hostname>:443` e la KB. **`api.anthropic.com` non serve su nessuna postazione**: la chiave API non lascia il server.                                                                                                                                                                                                                            |
+| CORS                  | `Access-Control-Allow-Origin` = origin dell'estensione (in demo `*`)                                                                                                                                                                                                                                                                                   |
 
 > Le risposte di `/ask` restano aperte per minuti (streaming). Qualunque firewall,
 > IDS o proxy di uscita con un idle timeout inferiore a ~5 minuti le taglia a

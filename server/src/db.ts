@@ -265,7 +265,7 @@ export function assertSchemaNotNewer(): void {
         `massimo ${SCHEMA_VERSION}: è stato scritto da una versione PIÙ RECENTE di Runway ` +
         'Surfer. Non parto — le migrazioni sono a senso unico e proseguire corromperebbe i ' +
         'dati senza dare segno. Rimetti la release più recente (sudo runwaysurfer-update ' +
-        '--list) oppure ripristina il backup del database preso prima di quell\'aggiornamento ' +
+        "--list) oppure ripristina il backup del database preso prima di quell'aggiornamento " +
         '(vedi docs/RUNBOOK-BACKEND.md, sezione «Backup del database»).',
     );
   }

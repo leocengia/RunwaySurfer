@@ -24,17 +24,17 @@ gli agenti digitano davvero, quindi è quello che il retrieval deve reggere.
 
 ## I numeri
 
-| | |
-| --- | --- |
-| Risposte | 9 |
-| Query utilizzabili | 27 (26 distinte: una ripetuta dallo stesso rispondente) |
-| Lingua di ricerca | Italiano 4 · Inglese 3 · Entrambe 1 |
-| Aree | BEX 8 · HCOM 6 · PLS 4 · GDPR 1 |
-| Cosa serve in una risposta | **la procedura 7** · le eccezioni 3 · **il link 3** |
-| Vettore citato nella query | Lufthansa **6** · LH 2 · TK 1 · LHG 1 · Emirates 1 |
-| Acronimi usati | ASC **4** · NDC **3** · EMEA 2 |
-| Richieste di elenco esaustivo | 3 |
-| Refusi | 2 |
+|                               |                                                         |
+| ----------------------------- | ------------------------------------------------------- |
+| Risposte                      | 9                                                       |
+| Query utilizzabili            | 27 (26 distinte: una ripetuta dallo stesso rispondente) |
+| Lingua di ricerca             | Italiano 4 · Inglese 3 · Entrambe 1                     |
+| Aree                          | BEX 8 · HCOM 6 · PLS 4 · GDPR 1                         |
+| Cosa serve in una risposta    | **la procedura 7** · le eccezioni 3 · **il link 3**     |
+| Vettore citato nella query    | Lufthansa **6** · LH 2 · TK 1 · LHG 1 · Emirates 1      |
+| Acronimi usati                | ASC **4** · NDC **3** · EMEA 2                          |
+| Richieste di elenco esaustivo | 3                                                       |
+| Refusi                        | 2                                                       |
 
 Tre agenti su nove hanno detto che **il link è ciò che serve di più**: non un
 riassunto, l'articolo. È il dato che motiva la Fase C3.
@@ -43,25 +43,25 @@ riassunto, l'articolo. È il dato che motiva la Fase C3.
 
 Tutte verificate sull'indice reale, non stimate.
 
-| Causa | Query colpite | Stato |
-| --- | --- | --- |
-| La KB archivia i vettori per **intervallo alfabetico** (`… policies I L`), e il nome cercato non è nel titolo: 48 articoli in 21 famiglie | 6 | risolta ([`lib/kb-ranges.ts`](../lib/kb-ranges.ts)) |
-| Gli **acronimi** ≤3 caratteri venivano scartati dal tokenizzatore: ASC, NDC, LH, TK, LHG | 9 | risolta, con confine di parola perché `asc` come sottostringa prende *Madagascar* |
-| Le **flessioni** italiane e `policy`/`policies` non matchavano: l'alias deve stare dentro la query | ~6 | risolta (dati in [`lib/kb-vocab.ts`](../lib/kb-vocab.ts)) |
-| La risposta è **sempre in italiano**, per 3 agenti su 9 che cercano in inglese | — | Fase C2 |
-| Le risposte **tagliate** non lo dicono: `stop_reason` c'era e lo buttavamo | 3 | Fase C4 |
+| Causa                                                                                                                                     | Query colpite | Stato                                                                             |
+| ----------------------------------------------------------------------------------------------------------------------------------------- | ------------- | --------------------------------------------------------------------------------- |
+| La KB archivia i vettori per **intervallo alfabetico** (`… policies I L`), e il nome cercato non è nel titolo: 48 articoli in 21 famiglie | 6             | risolta ([`lib/kb-ranges.ts`](../lib/kb-ranges.ts))                               |
+| Gli **acronimi** ≤3 caratteri venivano scartati dal tokenizzatore: ASC, NDC, LH, TK, LHG                                                  | 9             | risolta, con confine di parola perché `asc` come sottostringa prende _Madagascar_ |
+| Le **flessioni** italiane e `policy`/`policies` non matchavano: l'alias deve stare dentro la query                                        | ~6            | risolta (dati in [`lib/kb-vocab.ts`](../lib/kb-vocab.ts))                         |
+| La risposta è **sempre in italiano**, per 3 agenti su 9 che cercano in inglese                                                            | —             | Fase C2                                                                           |
+| Le risposte **tagliate** non lo dicono: `stop_reason` c'era e lo buttavamo                                                                | 3             | Fase C4                                                                           |
 
 Le somme superano 27 perché diverse query hanno più di una causa.
 
 ### Il caso che spiega tutto
 
 > **«ASC lufthansa policy»** → l'articolo giusto è `Global airline schedule change
-> policies I L`, perché Lufthansa comincia per **L**.
+policies I L`, perché Lufthansa comincia per **L**.
 
 Quel titolo non contiene né «lufthansa» né «ASC». Valeva **zero** per due ragioni
 sovrapposte: `asc` era sotto la soglia dei 4 caratteri, e `policy` non è
 sottostringa di `policies` (109 label contro 57). Sistemate quelle, la famiglia
-sale a punteggio pieno — e poi serve scegliere *quale* dei sei fratelli, che è il
+sale a punteggio pieno — e poi serve scegliere _quale_ dei sei fratelli, che è il
 lavoro dell'iniziale.
 
 ## Cosa resta fuori, dichiarato
@@ -74,7 +74,7 @@ lavoro dell'iniziale.
 - **`tier` in accezione loyalty.** I 30 label con «tier» sono tutti escalation
   interna (`When to escalate to Tier 3`). L'articolo su notti e livelli Hotels.com
   probabilmente non è nell'indice: è una domanda per chi cura la KB. E dall'evidenza
-  di retrieval `tier` appare *identico* a `ndc`, che invece è preciso — quindi
+  di retrieval `tier` appare _identico_ a `ndc`, che invece è preciso — quindi
   nemmeno l'avviso può distinguerli.
 - **`punti cash` / accumulo notti.** Stessa famiglia del punto sopra.
 

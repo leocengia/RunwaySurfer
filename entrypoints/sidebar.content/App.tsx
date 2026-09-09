@@ -1117,7 +1117,9 @@ export default function App() {
                     type="button"
                     aria-expanded={sourcesOpen}
                     onClick={() => setSourcesOpen((open) => !open)}
-                    title={sourcesOpen ? 'Nascondi gli articoli letti' : 'Mostra gli articoli letti'}
+                    title={
+                      sourcesOpen ? 'Nascondi gli articoli letti' : 'Mostra gli articoli letti'
+                    }
                   >
                     <span>Fonti lette</span>
                     <strong>

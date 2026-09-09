@@ -4,13 +4,7 @@
 import { createHash } from 'node:crypto';
 import { parseCityPair } from '../itinerary.js';
 import { SOURCES_SECTION, STANDARD_SECTIONS } from '../shared-assets.js';
-import type {
-  AnswerLanguage,
-  AskTurn,
-  KbPage,
-  KbLink,
-  ScheduleChangeRequest,
-} from '../types.js';
+import type { AnswerLanguage, AskTurn, KbPage, KbLink, ScheduleChangeRequest } from '../types.js';
 
 /** The network endpoint the backend contacts for a real call, shown to the CED. */
 export const ANTHROPIC_EGRESS = 'api.anthropic.com:443';

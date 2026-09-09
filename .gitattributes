@@ -1,0 +1,23 @@
+# Normalizza a LF tutto ciò che Git riconosce come testo, indipendentemente da
+# come core.autocrlf è configurato sulla macchina di chi committa.
+#
+# Perché questo file mancava del tutto: senza una regola esplicita, la
+# normalizzazione dipende dal core.autocrlf locale di chi fa `git add`, e su
+# Windows può fallire silenziosamente per certi strumenti di editing — risultato,
+# CRLF finito nei blob per la quasi totalità dei file di testo del repo. La CI
+# gira su Ubuntu, dove i file si estraggono così come sono memorizzati: con
+# `endOfLine: "lf"` di Prettier (il default), ogni file con CRLF viene segnalato
+# da `prettier --check`. Il problema era mascherato da mesi perché i passi
+# precedenti (compile/lint) fallivano prima di arrivarci.
+* text=auto eol=lf
+
+# I file .bat restano CRLF: cmd.exe li vuole così.
+*.bat text eol=crlf
+
+# Binari veri: mai passare per la normalizzazione testo.
+*.png binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.docx binary
+*.xlsx binary

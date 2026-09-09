@@ -31,7 +31,7 @@ l'applicativo, entro pochi minuti o subito con un `systemctl reload`.
 Poiché il servizio non sarà raggiungibile da Internet, la verifica di proprietà del
 nome da parte dell'autorità di certificazione avviene in entrambi i casi tramite un
 **record TXT nel DNS pubblico** di `aviationsrl.it` (il dettaglio tecnico è nel
-documento che vi ho inviato). Resta quindi da scegliere solo *come* lo scrivete:
+documento che vi ho inviato). Resta quindi da scegliere solo _come_ lo scrivete:
 
 **Opzione A — automatico (consigliata).** Aggiungete **un solo record CNAME
 permanente**, e poi non toccate più il DNS:
@@ -81,14 +81,14 @@ Per evitarvi lavoro inutile, mettiamo per iscritto anche i non-requisiti:
 
 ## 3. Specifica della VM
 
-| Voce | Valore |
-| --- | --- |
-| Sistema operativo | **Ubuntu 24.04 LTS**, installazione minimale, **senza ambiente grafico** |
-| vCPU | **2** |
-| RAM | **2–3 GB** |
-| Disco | **20 GB** consigliati (10 GB è il minimo praticabile) |
-| Filesystem | ext4, preferibilmente su **LVM**, così le dimensioni si possono ampliare senza reinstallare |
-| Rete | IP statico, FQDN impostato correttamente, **NTP attivo** |
+| Voce              | Valore                                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------- |
+| Sistema operativo | **Ubuntu 24.04 LTS**, installazione minimale, **senza ambiente grafico**                    |
+| vCPU              | **2**                                                                                       |
+| RAM               | **2–3 GB**                                                                                  |
+| Disco             | **20 GB** consigliati (10 GB è il minimo praticabile)                                       |
+| Filesystem        | ext4, preferibilmente su **LVM**, così le dimensioni si possono ampliare senza reinstallare |
+| Rete              | IP statico, FQDN impostato correttamente, **NTP attivo**                                    |
 
 Sul dimensionamento, per trasparenza: la RAM non è la risorsa critica — l'applicativo
 misurato sta in 60–120 MB, e 2–3 GB sono abbondanti. **La risorsa che può fermare il
@@ -98,13 +98,13 @@ servizio è il disco**, e il motivo sono i log (vedi il punto 3.2).
 
 Fra parentesi la variante a 10 GB.
 
-| Punto di mount | Dimensione | Contiene | Perché separato |
-| --- | --- | --- | --- |
-| `/boot` | 1 GB (512 MB) | kernel | standard |
-| swap | 2 GB (1 GB) | — | |
-| `/` | 10 GB (6 GB) | sistema, Node.js, applicativo (`/opt/runwaysurfer`) **e i backup del database** | L'applicativo occupa ~130 MB per versione e ne conserva 5, più una copia del database prima di ogni aggiornamento |
-| `/var/log` | 3 GB (1,5 GB) | log di sistema e del servizio | È la **sola voce di disco senza limite superiore**: isolandola, un log che cresce non riempie la radice |
-| `/var/lib/runwaysurfer` | 2 GB (1 GB) | database | Isolato **dai log**: un disco pieno corrompe un database SQLite, e i log sono ciò che lo riempirebbe |
+| Punto di mount          | Dimensione    | Contiene                                                                        | Perché separato                                                                                                   |
+| ----------------------- | ------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `/boot`                 | 1 GB (512 MB) | kernel                                                                          | standard                                                                                                          |
+| swap                    | 2 GB (1 GB)   | —                                                                               |                                                                                                                   |
+| `/`                     | 10 GB (6 GB)  | sistema, Node.js, applicativo (`/opt/runwaysurfer`) **e i backup del database** | L'applicativo occupa ~130 MB per versione e ne conserva 5, più una copia del database prima di ogni aggiornamento |
+| `/var/log`              | 3 GB (1,5 GB) | log di sistema e del servizio                                                   | È la **sola voce di disco senza limite superiore**: isolandola, un log che cresce non riempie la radice           |
+| `/var/lib/runwaysurfer` | 2 GB (1 GB)   | database                                                                        | Isolato **dai log**: un disco pieno corrompe un database SQLite, e i log sono ciò che lo riempirebbe              |
 
 Se preferite un partizionamento più semplice, il requisito minimo che vi chiediamo di
 rispettare è: **i log e il database non sullo stesso filesystem.**
@@ -146,14 +146,14 @@ Nei log **non c'è il testo delle domande degli agenti**, per scelta progettuale
 
 ### 3.3 Software da installare
 
-| Pacchetto | A cosa serve |
-| --- | --- |
-| `nodejs` **esattamente 22.x LTS** (repository NodeSource) | runtime dell'applicativo |
-| `gnupg` | serve a installare la chiave del repository NodeSource |
-| `sudo` | usato dall'accesso limitato per gli aggiornamenti (punto 4) |
-| `sqlite3` | backup coerente del database |
-| `curl`, `tar`, `ca-certificates` | installazione e verifica |
-| `certbot` (+ plugin DNS, solo con l'opzione A) | rinnovo del certificato |
+| Pacchetto                                                 | A cosa serve                                                |
+| --------------------------------------------------------- | ----------------------------------------------------------- |
+| `nodejs` **esattamente 22.x LTS** (repository NodeSource) | runtime dell'applicativo                                    |
+| `gnupg`                                                   | serve a installare la chiave del repository NodeSource      |
+| `sudo`                                                    | usato dall'accesso limitato per gli aggiornamenti (punto 4) |
+| `sqlite3`                                                 | backup coerente del database                                |
+| `curl`, `tar`, `ca-certificates`                          | installazione e verifica                                    |
+| `certbot` (+ plugin DNS, solo con l'opzione A)            | rinnovo del certificato                                     |
 
 **Una richiesta specifica: bloccate la major version di Node** (`apt-mark hold
 nodejs`). Motivo concreto: l'applicativo usa un componente compilato contro una
@@ -279,20 +279,20 @@ Grazie,
 Leonardo Cengia
 cengia.l@aviationsrl.it — +39 328 052 1769
 
-
 # La mia versione della mail
+
 Buongiorno,
 
 prima di procedere con l’installazione sul server, vorrei testare Runway Surfer in ambiente Linux, dato che finora ha girato solamente sul mio PC Windows.
 
 Vi chiederei quindi di abilitare sul mio PC **WSL2 con Ubuntu 24.04 LTS e systemd**, installando al suo interno:
 
-* Node.js 22.x LTS e npm;
-* Git;
-* SQLite3;
-* `curl`, `tar` e `ca-certificates`;
-* Codex CLI;
-* OpenCode.
+- Node.js 22.x LTS e npm;
+- Git;
+- SQLite3;
+- `curl`, `tar` e `ca-certificates`;
+- Codex CLI;
+- OpenCode.
 
 Codex e OpenCode mi servirebbero per completare lo sviluppo, eseguire i test e preparare il pacchetto da distribuire sul server.
 
@@ -315,4 +315,5 @@ Grazie,
 Leonardo
 
 # Prompt per nuova chat
+
 alla fine ho mandato al CED la mia versione della mail che mi avevi preparato (la trovi infondo al file docs/MAIL-CED-INSTALLAZIONE.md , c'è altro che possiamo fare mentre aspettiamo risposta?

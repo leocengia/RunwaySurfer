@@ -85,7 +85,9 @@ function main() {
     bootstrap,
   };
   writeFileSync(outPath, JSON.stringify(doc, null, 2) + '\n');
-  console.log(`scritte ${bootstrap.length} entry bootstrap (+${curated.length} curated) → ${outPath}`);
+  console.log(
+    `scritte ${bootstrap.length} entry bootstrap (+${curated.length} curated) → ${outPath}`,
+  );
 }
 
 main();

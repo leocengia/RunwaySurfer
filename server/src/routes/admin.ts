@@ -45,9 +45,9 @@ function tlsRequirements() {
   const status = dashboardData().tls;
   return {
     termination: 'diretta nel processo Node (nessun reverse proxy)',
-    material: 'due file PEM (catena completa + chiave) leggibili dall\'utente del servizio',
+    material: "due file PEM (catena completa + chiave) leggibili dall'utente del servizio",
     renewal:
-      'esterno all\'applicativo: client ACME con timer di sistema + deploy hook. ' +
+      "esterno all'applicativo: client ACME con timer di sistema + deploy hook. " +
       'Il servizio rilegge i file su SIGHUP e comunque ogni 6h, e sostituisce il ' +
       'certificato senza riavviare e senza interrompere le risposte in corso.',
     validation:
@@ -82,7 +82,7 @@ adminRoutes.get('/requirements', requireAuth('team_lead'), (_req, res) => {
           : ' — in chiaro: modalità sviluppo/demo, non pubblicabile dentro la KB'),
       outbound_egress: `HTTPS verso ${ANTHROPIC_EGRESS} (solo con provider reale)`,
       outbound_acme:
-        'HTTPS verso gli endpoint Let\'s Encrypt e l\'API DNS di validazione; ' +
+        "HTTPS verso gli endpoint Let's Encrypt e l'API DNS di validazione; " +
         'DNS 53 udp/tcp anche verso i nameserver autoritativi; NTP 123/udp',
       cors: `Access-Control-Allow-Origin = ${ALLOWED_ORIGIN}`,
       streaming:

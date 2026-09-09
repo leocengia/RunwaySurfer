@@ -197,9 +197,9 @@ describe('assessCertificate', () => {
   });
 
   it('ok un giorno prima del confine', () => {
-    expect(
-      assessCertificate({ validTo }, new Date(validTo.getTime() - 22 * day), 21).state,
-    ).toBe('ok');
+    expect(assessCertificate({ validTo }, new Date(validTo.getTime() - 22 * day), 21).state).toBe(
+      'ok',
+    );
   });
 
   it('expired dopo la scadenza', () => {

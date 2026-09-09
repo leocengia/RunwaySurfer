@@ -60,8 +60,7 @@ export function pageCoverage(page: Pick<KbPage, 'title' | 'text'>, query: string
   const haystack = `${page.title} ${page.text}`.toLowerCase();
   const covered = base.filter(
     (term) =>
-      haystack.includes(term) ||
-      expandTerm(term).some((expansion) => haystack.includes(expansion)),
+      haystack.includes(term) || expandTerm(term).some((expansion) => haystack.includes(expansion)),
   );
   return covered.length / base.length;
 }
