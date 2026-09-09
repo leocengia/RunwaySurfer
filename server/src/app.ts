@@ -3,7 +3,8 @@
 // istanziarla con supertest.
 import express from 'express';
 import cors from 'cors';
-import { ALLOWED_ORIGIN } from './config.js';
+import { ALLOWED_ORIGINS, TLS_ENABLED } from './config.js';
+import { RELEASE } from './release.js';
 import { getProvider } from './provider/index.js';
 import { authRoutes } from './routes/auth-routes.js';
 import { adminRoutes } from './routes/admin.js';
@@ -17,7 +18,14 @@ export function createApp(): express.Express {
   // middleware must whitelist it and answer the resulting OPTIONS preflights.
   // Bearer auth needs no credentials:true, so origin '*' stays legal; dashboard
   // cookies are same-origin and never go through CORS.
-  app.use(cors({ origin: ALLOWED_ORIGIN, allowedHeaders: ['Content-Type', 'Authorization'] }));
+  //
+  // ALLOWED_ORIGINS è un ARRAY (tranne nel caso wildcard) e va passato come
+  // tale: con una stringa `cors` emette quell'Access-Control-Allow-Origin a
+  // ogni richiesta senza confrontarlo con l'Origin ricevuta, quindi una sola
+  // origin ammessa diventa «ammessa nessuna» per tutte le altre, senza che il
+  // server se ne accorga. Con un array confronta ed echeggia solo se combacia,
+  // aggiungendo `Vary: Origin`.
+  app.use(cors({ origin: ALLOWED_ORIGINS, allowedHeaders: ['Content-Type', 'Authorization'] }));
   app.use(express.json({ limit: '4mb' }));
 
   // Header di sicurezza per le pagine HTML servite (login/dashboard).
@@ -26,6 +34,12 @@ export function createApp(): express.Express {
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
+    // Solo servendo davvero in TLS: annunciarlo in HTTP renderebbe la dashboard
+    // irraggiungibile in sviluppo. Senza includeSubDomains (aviationsrl.it
+    // ospita altro) e senza preload (questo host è interno). 180 giorni e non un
+    // anno perché HSTS inchioda il browser a https e per /dashboard non esiste
+    // un fallback: una max-age più corta limita quanto vive un errore.
+    if (TLS_ENABLED) res.setHeader('Strict-Transport-Security', 'max-age=15552000');
     res.setHeader(
       'Content-Security-Policy',
       "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
@@ -34,9 +48,23 @@ export function createApp(): express.Express {
     next();
   });
 
-  /** Liveness probe. */
+  /**
+   * Liveness probe.
+   *
+   * `version` e `commit` sono ciò che rende verificabile un aggiornamento: lo
+   * script di deploy interroga questo endpoint finché non risponde con il commit
+   * atteso, invece di accontentarsi di «il processo è su». Nient'altro va qui —
+   * è l'unico endpoint non autenticato oltre a /auth/login, e la versione di
+   * Node o dello schema non vanno regalate a chiunque sia in rete: quelle
+   * stanno in /dashboard-data, che è autenticato.
+   */
   app.get('/health', (_req, res) => {
-    res.json({ status: 'ok', provider: getProvider().name });
+    res.json({
+      status: 'ok',
+      provider: getProvider().name,
+      version: RELEASE.version,
+      commit: RELEASE.shortCommit,
+    });
   });
 
   app.use(authRoutes);

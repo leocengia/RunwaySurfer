@@ -186,3 +186,61 @@ describe('streamAsk · timeout di inattività', () => {
     }
   });
 });
+
+// Contratto con il keep-alive del backend (ASK_PING_MS in server/src/config.ts).
+// Senza reverse proxy davanti, il silenzio mentre il modello ragiona è l'unica
+// cosa che può far scattare il timeout di inattività qui sopra: il server manda
+// un commento SSE ogni 15s. Questi test fissano le due proprietà su cui quel
+// meccanismo si appoggia, così un refactoring del parser non le rompe in
+// silenzio.
+describe('streamAsk · commenti SSE del keep-alive', () => {
+  it('un frame di commento non diventa un evento', async () => {
+    const encoder = new TextEncoder();
+    const frames = [
+      ': ping\n\n',
+      'data: {"type":"delta","text":"ciao"}\n\n',
+      ': ping\n\n',
+      'data: {"type":"done"}\n\n',
+    ];
+    let sent = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent < frames.length) controller.enqueue(encoder.encode(frames[sent++]));
+        else controller.close();
+      },
+    });
+    const events = await collect(new Response(body, { status: 200 }));
+    expect(events.map((e) => e.type)).toEqual(['delta', 'done']);
+  });
+
+  it('un commento riarma il contatore di inattività', async () => {
+    vi.useFakeTimers();
+    try {
+      const encoder = new TextEncoder();
+      // Solo ping per 90s — tre volte il budget di 30s — e poi la risposta.
+      // Senza il riarmo a ogni chunk, questo stream verrebbe interrotto.
+      const frames = [': ping\n\n', ': ping\n\n', ': ping\n\n', 'data: {"type":"done"}\n\n'];
+      let sent = 0;
+      const body = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          if (sent >= frames.length) {
+            controller.close();
+            return;
+          }
+          const frame = frames[sent++];
+          await vi.advanceTimersByTimeAsync(25_000);
+          controller.enqueue(encoder.encode(frame));
+        },
+      });
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => new Response(body, { status: 200 })),
+      );
+      const events: AskEvent[] = [];
+      await streamAsk('http://proxy.test', REQUEST, (e) => events.push(e));
+      expect(events.map((e) => e.type)).toEqual(['done']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

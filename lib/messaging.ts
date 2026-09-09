@@ -23,10 +23,14 @@ export type RuntimeMessage = AskMessage | AskStreamMessage;
 /**
  * URL del backend usato se nessuno lo configura.
  *
- * Resta `localhost` di proposito finché non c'è l'hostname https di produzione:
- * è l'unico valore che funziona senza infrastruttura, e un default sbagliato che
- * "quasi" funziona è peggio di uno palesemente locale. Da sostituire con
- * l'hostname reale (vedi docs/INSTALLAZIONE-PILOTA.md).
+ * Resta `localhost` di proposito, e ci resta: è l'unico valore che funziona senza
+ * infrastruttura, e un default sbagliato che "quasi" funziona è peggio di uno
+ * palesemente locale.
+ *
+ * In produzione l'hostname NON arriva da qui ma da `storage.managed`, cioè dalla
+ * GPO del CED (vedi getProxyUrl sotto e docs/INSTALLAZIONE-PILOTA.md). Tenerlo
+ * fuori dal codice significa che un cambio di hostname è un valore di policy, non
+ * una nuova build da ridistribuire su ogni postazione.
  */
 export const DEFAULT_PROXY_URL = 'http://localhost:8787';
 

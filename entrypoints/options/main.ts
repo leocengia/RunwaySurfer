@@ -21,6 +21,11 @@ const testBtn = el<HTMLButtonElement>('test');
 
 el<HTMLImageElement>('mark').src = LOGO_MARK;
 
+// Versione dell'estensione, leggibile senza DevTools: quando si chiede a un
+// agente «che versione hai?», deve poterla leggere da qui e dirla al telefono.
+// Non va nella sidebar, che resta libera da stringhe tecniche.
+el<HTMLSpanElement>('ext-version').textContent = browser.runtime.getManifest().version;
+
 type Tone = 'ok' | 'error' | 'busy' | 'none';
 
 function say(message: string, tone: Tone = 'none'): void {
@@ -84,9 +89,18 @@ testBtn.addEventListener('click', () => {
         say(`Il servizio risponde ma con un errore (${res.status}). Segnalalo.`, 'error');
         return;
       }
-      const body = (await res.json()) as { status?: string; provider?: string };
+      const body = (await res.json()) as {
+        status?: string;
+        provider?: string;
+        version?: string;
+        commit?: string;
+      };
+      // Versione e commit del BACKEND, non solo «risponde». Così un clic da una
+      // postazione risponde a «stai parlando con la release che ho appena
+      // installato?» senza DevTools e senza aprire un ticket.
+      const build = body.version ? ` — servizio ${body.version} (${body.commit ?? '?'})` : '';
       say(
-        `Connessione riuscita${body.provider ? ` — provider: ${body.provider}` : ''}. Puoi salvare.`,
+        `Connessione riuscita${build}${body.provider ? `, provider: ${body.provider}` : ''}. Puoi salvare.`,
         'ok',
       );
     } catch {

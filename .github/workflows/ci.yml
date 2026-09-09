@@ -4,11 +4,15 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Permette di costruire un pacchetto da un branch senza aspettare il merge:
+  # serve per un aggiornamento urgente che il CED deve provare sul rack.
+  workflow_dispatch:
 
 jobs:
   extension:
     name: Estensione (typecheck + lint + test + build)
-    runs-on: ubuntu-latest
+    # Fissato per coerenza con il job `server`, dove la versione conta davvero.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,11 +34,19 @@ jobs:
           name: runway-surfer-extension
           path: .output/*.zip
           if-no-files-found: error
-          retention-days: 30
+          # 90 giorni (il massimo): se la build che un agente sta usando è già
+          # scaduta dalla CI, non se ne può riprodurre il difetto.
+          retention-days: 90
 
   server:
     name: Backend (typecheck + lint + test + build)
-    runs-on: ubuntu-latest
+    # Fissato, e NON `ubuntu-latest`: il pacchetto si porta dietro node_modules
+    # con il binario nativo di better-sqlite3, e glibc è compatibile solo ALL
+    # INDIETRO — un binario costruito su un runner più recente del rack può non
+    # caricarsi sul rack. Ubuntu 24.04 è la versione del rack, quindi ambiente di
+    # build, di prova (WSL2) e di produzione combaciano e la domanda non si pone.
+    # Va cambiato INSIEME al rack, non prima.
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: server
@@ -50,3 +62,93 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build
+
+      # --- Pacchetto offline per il rack ---------------------------------------
+      #
+      # Il rack può non avere accesso né a npm né a GitHub, quindi il pacchetto
+      # si porta dietro node_modules di produzione, compreso il binario nativo
+      # di better-sqlite3 per Linux x64/glibc. Va costruito QUI e non su un
+      # portatile Windows, dove quel binario sarebbe un .node per win32 e il
+      # servizio morirebbe alla prima query.
+      #
+      # I passi stanno nel job `server` e non in un job a parte di proposito:
+      # così il pacchetto può nascere SOLO da un albero che ha già superato
+      # compile, lint e test.
+      - name: node_modules di sola produzione
+        if: github.event_name != 'pull_request'
+        # `npm ci` ricrea node_modules da zero; dist/ è già compilato e resta.
+        run: npm ci --omit=dev
+
+      - name: Comporre il pacchetto
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          SHORT="$(git rev-parse --short=7 HEAD)"
+          VERSION="$(node -p "require('./package.json').version")"
+          # La versione di schema arriva dal CODICE compilato, non da una copia a
+          # mano qui: se qualcuno aggiunge una migrazione e non tocca
+          # SCHEMA_VERSION, il test di migrazione fallisce prima di arrivare qui.
+          SCHEMA="$(node -e "const {pathToFileURL}=require('node:url');import(pathToFileURL('dist/schema-version.js').href).then(m=>console.log(m.SCHEMA_VERSION))")"
+          ID="$(date -u +%Y-%m-%d).$(printf '%04d' "$GITHUB_RUN_NUMBER").$SHORT"
+          STAGE="$RUNNER_TEMP/bundle"
+          mkdir -p "$STAGE"
+          cp -R dist node_modules package.json package-lock.json deploy "$STAGE"/
+          cat > "$STAGE/RELEASE.json" <<JSON
+          {
+            "id": "$ID",
+            "version": "$VERSION",
+            "commit": "$GITHUB_SHA",
+            "shortCommit": "$SHORT",
+            "schemaVersion": $SCHEMA,
+            "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "ref": "$GITHUB_REF",
+            "runId": "$GITHUB_RUN_ID",
+            "runNumber": "$GITHUB_RUN_NUMBER",
+            "nodeVersion": "$(node -p process.version)",
+            "nodeAbi": "$(node -p process.versions.modules)",
+            "platform": "$(node -p process.platform)",
+            "arch": "$(node -p process.arch)",
+            "builtOn": "${ImageOS:-sconosciuto}",
+            "glibc": "$(ldd --version | head -1 | grep -oE '[0-9]+\.[0-9]+$' || echo sconosciuta)"
+          }
+          JSON
+          cat "$STAGE/RELEASE.json"
+          TARBALL="runwaysurfer-server-$ID.tar.gz"
+          # tar e non zip: preserva il bit di eseguibile e i symlink di
+          # node_modules/.bin, che uno zip prodotto su Windows perderebbe.
+          tar -czf "$RUNNER_TEMP/$TARBALL" -C "$STAGE" .
+          cd "$RUNNER_TEMP" && sha256sum "$TARBALL" > "$TARBALL.sha256"
+          ls -lh "$RUNNER_TEMP/$TARBALL"
+
+      - name: Verificare che il pacchetto sia autoportante
+        if: github.event_name != 'pull_request'
+        # Stessa prova che farà lo script di aggiornamento sul rack: se il modulo
+        # nativo non si carica, si scopre qui e non davanti al CED.
+        #
+        # La seconda riga dice se il binario è arrivato PRECOMPILATO (portabile,
+        # linkato contro una glibc vecchia) o COMPILATO sul runner (linkato contro
+        # la glibc del runner, quindi utilizzabile solo su un sistema pari o più
+        # recente). Se compare `build/Makefile`, è stato compilato qui: allora la
+        # versione del rack non può essere più vecchia di quella del runner.
+        run: |
+          node -e "require('./node_modules/better-sqlite3')"
+          echo "--- origine del binario nativo ---"
+          if [ -f node_modules/better-sqlite3/build/Makefile ]; then
+            echo "COMPILATO sul runner (glibc $(ldd --version | head -1 | grep -oE '[0-9]+\.[0-9]+$'))"
+          else
+            echo "PRECOMPILATO (prebuild-install): portabile"
+          fi
+
+      - name: Pubblicare il pacchetto
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: runway-surfer-server-bundle
+          path: |
+            ${{ runner.temp }}/runwaysurfer-server-*.tar.gz
+            ${{ runner.temp }}/runwaysurfer-server-*.tar.gz.sha256
+          if-no-files-found: error
+          retention-days: 90
+          # Il tar.gz è già compresso: ricomprimerlo nello zip dell'artifact
+          # costa tempo e non guadagna byte.
+          compression-level: 0

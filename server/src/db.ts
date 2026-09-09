@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SCHEMA_VERSION } from './schema-version.js';
 
 export type UserRole = 'agent' | 'team_lead' | 'admin';
 export type UserStatus = 'pending' | 'active' | 'disabled';
@@ -158,21 +159,68 @@ export interface SettingsRecord {
   retention_days: number;
 }
 
+/**
+ * Una variabile impostata a vuoto vale come assente.
+ *
+ * `??` da solo NON basta, e la differenza è costata una perdita silenziosa di
+ * dati: `EnvironmentFile=` di systemd sovrascrive `Environment=`, quindi una riga
+ * `RUNWAYSURFER_DB_PATH=` copiata da un modello di configurazione vinceva sul
+ * percorso dichiarato nella unit; `??` non scatta sulla stringa vuota; e
+ * better-sqlite3 tratta il nome file `''` come **database anonimo in memoria**. Il
+ * servizio partiva, /health rispondeva `ok`, e ogni riavvio cancellava utenti,
+ * sessioni, storico e impostazioni.
+ *
+ * Lo stesso valeva per i `Number(...)`: `Number('') === 0`, e i settings vengono
+ * seminati con INSERT OR IGNORE una volta sola al primo avvio — una riga vuota
+ * fissava il budget mensile a 0 in modo permanente.
+ *
+ * config.ts applica già questa regola con il suo `str()`; qui mancava.
+ */
+function envValue(name: string): string | undefined {
+  const raw = process.env[name];
+  if (raw === undefined) return undefined;
+  const trimmed = raw.trim();
+  return trimmed === '' ? undefined : trimmed;
+}
+
+/** Come envValue, ma per i numeri: un valore non numerico non deve diventare NaN. */
+function envNumber(name: string, fallback: number): number {
+  const raw = envValue(name);
+  if (raw === undefined) return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) {
+    console.warn(`[config] ${name}="${raw}" non è un numero: uso il default ${fallback}.`);
+    return fallback;
+  }
+  return value;
+}
+
 const DEFAULT_SETTINGS: SettingsRecord = {
-  max_concurrent_requests: Number(process.env.MAX_CONCURRENT_REQUESTS ?? 30),
-  max_concurrent_per_agent: Number(process.env.MAX_CONCURRENT_PER_AGENT ?? 2),
-  max_monthly_estimated_cost_eur: Number(process.env.MAX_MONTHLY_ESTIMATED_COST_EUR ?? 70),
-  max_requests_per_hour_per_agent: Number(process.env.MAX_REQUESTS_PER_HOUR_PER_AGENT ?? 30),
-  max_request_pages: Number(process.env.MAX_REQUEST_PAGES ?? 4),
-  max_request_links: Number(process.env.MAX_REQUEST_LINKS ?? 12),
-  max_page_text_chars: Number(process.env.MAX_PAGE_TEXT_CHARS ?? 6_000),
-  max_history_turns: Number(process.env.MAX_HISTORY_TURNS ?? 3),
-  retention_days: Number(process.env.REQUEST_RETENTION_DAYS ?? 90),
+  max_concurrent_requests: envNumber('MAX_CONCURRENT_REQUESTS', 30),
+  max_concurrent_per_agent: envNumber('MAX_CONCURRENT_PER_AGENT', 2),
+  max_monthly_estimated_cost_eur: envNumber('MAX_MONTHLY_ESTIMATED_COST_EUR', 70),
+  max_requests_per_hour_per_agent: envNumber('MAX_REQUESTS_PER_HOUR_PER_AGENT', 30),
+  max_request_pages: envNumber('MAX_REQUEST_PAGES', 4),
+  max_request_links: envNumber('MAX_REQUEST_LINKS', 12),
+  max_page_text_chars: envNumber('MAX_PAGE_TEXT_CHARS', 6_000),
+  max_history_turns: envNumber('MAX_HISTORY_TURNS', 3),
+  retention_days: envNumber('REQUEST_RETENTION_DAYS', 90),
 };
 
 const here = dirname(fileURLToPath(import.meta.url));
-const dbPath = process.env.RUNWAYSURFER_DB_PATH ?? join(here, '..', 'data', 'runwaysurfer.db');
+const dbPath = envValue('RUNWAYSURFER_DB_PATH') ?? join(here, '..', 'data', 'runwaysurfer.db');
 mkdirSync(dirname(dbPath), { recursive: true });
+
+/**
+ * Percorso effettivo del database, esportato per poterlo stampare all'avvio.
+ *
+ * Non è decorazione: il default punta dentro la cartella del codice
+ * (`<dist>/../data/`), che in produzione sta dentro una directory di release e
+ * verrebbe cancellata dalla potatura delle release vecchie. La unit systemd
+ * imposta RUNWAYSURFER_DB_PATH, quindi oggi è al sicuro; loggarlo è ciò che
+ * rende visibile l'errore il giorno in cui quella riga sparisce dall'env file.
+ */
+export const DB_PATH = dbPath;
 
 export const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
@@ -194,7 +242,41 @@ function json(value: unknown): string {
   return JSON.stringify(value ?? null);
 }
 
+/**
+ * Rifiuta un database scritto da una build PIÙ RECENTE di questa.
+ *
+ * Le migrazioni sono forward-only: il gradino inverso non esiste. Se
+ * `user_version` supera SCHEMA_VERSION, la scala in migrate() è tutta falsa,
+ * migrate() esce in silenzio e il servizio parte su uno schema che non conosce —
+ * che è il modo peggiore di rompersi, perché sembra funzionare e il danno si
+ * vede giorni dopo. Succede in un caso concreto e prevedibile: un rollback a una
+ * release precedente dopo che quella nuova ha già migrato il database.
+ *
+ * Fatale di proposito. Un servizio visibilmente giù si sistema in dieci minuti;
+ * uno schema disallineato scoperto una settimana dopo può non essere più
+ * recuperabile. È lo stesso argomento già usato per il certificato scaduto in
+ * index.ts.
+ */
+export function assertSchemaNotNewer(): void {
+  const version = db.pragma('user_version', { simple: true }) as number;
+  if (version > SCHEMA_VERSION) {
+    throw new Error(
+      `il database (${dbPath}) è allo schema ${version}, ma questa build ne conosce al ` +
+        `massimo ${SCHEMA_VERSION}: è stato scritto da una versione PIÙ RECENTE di Runway ` +
+        'Surfer. Non parto — le migrazioni sono a senso unico e proseguire corromperebbe i ' +
+        'dati senza dare segno. Rimetti la release più recente (sudo runwaysurfer-update ' +
+        '--list) oppure ripristina il backup del database preso prima di quell\'aggiornamento ' +
+        '(vedi docs/RUNBOOK-BACKEND.md, sezione «Backup del database»).',
+    );
+  }
+}
+
 export function initDb(): void {
+  // PRIMA di qualunque altra cosa: le CREATE INDEX del blocco qui sotto hanno
+  // già causato un mancato avvio reale su un database esistente (vedi
+  // tests/migration.test.ts), e contro uno schema futuro darebbero un
+  // SqliteError confuso invece del messaggio che spiega cosa è successo.
+  assertSchemaNotNewer();
   db.exec(`
     CREATE TABLE IF NOT EXISTS teams (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -391,6 +473,19 @@ function migrate(): void {
       }
       db.pragma('user_version = 5');
     })();
+  }
+
+  // Rete di sicurezza: se qualcuno aggiunge un gradino alla scala e dimentica di
+  // aggiornare SCHEMA_VERSION (o viceversa), il pacchetto dichiarerebbe uno
+  // schema diverso da quello che il database ha davvero, e la guardia
+  // anti-downgrade lavorerebbe su un numero sbagliato. Meglio accorgersene qui,
+  // dove il test di migrazione lo vede subito.
+  const reached = db.pragma('user_version', { simple: true }) as number;
+  if (reached !== SCHEMA_VERSION) {
+    throw new Error(
+      `dopo le migrazioni il database è allo schema ${reached} ma SCHEMA_VERSION dice ` +
+        `${SCHEMA_VERSION}: aggiornare src/schema-version.ts insieme alla scala in migrate().`,
+    );
   }
 }
 

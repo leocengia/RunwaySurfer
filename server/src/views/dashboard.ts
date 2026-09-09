@@ -188,6 +188,28 @@ export function renderDashboard(auth: AuthContext): string {
   const costUsdThisMonth = estimatedCostMonthToDate();
   const costToday = estimatedCostToday();
   const readiness = data.aiReady ? 'Ready' : 'Missing API key';
+  // Il rinnovo del certificato è automatico e fuori dall'applicativo: quando si
+  // ferma non se ne accorge nessuno finché il servizio non si spegne per tutti
+  // insieme. Questa card è l'unico preavviso, quindi mostra i giorni residui e
+  // non un generico "ok".
+  // `dev` in produzione significa che qualcuno sta girando da sorgente sul
+  // server: reso in giallo perché deve sembrare sbagliato.
+  const build = data.build;
+  const buildTitle =
+    `release ${build.release} · commit ${build.fullCommit} · ` +
+    `costruita ${build.builtAt ?? 'da sorgente'} · Node ${build.node} · ` +
+    `schema DB ${build.schemaVersion} · database ${build.dbPath} · avviato ${build.startedAt}`;
+
+  const tls = data.tls;
+  const tlsValue = !tls.enabled
+    ? 'HTTP (nessun TLS)'
+    : tls.state === 'expired'
+      ? 'SCADUTO'
+      : `${tls.daysToExpiry} giorni`;
+  const tlsClass = !tls.enabled ? 'warn' : tls.state === 'ok' ? 'ok' : 'warn';
+  const tlsTitle = tls.enabled
+    ? `${tls.subject} — scadenza ${tls.validTo} — fingerprint ${tls.fingerprint256}`
+    : 'Il servizio non sta terminando TLS: impostare TLS_CERT_PATH e TLS_KEY_PATH.';
   return `<!doctype html>
 <html lang="it">
 <head>
@@ -595,10 +617,12 @@ ${THEME_CSS}
   <main>
   <div role="tabpanel" id="panel-diagnostica" aria-labelledby="tab-diagnostica">
     <section class="grid">
+      <div class="card" title="${escapeHtml(buildTitle)}"><div class="label">Versione</div><div class="value ${build.version === 'dev' ? 'warn' : ''}">${escapeHtml(build.version)} · ${escapeHtml(build.commit)}</div></div>
       <div class="card"><div class="label">Provider</div><div class="value">${data.provider}</div></div>
       <div class="card"><div class="label">AI readiness</div><div class="value ${data.aiReady ? 'ok' : 'warn'}">${readiness}</div></div>
       <div class="card"><div class="label">CORS</div><div class="value">${escapeHtml(data.corsOrigin)}</div></div>
       <div class="card"><div class="label">Egress</div><div class="value">${data.egress}</div></div>
+      <div class="card" title="${escapeHtml(tlsTitle)}"><div class="label">Certificato TLS</div><div class="value ${tlsClass}">${escapeHtml(tlsValue)}</div></div>
       <div class="card"><div class="label">Requests</div><div class="value">${summary.totals.requests}</div></div>
       <div class="card"><div class="label">Input tokens</div><div class="value">${summary.totals.inputTokens}</div></div>
       <!-- Gli errori non erano mostrati da nessuna parte pur essendo già calcolati

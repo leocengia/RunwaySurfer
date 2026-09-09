@@ -2,6 +2,10 @@ node_modules/
 .output/
 .wxt/
 dist/
+# Timbro della build, scritto dalla CI nel pacchetto di release: da sorgente non
+# esiste (e il servizio riporta versione 'dev'). Ignorato perché un pacchetto
+# scompattato su un portatile non deve poter finire in un commit.
+server/RELEASE.json
 *.log
 .env
 stats.html

@@ -7,9 +7,38 @@ import {
   estimatedCostMonthToDate,
   estimatedCostToday,
   getSettings,
+  DB_PATH,
 } from './db.js';
+import { RELEASE } from './release.js';
 import { estimatedCostEurThisMonth, metrics } from './metrics.js';
-import { PORT, ALLOWED_ORIGIN, USD_PER_EUR } from './config.js';
+import { PORT, ALLOWED_ORIGIN, USD_PER_EUR, PUBLIC_SCHEME, SERVER, TLS_ENABLED } from './config.js';
+import { assessCertificate, getActiveTlsMaterial } from './tls.js';
+
+/**
+ * Stato del certificato servito, per la dashboard.
+ *
+ * Il failure mode di questa funzionalità è un rinnovo automatico che si è
+ * fermato in silenzio: il servizio funziona per settimane e poi si spegne per
+ * tutti insieme il giorno della scadenza. La dashboard è l'unico posto dove
+ * qualcuno guarda, quindi il conto dei giorni va lì.
+ */
+function tlsStatus() {
+  const material = getActiveTlsMaterial();
+  if (!TLS_ENABLED || !material) {
+    return { enabled: false as const };
+  }
+  const health = assessCertificate(material, new Date(), SERVER.tls?.expiryWarnDays ?? 21);
+  return {
+    enabled: true as const,
+    subject: material.subject,
+    subjectAltName: material.subjectAltName ?? null,
+    validFrom: material.validFrom.toISOString(),
+    validTo: material.validTo.toISOString(),
+    fingerprint256: material.fingerprint256,
+    daysToExpiry: health.daysToExpiry,
+    state: health.state,
+  };
+}
 
 export function extensionConfig() {
   const settings = getSettings();
@@ -41,17 +70,33 @@ export function dashboardData() {
   return {
     service: 'Runway Surfer proxy',
     status: 'ok',
+    // Identità della build. Autenticato, quindi qui ci va tutto: è la risposta a
+    // «quale versione sta girando?» dopo un aggiornamento.
+    build: {
+      version: RELEASE.version,
+      commit: RELEASE.shortCommit,
+      fullCommit: RELEASE.commit,
+      release: RELEASE.id,
+      builtAt: RELEASE.builtAt,
+      schemaVersion: RELEASE.schemaVersion,
+      node: RELEASE.nodeVersion,
+      dbPath: DB_PATH,
+      startedAt: RELEASE.startedAt,
+      uptimeSeconds: Math.round(process.uptime()),
+    },
     provider: provider.name,
     aiReady: provider.name === 'mock' || anthropicKeyConfigured,
     aiProviderConfigured: provider.name,
     anthropicKeyConfigured,
     port: PORT,
+    scheme: PUBLIC_SCHEME,
+    tls: tlsStatus(),
     corsOrigin: ALLOWED_ORIGIN,
     egress: provider.name === 'anthropic' ? ANTHROPIC_EGRESS : 'none in mock mode',
     extension: {
       ...extensionConfig(),
       supportedModes: ['visual', 'follow', 'single'],
-      localProxyDefault: 'http://localhost:8787',
+      localProxyDefault: `${PUBLIC_SCHEME}://localhost:${PORT}`,
       note: 'The extension can be wired to poll /extension-config at startup.',
     },
     promptPolicy: {

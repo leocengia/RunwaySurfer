@@ -23,6 +23,7 @@ import {
   type UserRecord,
   type UserRole,
 } from './db.js';
+import { COOKIE_SECURE } from './config.js';
 
 const SCRYPT_N = 16384;
 const SCRYPT_R = 8;
@@ -34,7 +35,6 @@ export const SESSION_COOKIE = 'rs_session';
 const COOKIE_TTL_MS = 12 * 60 * 60 * 1000; // dashboard: one work day
 const BEARER_TTL_MS = 30 * 24 * 60 * 60 * 1000; // extension: re-login monthly
 const TOUCH_THROTTLE_MS = 60 * 1000;
-const COOKIE_SECURE = process.env.COOKIE_SECURE === '1';
 
 const MIN_PASSWORD_LENGTH = 8;
 const LOGIN_MAX_FAILURES = 5;
@@ -146,7 +146,12 @@ export function parseCookies(header: string | undefined): Record<string, string>
   return cookies;
 }
 
-/** Secure only behind TLS (COOKIE_SECURE=1): on plain http://localhost the browser would drop it. */
+/**
+ * Secure solo se il servizio gira in TLS: su http://localhost il browser
+ * scarterebbe il cookie. Il default è derivato dalla presenza del materiale TLS
+ * (vedi COOKIE_SECURE in config.ts), così in produzione non dipende dal fatto
+ * che qualcuno si ricordi una riga di .env.
+ */
 export function sessionCookie(token: string, maxAgeSeconds: number): string {
   const secure = COOKIE_SECURE ? '; Secure' : '';
   return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}${secure}`;

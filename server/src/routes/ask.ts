@@ -39,7 +39,7 @@ import {
   noteRequestForRateLimit,
 } from '../metrics.js';
 import { truncate, newRequestId } from '../util.js';
-import { MAX_QUERY_CHARS } from '../config.js';
+import { ASK_PING_MS, MAX_QUERY_CHARS } from '../config.js';
 
 /** Caratteri massimi per la risposta di un turno precedente rimandato al modello. */
 export const MAX_HISTORY_ANSWER_CHARS = 1_200;
@@ -246,6 +246,10 @@ const handleAsk = async (req: Request, res: Response): Promise<void> => {
   // during SSE setup (e.g. flushHeaders/write on an already-closed socket) can
   // never leak it and eventually trip the concurrency guardrail (429).
   beginActive(agentId);
+  // Dichiarato FUORI dal try perché il clearInterval sta nel finally in fondo,
+  // che è l'unico punto attraversato sia dal percorso normale sia dalla
+  // disconnessione del client.
+  let ping: NodeJS.Timeout | undefined;
   try {
     // NIENTE query nel log. La tabella `requests` è volutamente
     // privacy-minimised (hash + preview) e stampare il testo su stdout
@@ -263,13 +267,27 @@ const handleAsk = async (req: Request, res: Response): Promise<void> => {
     res.setHeader('Connection', 'keep-alive');
     // Dice ai reverse proxy (nginx e derivati) di NON bufferizzare la risposta.
     // Senza, il proxy accumula lo stream e lo consegna tutto alla fine: per
-    // l'agente la sidebar sembra piantata e poi stampa il testo di colpo. Non
-    // sostituisce `proxy_buffering off;` su tutti i proxy, ma è la metà che
-    // possiamo garantire noi.
+    // l'agente la sidebar sembra piantata e poi stampa il testo di colpo.
+    // In produzione il TLS è terminato da Node e non c'è alcun proxy da
+    // istruire, quindi oggi l'header è inerte: resta come assicurazione se un
+    // proxy verrà mai inserito davanti al servizio.
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders?.();
 
     const send = (event: AskEvent) => res.write(`data: ${JSON.stringify(event)}\n\n`);
+
+    // Keep-alive SSE. La sidebar interrompe lo stream dopo 30s di silenzio
+    // (STREAM_IDLE_TIMEOUT_MS in lib/client.ts) e riarma il contatore a OGNI
+    // chunk ricevuto. Un commento SSE non è un evento — il parser cerca la riga
+    // `data:` e scarta il frame senza rumore — ma è traffico, quindi basta a
+    // tenere vivo il contatore. Serve perché con il provider reale e un prompt
+    // grande il primo token può arrivare dopo più di 30s: senza questo l'agente
+    // vedrebbe «il backend non ha risposto» su una richiesta che stava andando
+    // bene. send() scrive ogni frame intero in una sola write e le write sono
+    // ordinate, quindi un ping non può spezzare un frame.
+    ping = setInterval(() => {
+      if (!res.writableEnded) res.write(': ping\n\n');
+    }, ASK_PING_MS);
 
     // Abort the provider stream if the *client* disconnects. Use res 'close'
     // (not req 'close', which fires as soon as the already-parsed body stream ends).
@@ -364,6 +382,7 @@ const handleAsk = async (req: Request, res: Response): Promise<void> => {
       });
     }
   } finally {
+    clearInterval(ping);
     endActive(agentId);
     try {
       res.end();

@@ -24,7 +24,7 @@ volta per macchina e richiede circa dieci minuti.
 
 ## 1. Scompatta il pacchetto in un percorso stabile
 
-Scegli una cartella che **non verrà spostata né svuotata**, per esempio:
+Usa **sempre lo stesso percorso su tutte le postazioni**:
 
 ```
 C:\Programmi Aziendali\RunwaySurfer\
@@ -32,6 +32,10 @@ C:\Programmi Aziendali\RunwaySurfer\
 
 Evita Desktop, Download e cartelle temporanee: se la cartella sparisce,
 l'estensione sparisce con lei e va reinstallata.
+
+Il percorso identico su tutte le macchine non è pignoleria: è ciò che rende
+l'**aggiornamento** una procedura da trenta secondi (vedi §7) invece di una
+reinstallazione.
 
 Scompatta lo zip lì dentro. Devi ritrovarti con un `manifest.json` **nella
 cartella**, non dentro un'ulteriore sottocartella. Se lo trovi annidato, sposta
@@ -109,6 +113,30 @@ risolve con una riga di configurazione lato server.
   È l'unica cosa che l'agente cercherà quando qualcosa non va: lasciagliela
   scritta da qualche parte, non solo detta a voce.
 
+## 7. Aggiornare una postazione
+
+Lo sviluppo è in corso, quindi arriveranno versioni nuove. La procedura è:
+
+1. chiudi Chrome **completamente** (non solo la finestra: controlla l'icona
+   nell'area di notifica);
+2. sostituisci il **contenuto** della cartella del punto 1 con quello del nuovo
+   pacchetto — stessa cartella, stesso percorso;
+3. riapri Chrome.
+
+Chrome ricarica da sé le estensioni non pacchettizzate all'avvio. Non serve
+tornare su `chrome://extensions`, non serve rimuovere e riaggiungere.
+
+**L'indirizzo del backend resta configurato.** È la domanda che fanno tutti, e la
+risposta è no, non va reimpostato: l'ID dell'estensione è fissato dalla chiave nel
+manifest, quindi resta identico dopo la sostituzione, e con l'ID sopravvivono sia
+la configurazione locale sia quella imposta via policy.
+
+**Come si controlla che l'aggiornamento sia servito.** Clicca l'icona di Runway
+Surfer nella barra di Chrome: la pagina di configurazione mostra la versione
+dell'estensione in alto, accanto al titolo. Il pulsante **Test connessione**
+riporta anche la versione del **servizio**, così una postazione risponde in un
+colpo a «sei aggiornata, e stai parlando con il backend giusto?».
+
 ---
 
 ## Se qualcosa non funziona
@@ -121,6 +149,7 @@ risolve con una riga di configurazione lato server.
 | La sidebar non compare                                  | non sei su un articolo, oppure l'estensione è disattivata            | apri un articolo; controlla l'interruttore su `chrome://extensions`               |
 | «Sembra la pagina di login della KB»                    | la sessione della Knowledge Base è scaduta                           | rientra nella KB e riprova                                                        |
 | La risposta arriva tutta insieme dopo una lunga attesa  | buffering del proxy lato server                                      | segnalalo: è una configurazione del server, non della postazione                  |
+| «Backend non raggiungibile» su **tutte** le postazioni, **ma il test di connessione riesce** | `ALLOWED_ORIGIN` sul server non include l'origin della KB | è una riga di configurazione del server, non un problema di rete: vedi «Perché l'ID è fisso» più sotto |
 
 Quando segnali un problema, riporta **il testo esatto** del messaggio che vedi:
 i messaggi sono scritti per essere diversi l'uno dall'altro proprio per far
@@ -138,15 +167,28 @@ mano su un portatile. In locale `npm run zip` produce lo stesso file in
 
 **Perché l'ID è fisso.** Il manifest include la chiave pubblica
 dell'estensione, quindi l'ID è identico su tutte le macchine e non dipende dal
-percorso della cartella. Questo permette un solo valore di CORS lato backend:
+percorso della cartella. Questo permette un valore di CORS uguale su tutte le
+installazioni, lato backend:
 
 ```
-ALLOWED_ORIGIN=chrome-extension://ihpknodkjnjcbdfmdneeeollnedbdcpd
+ALLOWED_ORIGIN=https://traveler.my.site.com,chrome-extension://ihpknodkjnjcbdfmdneeeollnedbdcpd
 ```
+
+**Sono due origin, e la prima è quella che conta.** La sidebar è un content
+script iniettato nella pagina della Knowledge Base, e in Manifest V3 le sue
+chiamate al backend viaggiano con l'`Origin` della **pagina**, non
+dell'estensione (Chrome ha rimosso il bypass CORS per i content script nella
+versione 85). Se manca `https://traveler.my.site.com` il browser blocca ogni
+richiesta degli agenti — e il sintomo è fuorviante: la sidebar mostra «Backend
+non raggiungibile», che sembra un problema di rete o di VPN, **mentre il
+pulsante «Test connessione» della pagina opzioni continua a dire "riuscita"**,
+perché quella pagina gira dall'origin dell'estensione. La seconda origin serve
+proprio a tenere in vita quel pulsante.
 
 Con `AI_PROVIDER=anthropic` il backend **rifiuta di avviarsi** se
-`ALLOWED_ORIGIN` è `*`, quindi questo valore è obbligatorio. La chiave privata
-corrispondente non è nel repository: serve solo a firmare un `.crx` e va
+`ALLOWED_ORIGIN` è `*` o se non contiene l'origin della KB: la configurazione
+sbagliata si vede all'avvio invece che sulle postazioni. La chiave privata
+dell'estensione non è nel repository: serve solo a firmare un `.crx` e va
 custodita a parte.
 
 **Configurazione via policy.** Per non toccare dieci postazioni a mano, l'URL del
@@ -155,11 +197,17 @@ backend può arrivare da `storage.managed` (lo schema è in
 
 ```
 HKLM\Software\Policies\Google\Chrome\3rdparty\extensions\ihpknodkjnjcbdfmdneeeollnedbdcpd\policy
-  proxyUrl = "https://runway-surfer.esempio.local"
+  proxyUrl = "https://runway-surfer.aviationsrl.it"
 ```
 
 Un valore impostato via policy vince su quello locale e appare bloccato nella
-pagina di configurazione.
+pagina di configurazione. **Senza porta**: il backend termina il TLS da sé e
+ascolta sulla 443.
+
+> La grafia dell'hostname è ancora da confermare col CED (`runway-surfer` o
+> `runway-serfer`): è il valore che va in questa policy e nel certificato.
+> Questo è l'unico posto in cui l'hostname va scritto sulle postazioni — nel
+> codice dell'estensione non c'è.
 
 **Diagnostica estesa.** Per vedere modello, token stimati, costo ed egress nel
 pannello della risposta, dalla console della pagina KB:

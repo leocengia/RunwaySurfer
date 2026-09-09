@@ -266,7 +266,11 @@ Dentro `POST /ask` (`routes/ask.ts`) succede:
 Variabili ambiente:
 
 - `PORT`: porta backend, default `8787`.
-- `ALLOWED_ORIGIN`: CORS, default `*` (solo demo; obbligatoria con provider reale).
+- `ALLOWED_ORIGIN`: origin CORS ammesse, **lista separata da virgola**, default `*`
+  (solo demo; obbligatoria con provider reale, e deve contenere l'origin della KB —
+  la sidebar è un content script e in MV3 il suo fetch porta l'Origin della pagina).
+  Parsing in `resolveAllowedOrigins` (`server/src/config.ts`), test in
+  `server/tests/cors.test.ts`.
 - `AI_PROVIDER`: `mock` o `anthropic`.
 - `ANTHROPIC_API_KEY`: chiave provider reale, solo lato server.
 
@@ -486,7 +490,9 @@ Il canale che dice se il prodotto funziona davvero, che i test non possono dare.
 
 - `wxt.config.ts` contiene la chiave **pubblica** dell'estensione: l'ID è fisso
   (`ihpknodkjnjcbdfmdneeeollnedbdcpd`) su ogni macchina, quindi
-  `ALLOWED_ORIGIN=chrome-extension://<id>` è un solo valore. La privata è fuori dal
+  `ALLOWED_ORIGIN` ha lo stesso valore ovunque. Sono **due** origin:
+  `https://traveler.my.site.com` (la sidebar, content script → Origin della
+  pagina) e `chrome-extension://<id>` (la pagina opzioni). La privata è fuori dal
   repo (`.gitignore`).
 - `entrypoints/options/` — pagina di configurazione dell'URL del backend, con
   "Testa connessione" su `/health`. Prima l'unico modo era scrivere in

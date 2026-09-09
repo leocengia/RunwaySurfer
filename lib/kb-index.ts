@@ -66,9 +66,17 @@ export function kbIndexSize(): number {
  * popolato). Così sia il candidato mostrato come fonte sia la navigazione B2
  * puntano alla variante inglese, non a quella tedesca/coreana della sitemap.
  */
+let cachedLinks: KbLink[] | null = null;
+
 export function kbIndexAsLinks(): KbLink[] {
-  return index.articles.map((a) => ({
+  // Memoizzato: l'indice è statico e immutabile per tutta la vita della pagina,
+  // ma questa funzione veniva chiamata da tre punti di lib/crawl.ts a ogni
+  // domanda, e ogni chiamata ricostruiva 2.964 oggetti passando due volte per
+  // una regex. Non era una perdita di memoria, era spazzatura evitabile nella
+  // scheda dell'agente — e il costo si pagava mentre l'agente aspettava.
+  cachedLinks ??= index.articles.map((a) => ({
     url: withRetrievalLanguage(a.u),
     text: cleanKbLabel(a.l),
   }));
+  return cachedLinks;
 }

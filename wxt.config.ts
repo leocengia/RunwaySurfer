@@ -17,7 +17,12 @@ export default defineConfig({
     // della cartella: dieci agenti = dieci ID diversi, e il backend con
     // AI_PROVIDER=anthropic rifiuta di partire con ALLOWED_ORIGIN='*', quindi non
     // esisterebbe un valore che funzioni per tutti. Da qui:
-    //   ALLOWED_ORIGIN=chrome-extension://ihpknodkjnjcbdfmdneeeollnedbdcpd
+    //   ALLOWED_ORIGIN=https://traveler.my.site.com,chrome-extension://ihpknodkjnjcbdfmdneeeollnedbdcpd
+    // NB: l'origin dell'estensione è la SECONDA voce e serve alla pagina delle
+    // opzioni. La prima è l'origin della KB, perché la sidebar è un content
+    // script e in MV3 il suo fetch porta l'Origin della pagina ospite (Chrome
+    // ha rimosso il bypass CORS per i content script nella 85). Ammettere solo
+    // questo ID farebbe funzionare il test di connessione e fallire la sidebar.
     // La chiave PRIVATA corrispondente NON sta nel repo (vedi .gitignore): serve
     // solo per firmare un .crx, ma perderla significa non poter più aggiornare
     // mantenendo lo stesso ID.

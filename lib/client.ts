@@ -1,7 +1,15 @@
 // Streaming client for the backend `POST /ask` endpoint.
 // Parses Server-Sent Events from a fetch ReadableStream and invokes `onEvent`
-// for each AskEvent. Runs in the sidebar (content script) context; the backend
-// returns permissive CORS for the demo so no host permission is required.
+// for each AskEvent.
+//
+// Gira nel contesto della sidebar, cioè in un CONTENT SCRIPT: in Manifest V3
+// queste fetch viaggiano con l'Origin della pagina ospite (la KB), non con
+// quello dell'estensione, e `host_permissions` NON concede alcun bypass CORS a
+// un content script — Chrome l'ha rimosso nella versione 85. Quindi il backend
+// deve ammettere esplicitamente l'origin della KB in ALLOWED_ORIGIN, altrimenti
+// il browser blocca ogni chiamata e qui si vede un `TypeError: Failed to fetch`
+// indistinguibile da un host irraggiungibile (vedi BACKEND_UNREACHABLE sotto:
+// il messaggio parla di rete, e in quel caso mente).
 import { isAbortError, withTimeout } from './abort';
 import type { AskRequest, AskEvent, RankRequest, RankResponse } from './outcome';
 

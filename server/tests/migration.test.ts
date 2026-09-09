@@ -108,11 +108,13 @@ function buildLegacyDatabase(): void {
 }
 
 /**
- * La versione di schema che `migrate()` deve raggiungere. Sta qui e non sparsa nei
- * test: quando si aggiunge una migrazione, questo numero è l'unica riga da
- * toccare, e il test fallisce subito se `migrate()` si ferma prima.
+ * La versione di schema che `migrate()` deve raggiungere arriva dal CODICE
+ * (`src/schema-version.ts`), non da una copia qui: così il test non può
+ * "confermare" un numero sbagliato, e aggiungere una migrazione resta una riga
+ * sola da toccare — quella. La stessa costante regge la guardia anti-downgrade e
+ * il campo `schemaVersion` del pacchetto di release.
  */
-const SCHEMA_VERSION = 5;
+import { SCHEMA_VERSION } from '../src/schema-version.js';
 
 buildLegacyDatabase();
 const { db, initDb, listFlaggedRequests, listUsers } = await import('../src/db.js');
