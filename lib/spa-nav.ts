@@ -28,6 +28,22 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Stato di un singolo poll dell'attesa. Serve a mostrare un'attesa DETERMINATA
+ * al posto di uno shimmer indeterminato: il loop questi numeri li calcola già,
+ * prima li scartava.
+ */
+export interface SpaRenderProgress {
+  /** La route di destinazione è arrivata (identità combaciante). */
+  arrived: boolean;
+  /** Caratteri attualmente renderizzati nel content-root. */
+  chars: number;
+  /** Poll consecutivi con testo identico osservati finora. */
+  stable: number;
+  elapsedMs: number;
+  timeoutMs: number;
+}
+
 export interface WaitForSpaRenderOptions {
   timeoutMs?: number;
   pollMs?: number;
@@ -36,6 +52,8 @@ export interface WaitForSpaRenderOptions {
   /** Lunghezza minima del testo per considerare la pagina "renderizzata" (non vuota). */
   minChars?: number;
   probe?: SpaRenderProbe;
+  /** Notifica a ogni poll. Un'eccezione della callback non interrompe l'attesa. */
+  onProgress?: (progress: SpaRenderProgress) => void;
 }
 
 /**
@@ -54,10 +72,20 @@ export async function waitForSpaRender(
     stablePolls = 4,
     minChars = 50,
     probe = defaultProbe,
+    onProgress,
   } = options;
   const maxIter = Math.max(1, Math.ceil(timeoutMs / Math.max(1, pollMs)));
   let lastText: string | null = null;
   let stable = 0;
+
+  const report = (arrived: boolean, chars: number, iteration: number): void => {
+    if (!onProgress) return;
+    try {
+      onProgress({ arrived, chars, stable, elapsedMs: iteration * pollMs, timeoutMs });
+    } catch {
+      /* la UI non deve poter rompere l'attesa */
+    }
+  };
 
   for (let i = 0; i < maxIter; i++) {
     if (shouldAbort()) return false;
@@ -65,7 +93,10 @@ export async function waitForSpaRender(
     const text = probe.text().replace(/\s+/g, ' ').trim();
     if (arrived && text.length >= minChars) {
       if (text === lastText) {
-        if (++stable >= stablePolls) return true;
+        if (++stable >= stablePolls) {
+          report(arrived, text.length, i);
+          return true;
+        }
       } else {
         lastText = text;
         stable = 1; // il poll corrente è la prima osservazione stabile
@@ -74,6 +105,7 @@ export async function waitForSpaRender(
       lastText = null;
       stable = 0;
     }
+    report(arrived, text.length, i);
     await delay(pollMs);
   }
   return false;

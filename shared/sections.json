@@ -1,0 +1,25 @@
+{
+  "_comment": [
+    "Vocabolario delle sezioni di output — UNICA fonte di verità.",
+    "Prima gli stessi titoli erano scritti in quattro posti (prompt di sistema, mock,",
+    "OUTCOME_SECTIONS dichiarato e mai usato, regex del renderer): con le sezioni",
+    "che diventano variabili per il form Schedule Change, quattro copie che devono",
+    "concordare sono un bug garantito.",
+    "Consumato dall'estensione con un import diretto (lib/outcome.ts) e dal server",
+    "con una lettura da disco (server/src/shared-assets.ts), perché server/tsconfig",
+    "ha rootDir: src e non può importare fuori da lì.",
+    "Giro 4: via «Risposta suggerita al cliente». Nel sondaggio agenti nessuno dei",
+    "nove l'ha chiesta — servono la procedura (7 su 9) e il link (3 su 9) — e",
+    "occupava budget di output fra la procedura e le fonti, cioè fra le due cose",
+    "che servono davvero."
+  ],
+  "standard": ["Procedura", "Eccezioni"],
+  "sources": "Fonti",
+  "scheduleChangeFields": [
+    { "id": "booking-class", "label": "Booking class" },
+    { "id": "date-flexibility", "label": "Date flexibility" },
+    { "id": "operating-carrier", "label": "Operating carrier conditions" },
+    { "id": "re-routing", "label": "Re-routing permitted?" },
+    { "id": "waiver-code", "label": "Waiver code" }
+  ]
+}

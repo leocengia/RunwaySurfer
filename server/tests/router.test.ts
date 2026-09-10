@@ -44,7 +44,9 @@ describe('chooseModel', () => {
   it('un follow di più pagine ma con contesto piccolo NON va su opus (profilo KB post-E2)', () => {
     // Baseline reale Passa 7: dopo E2 anche un follow di 3-4 pagine porta solo
     // ~8-12k char (~2-3k token). Non è "sintesi grande" → resta sonnet, non opus.
-    const { spec } = chooseModel(req([{ chars: 3000 }, { chars: 3000 }, { chars: 3000 }, { chars: 3000 }]));
+    const { spec } = chooseModel(
+      req([{ chars: 3000 }, { chars: 3000 }, { chars: 3000 }, { chars: 3000 }]),
+    );
     expect(spec.id).toBe(MODELS.sonnet.id);
   });
 

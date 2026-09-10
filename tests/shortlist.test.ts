@@ -64,8 +64,16 @@ describe('shortlistCandidates', () => {
         origin: 'https://kb.example.com',
         count: 2,
         articles: [
-          { u: `${BASE}/Flight-refund-policy?language=en_US`, s: 'Flight-refund-policy', l: 'Flight refund policy' },
-          { u: `${BASE}/Check-in-online?language=en_US`, s: 'Check-in-online', l: 'Online check-in' },
+          {
+            u: `${BASE}/Flight-refund-policy?language=en_US`,
+            s: 'Flight-refund-policy',
+            l: 'Flight refund policy',
+          },
+          {
+            u: `${BASE}/Check-in-online?language=en_US`,
+            s: 'Check-in-online',
+            l: 'Online check-in',
+          },
         ],
       },
     }));
@@ -87,14 +95,22 @@ describe('resolveFollowLinks', () => {
 
   it('mappa gli URL scelti ai KbLink arricchiti della shortlist, in ordine', async () => {
     const { resolveFollowLinks } = await import('../lib/crawl');
-    const out = resolveFollowLinks(shortlist, [`${BASE}/B?language=en_US`, `${BASE}/A?language=en_US`], fallback);
+    const out = resolveFollowLinks(
+      shortlist,
+      [`${BASE}/B?language=en_US`, `${BASE}/A?language=en_US`],
+      fallback,
+    );
     expect(out.map((l) => l.text)).toEqual(['B', 'A']);
     expect(out.every((l) => typeof l.score === 'number')).toBe(true);
   });
 
   it('deduplica per identità (varianti ?language dello stesso articolo)', async () => {
     const { resolveFollowLinks } = await import('../lib/crawl');
-    const out = resolveFollowLinks(shortlist, [`${BASE}/A?language=en_US`, `${BASE}/A?language=it`], fallback);
+    const out = resolveFollowLinks(
+      shortlist,
+      [`${BASE}/A?language=en_US`, `${BASE}/A?language=it`],
+      fallback,
+    );
     expect(out.map((l) => l.text)).toEqual(['A']);
   });
 

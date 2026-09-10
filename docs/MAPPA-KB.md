@@ -214,11 +214,11 @@ l'estensione). Il metodo di stima è **costante** (`Math.ceil(len/4)`, `router.t
 Catturata dalla dashboard "Recent requests" (estensione caricata sulla KB, tutte `status: ok`).
 Raggruppata per modello scelto dal router:
 
-| Modello (pre-taratura) | n. righe | # pagine | tok in (stima) | costo $ |
-| ---------------------- | -------- | -------- | -------------- | ------- |
-| `haiku`  | 8 | 1     | 317 – 1 842   | 0,0028 – 0,0043 |
-| `sonnet` | 4 | 1 – 2 | 702 – 2 601   | 0,0096 – 0,0153 |
-| `opus`   | 4 | **3 – 4** | **2 441 – 3 014** | **0,0247 – 0,0276** |
+| Modello (pre-taratura) | n. righe | # pagine  | tok in (stima)    | costo $             |
+| ---------------------- | -------- | --------- | ----------------- | ------------------- |
+| `haiku`                | 8        | 1         | 317 – 1 842       | 0,0028 – 0,0043     |
+| `sonnet`               | 4        | 1 – 2     | 702 – 2 601       | 0,0096 – 0,0153     |
+| `opus`                 | 4        | **3 – 4** | **2 441 – 3 014** | **0,0247 – 0,0276** |
 
 **Mediana `estimated_input_tokens` ≈ 1,5k** → contro il corpo intero pre-E2 (**~16-31k**, cfr.
 Passa 9) è un **−95%** di contesto per `/ask`. La leva E2 (Passa 10) è confermata efficace sui
@@ -232,11 +232,11 @@ Si pagava ~$0,026 per lavoro che `sonnet` fa a ~$0,015.
 
 ### Ri-taratura router applicata (`server/src/router.ts`)
 
-| Soglia | Prima (Wikipedia) | Dopo (KB reale) | Perché |
-| ------ | ----------------- | --------------- | ------ |
-| `SIMPLE_MAX_CONTEXT_CHARS`   | 6 000  | **8 000**  | una pagina piena è ≤ `MAX_PAGE_CHARS` (6 000); a 6 000 il `< 6 000` la escludeva da `haiku`. |
-| `MODERATE_MAX_PAGES`         | 2      | **6**      | il conteggio pagine non implica più dimensione: non deve da solo forzare `opus`. |
-| `MODERATE_MAX_CONTEXT_CHARS` | 16 000 | **18 000** | copre ~4 pagine focalizzate (~4,5k char l'una) come "medio" → `sonnet`. |
+| Soglia                       | Prima (Wikipedia) | Dopo (KB reale) | Perché                                                                                       |
+| ---------------------------- | ----------------- | --------------- | -------------------------------------------------------------------------------------------- |
+| `SIMPLE_MAX_CONTEXT_CHARS`   | 6 000             | **8 000**       | una pagina piena è ≤ `MAX_PAGE_CHARS` (6 000); a 6 000 il `< 6 000` la escludeva da `haiku`. |
+| `MODERATE_MAX_PAGES`         | 2                 | **6**           | il conteggio pagine non implica più dimensione: non deve da solo forzare `opus`.             |
+| `MODERATE_MAX_CONTEXT_CHARS` | 16 000            | **18 000**      | copre ~4 pagine focalizzate (~4,5k char l'una) come "medio" → `sonnet`.                      |
 
 Ora **decide la dimensione del contesto in caratteri**, non il numero di pagine. `opus` scatta
 solo per sintesi davvero grande (≥18k char) o >6 pagine. Lock-in in `server/tests/router.test.ts`

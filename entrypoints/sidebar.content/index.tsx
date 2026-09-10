@@ -3,11 +3,21 @@
 // never clash with the host page's CSS.
 import ReactDOM from 'react-dom/client';
 import App from './App';
+// I token condivisi (shared/theme.css, blocco `:root, :host`) sono la stessa
+// fonte che alimenta dashboard, pagine auth e FX del tour.
+//
+// L'ordine conta: style.css dichiara `:host { all: initial }` per isolarsi dal
+// CSS della pagina host. Per spec `all` non azzera le custom property, ma
+// caricando i token DOPO la regola la palette sopravvive comunque — e questo
+// file non dipende più da quel dettaglio.
 import './style.css';
+import '../../shared/theme.css';
 
 export default defineContentScript({
-  // KB reale (Salesforce Experience Cloud) + Wikipedia per il demo/dev.
-  matches: ['https://traveler.my.site.com/Runway/*', '*://*.wikipedia.org/*'],
+  // Solo la KB reale (Salesforce Experience Cloud). Wikipedia serviva alle prove
+  // e va via prima del pilota: la sidebar non deve comparire sulle pagine che
+  // l'agente apre per sé. Vedi host_permissions in wxt.config.ts.
+  matches: ['https://traveler.my.site.com/Runway/*'],
   cssInjectionMode: 'ui',
   async main(ctx) {
     // Monta SOLO nel top frame. B2 (`lib/nav.ts openAndReadArticle`) legge gli

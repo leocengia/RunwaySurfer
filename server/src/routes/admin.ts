@@ -1,8 +1,9 @@
 // Endpoint amministrativi e di osservabilità (JSON): utenti, team, storico
 // richieste, analytics, settings, manutenzione e stato del proxy.
-import { Router } from 'express';
-import { truncate } from '../util.js';
-import { PORT, ALLOWED_ORIGIN } from '../config.js';
+import { Router, type Request, type Response } from 'express';
+import { asyncRoute } from '../http.js';
+import { newRequestId, truncate } from '../util.js';
+import { PORT, ALLOWED_ORIGIN, PUBLIC_SCHEME, TLS_ENABLED } from '../config.js';
 import { getProvider, ANTHROPIC_EGRESS } from '../provider/index.js';
 import { metrics } from '../metrics.js';
 import { dashboardData, extensionConfig } from '../status.js';
@@ -12,6 +13,9 @@ import {
   createUser,
   getRequest,
   getSettings,
+  insertFeedback,
+  listFeedback,
+  listFlaggedRequests,
   listRequests,
   listTeams,
   listUsers,
@@ -22,9 +26,37 @@ import {
   updateUser,
   type SettingsRecord,
 } from '../db.js';
-import { hashPassword, requireAuth, revokeAllUserSessions, validateNewPassword } from '../auth.js';
+import {
+  hashPassword,
+  requireAuth,
+  revokeAllUserSessions,
+  validateNewPassword,
+  type AuthContext,
+} from '../auth.js';
 
 export const adminRoutes = Router();
+
+/**
+ * Requisiti sui certificati, per il CED. Il punto da far passare è che il
+ * rinnovo NON è compito dell'applicativo: chiedono un macchinario esterno, e
+ * questo è il contratto minimo che l'applicativo si impegna a rispettare.
+ */
+function tlsRequirements() {
+  const status = dashboardData().tls;
+  return {
+    termination: 'diretta nel processo Node (nessun reverse proxy)',
+    material: "due file PEM (catena completa + chiave) leggibili dall'utente del servizio",
+    renewal:
+      "esterno all'applicativo: client ACME con timer di sistema + deploy hook. " +
+      'Il servizio rilegge i file su SIGHUP e comunque ogni 6h, e sostituisce il ' +
+      'certificato senza riavviare e senza interrompere le risposte in corso.',
+    validation:
+      'solo DNS-01: il servizio non è raggiungibile da Internet, quindi HTTP-01 e ' +
+      'TLS-ALPN-01 non sono utilizzabili. Il certificato si può ottenere prima che ' +
+      'esista il record A.',
+    current: status,
+  };
+}
 
 /**
  * Server & network requirements — surfaced for the CED so they can plan the
@@ -33,17 +65,31 @@ export const adminRoutes = Router();
 adminRoutes.get('/requirements', requireAuth('team_lead'), (_req, res) => {
   res.json({
     backend: {
-      runtime: 'Node.js 20+ (single stateless process)',
-      cpu: '1 vCPU sufficiente per il prototipo (I/O bound)',
-      ram: '256–512 MB',
-      disk: 'minimo (nessuna persistenza; log opzionali)',
-      scaling: 'orizzontale, stateless — replicabile dietro load balancer',
+      runtime: 'Node.js 20+ (processo singolo)',
+      cpu: '2 vCPU (I/O bound, ma better-sqlite3 è sincrono)',
+      ram: '2 GB consigliati; misurati 60–120 MB RSS',
+      disk:
+        '10–20 GB: un database SQLite (retention 90 giorni) più i log, ' +
+        "che l'applicativo NON ruota — va configurata la rotazione a livello OS",
+      scaling:
+        'istanza singola: SQLite tiene stato. Per più istanze servirebbero Postgres e Redis.',
     },
     network: {
-      inbound: `porta ${PORT} (HTTP); esporre via reverse proxy con TLS`,
+      inbound:
+        `porta ${PORT} (${PUBLIC_SCHEME.toUpperCase()})` +
+        (TLS_ENABLED
+          ? ' — TLS terminato direttamente da Node, nessun reverse proxy'
+          : ' — in chiaro: modalità sviluppo/demo, non pubblicabile dentro la KB'),
       outbound_egress: `HTTPS verso ${ANTHROPIC_EGRESS} (solo con provider reale)`,
+      outbound_acme:
+        "HTTPS verso gli endpoint Let's Encrypt e l'API DNS di validazione; " +
+        'DNS 53 udp/tcp anche verso i nameserver autoritativi; NTP 123/udp',
       cors: `Access-Control-Allow-Origin = ${ALLOWED_ORIGIN}`,
+      streaming:
+        'le risposte di /ask restano aperte per minuti: idle timeout minimo 5 minuti ' +
+        'su qualunque apparato in mezzo, e nessun buffering',
     },
+    tls: tlsRequirements(),
     secrets: {
       anthropic_api_key: "ANTHROPIC_API_KEY via env/secret manager sul server; MAI nell'estensione",
       rotation: "ruotabile senza redeploy dell'estensione",
@@ -69,7 +115,7 @@ adminRoutes.get('/users', requireAuth('team_lead'), (_req, res) => {
   res.json({ users: listUsers().map(sanitizeUser) });
 });
 
-adminRoutes.post('/users', requireAuth('admin'), async (req, res) => {
+const handleCreateUser = async (req: Request, res: Response): Promise<void> => {
   try {
     const body = req.body as Record<string, unknown>;
     const externalId = truncate(body.externalId ?? body.external_id, 120);
@@ -97,11 +143,13 @@ adminRoutes.post('/users', requireAuth('admin'), async (req, res) => {
   } catch (e) {
     res.status(400).json({ error: String(e) });
   }
-});
+};
+
+adminRoutes.post('/users', requireAuth('admin'), asyncRoute(handleCreateUser));
 
 // Recovery path for locked-out or pre-auth users: new temporary password,
 // forced change, all existing sessions revoked.
-adminRoutes.post('/users/:id/reset-password', requireAuth('admin'), async (req, res) => {
+const handleResetPassword = async (req: Request, res: Response): Promise<void> => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) {
     res.status(400).json({ error: 'invalid user id' });
@@ -120,7 +168,13 @@ adminRoutes.post('/users/:id/reset-password', requireAuth('admin'), async (req, 
   }
   revokeAllUserSessions(id);
   res.json({ user: sanitizeUser(user) });
-});
+};
+
+adminRoutes.post(
+  '/users/:id/reset-password',
+  requireAuth('admin'),
+  asyncRoute(handleResetPassword),
+);
 
 adminRoutes.patch('/users/:id', requireAuth('admin'), (req, res) => {
   const id = Number(req.params.id);
@@ -191,6 +245,53 @@ adminRoutes.get('/requests/:id', requireAuth('team_lead'), (req, res) => {
 
 adminRoutes.get('/analytics/summary', requireAuth('team_lead'), (_req, res) => {
   res.json(analyticsSummary());
+});
+
+/** Quanto di un commento libero si conserva. Un paragrafo basta; un romanzo no. */
+const MAX_FEEDBACK_COMMENT_CHARS = 600;
+
+/**
+ * Feedback di un agente su una risposta. `requireAuth('agent')` accetta sia il
+ * Bearer della sidebar sia il cookie della dashboard, quindi non serve una route
+ * separata per i due contesti.
+ *
+ * PRIVACY: il commento arriva GIÀ passato da scrubPii nel browser (lib/scrub.ts).
+ * Qui viene solo troncato, e NON finisce nei log — come per la query.
+ */
+adminRoutes.post('/feedback', requireAuth('agent'), (req, res) => {
+  const { user } = res.locals.auth as AuthContext;
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const rating = body.rating;
+  if (rating !== 'up' && rating !== 'down') {
+    res.status(400).json({ error: "invalid request: rating must be 'up' or 'down'" });
+    return;
+  }
+  const id = newRequestId();
+  insertFeedback({
+    id,
+    // Un feedback senza richiesta è legittimo: è la segnalazione generica.
+    requestId: typeof body.requestId === 'string' ? truncate(body.requestId, 64) : null,
+    userId: user.id,
+    agentId: user.external_id,
+    rating,
+    comment:
+      typeof body.comment === 'string' ? truncate(body.comment, MAX_FEEDBACK_COMMENT_CHARS) : null,
+    queryPreview: typeof body.query === 'string' ? truncate(body.query, 240) : null,
+    model: typeof body.model === 'string' ? truncate(body.model, 60) : null,
+    mode: typeof body.mode === 'string' ? truncate(body.mode, 20) : null,
+  });
+  // Nel log solo l'esito, mai il commento.
+  console.log(`[feedback:${id}] agent=${user.external_id} rating=${rating}`);
+  res.status(201).json({ ok: true, id });
+});
+
+/** Feedback degli agenti + richieste che il sistema segnala da sé. */
+adminRoutes.get('/feedback', requireAuth('team_lead'), (req, res) => {
+  const limit = Number((req.query.limit as string | undefined) ?? 50);
+  res.json({
+    feedback: listFeedback({ limit }),
+    flagged: listFlaggedRequests({ limit }),
+  });
 });
 
 adminRoutes.get('/settings', requireAuth('team_lead'), (_req, res) => {

@@ -10,16 +10,28 @@ import { detectUnreadablePage, extractCurrentPage, extractInternalLinks } from '
 import {
   MAX_FOLLOW,
   pickCandidatesWithKbIndex,
+  retrievalEvidence,
   shallowFollow,
   shortlistCandidates,
   resolveFollowLinks,
 } from '../../lib/crawl';
 import { readIndexOnlyArticles } from '../../lib/nav';
+import { isOffTopic } from '../../lib/off-topic';
 import { linkIdentity } from '../../lib/site-profile';
-import { streamAsk, rankCandidates } from '../../lib/client';
+import { streamAsk, rankCandidates, sendFeedback, BACKEND_UNREACHABLE } from '../../lib/client';
+import { assessQuery } from '../../lib/query-quality';
+import { redactionNotice, scrubPii } from '../../lib/scrub';
+import { parseSources } from '../../lib/sources';
 import { getProxyUrl } from '../../lib/messaging';
 import { clearToken, fetchMe, getToken, logout, type AuthUser } from '../../lib/auth';
-import type { AiPlan, KbPage } from '../../lib/outcome';
+import type {
+  AiPlan,
+  AnswerLanguage,
+  AskTurn,
+  KbLink,
+  KbPage,
+  ScheduleChangeRequest,
+} from '../../lib/outcome';
 import {
   clearTour,
   clearTourResult,
@@ -29,13 +41,57 @@ import {
   startTour,
   type TourState,
 } from '../../lib/tour';
-import { teardownFx, TOUR_ABORT_EVENT } from '../../lib/fx';
+import { setBannerOffset, teardownFx } from '../../lib/fx';
+import { observeHostHeader } from '../../lib/host-chrome';
 import { LoginForm, ChangePasswordForm } from './AuthForms';
+import { Logo } from './Logo';
+import { OutcomeView } from './OutcomeView';
+import {
+  emptyFormDraft,
+  isFormComplete,
+  ScheduleChangeForm,
+  type FormDraft,
+} from './ScheduleChangeForm';
+import { FeedbackPanel } from './FeedbackPanel';
+import { ThreadView } from './ThreadView';
+import { TourTimeline } from './TourTimeline';
+import { useAutoGrow } from './useAutoGrow';
 import { useTourDriver, type AskResult } from './useTourDriver';
 
 type Status = 'idle' | 'reading' | 'streaming' | 'done' | 'error';
 type Mode = 'single' | 'follow' | 'visual';
-type AuthPhase = 'checking' | 'loggedOut' | 'mustChange' | 'in';
+// 'offline' esiste perché "backend spento" e "sessione scaduta" sono problemi
+// diversi con rimedi diversi: mandare al form di login chi non ha rete gli fa
+// digitare le credenziali per poi vedere un errore di rete incomprensibile.
+type AuthPhase = 'checking' | 'offline' | 'loggedOut' | 'mustChange' | 'in';
+
+/** Le tre modalità come segmented control: l'etichetta breve sta nel bottone,
+ *  la spiegazione completa nel title (in 320px non ci stanno entrambe).
+ *  I valori interni restano quelli originali: sono la chiave su cui ramificano
+ *  run(), il driver del tour e `supportedModes` lato server. */
+const MODES: ReadonlyArray<{ value: Mode; label: string; hint: string }> = [
+  { value: 'visual', label: 'Immersiva', hint: 'Tour visivo automatico sulle pagine collegate' },
+  { value: 'follow', label: 'Background', hint: 'Legge le pagine collegate in background' },
+  { value: 'single', label: 'Articolo', hint: 'Legge solo la pagina corrente' },
+];
+
+/** Lingua della risposta: due pillole sulla riga dell'etichetta della modalità.
+ *  Default italiano, cioè il comportamento che c'era prima del selettore. */
+const LANGUAGES: ReadonlyArray<{ value: AnswerLanguage; label: string; hint: string }> = [
+  { value: 'it', label: 'IT', hint: 'Rispondi in italiano' },
+  { value: 'en', label: 'EN', hint: 'Answer in English' },
+];
+
+/** Lingua scelta, ricordata per agente come la larghezza della sidebar. */
+const LANGUAGE_KEY = 'rs:answerLanguage';
+
+/** Override manuale dell'altezza banda, se l'euristica sbaglia sulla KB reale.
+ *  Il default vive nel CSS (`var(--rs-host-header-h, 64px)`), non qui: 64px è
+ *  l'altezza misurata sulla KB reale. */
+const HOST_HEADER_OVERRIDE_KEY = 'rs:hostHeaderHeight';
+
+/** Diagnostica estesa nel pannello risposta: per noi durante il pilota. */
+const DEBUG_KEY = 'rs:debug';
 
 const SIDEBAR_WIDTH_KEY = 'rs:sidebarWidth';
 const DEFAULT_SIDEBAR_WIDTH = 360;
@@ -60,30 +116,92 @@ function clampSidebarWidth(width: number): number {
 }
 
 function statusLabel(status: Status, mode: Mode): string {
-  if (status === 'reading') return mode === 'visual' ? 'Tour visivo' : 'Lettura';
+  if (status === 'reading') return mode === 'visual' ? 'Immersiva' : 'Lettura';
   if (status === 'streaming') return 'Generazione';
-  if (status === 'done') return 'Pronto';
   if (status === 'error') return 'Errore';
-  return 'In attesa';
+  // A riposo (`idle`) e a risposta conclusa (`done`) il significato è lo stesso:
+  // niente in corso, si può partire.
+  return 'Ready';
+}
+
+/** X del pulsante di chiusura: SVG, non il carattere "x" del font. */
+function CloseIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+      <path
+        d="M1.5 1.5l9 9M10.5 1.5l-9 9"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
 }
 
 export default function App() {
   const [open, setOpen] = useState(true);
   const [authPhase, setAuthPhase] = useState<AuthPhase>('checking');
+  /** Motivo per cui la sessione non è verificabile, mostrato nella fase offline. */
+  const [authError, setAuthError] = useState('');
   const [me, setMe] = useState<AuthUser | null>(null);
   const [query, setQuery] = useState('');
-  // Default single-page: sulla KB Salesforce (client-rendered) le altre modalità
-  // non possono leggere altre pagine via fetch (vedi hasRenderedContent), e la
-  // pagina corrente è la più economica in token.
-  const [mode, setMode] = useState<Mode>('single');
+  // Default Immersiva: è la modalità che mostra all'agente COME si è arrivati alla
+  // risposta, e dopo la Fase A un follow-up non rifà la camminata quando la pagina
+  // aperta basta già. Le altre due restano un click di distanza.
+  const [mode, setMode] = useState<Mode>('visual');
   const [status, setStatus] = useState<Status>('idle');
   const [plan, setPlan] = useState<AiPlan | null>(null);
   const [outcome, setOutcome] = useState('');
   const [error, setError] = useState('');
+  /** Avviso non bloccante: es. "la pagina aperta non copre la domanda". */
+  const [notice, setNotice] = useState('');
+  /**
+   * Avviso di redazione, separato da `notice`: i due possono capitare nella
+   * stessa ricerca (dato rimosso E ricerca allargata) e non devono sovrascriversi.
+   */
+  const [redaction, setRedaction] = useState('');
+  /** La risposta è stata tagliata dal tetto di output (evento `done`). */
+  const [truncated, setTruncated] = useState(false);
+  /** L'elenco degli articoli letti è aperto sotto la riga «Fonti lette». */
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  /** Lingua della risposta. Non si azzera fra le ricerche: è una preferenza. */
+  const [language, setLanguage] = useState<AnswerLanguage>('it');
   const [pagesUsed, setPagesUsed] = useState<KbPage[]>([]);
   const [tour, setTour] = useState<TourState | null>(null);
+  /** Turni conclusi della conversazione: restano a schermo e tornano al modello. */
+  const [thread, setThread] = useState<AskTurn[]>([]);
+  /** Il caso è uno Schedule Change: il prompt libero cede il posto al form. */
+  const [structured, setStructured] = useState(false);
+  const [formDraft, setFormDraft] = useState<FormDraft>(emptyFormDraft);
+  /** Dettaglio live del passo di tour in corso, mostrato dalla timeline. */
+  const [tourDetail, setTourDetail] = useState('');
+  const [stopping, setStopping] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
+  /** Altezza della banda blu della KB, per allinearci a essa. 0 = non misurata. */
+  const [hostHeaderHeight, setHostHeaderHeight] = useState(0);
+  /**
+   * Diagnostica estesa nel pannello della risposta (modello, token, costo,
+   * egress). Si attiva mettendo `rs:debug` a true in storage.local: serve a noi
+   * durante il pilota, non all'agente al telefono.
+   */
+  const [debug, setDebug] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  /**
+   * Domanda dell'ultima risposta completata: serve al pannello del feedback per
+   * far riconoscere all'agente di cosa sta parlando. Distinta da `query`, che
+   * l'agente può già aver riscritto per la domanda successiva.
+   */
+  const [lastAnsweredQuery, setLastAnsweredQuery] = useState('');
+  const queryRef = useRef<HTMLTextAreaElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // `runAsk` è memoizzato su [] e viene passato a useTourDriver: leggere lo
+  // storico da un ref evita che la sua identità cambi a ogni turno, cosa che
+  // ricreerebbe il driver del tour a metà cammino.
+  const threadRef = useRef<AskTurn[]>([]);
+  // Stessa ragione: `runAsk` è memoizzato su [] e la lingua può cambiare fra un
+  // turno e l'altro. Metterla nelle dipendenze ricreerebbe il driver del tour.
+  const languageRef = useRef<AnswerLanguage>('it');
   const tourAbortRef = useRef(false);
   const drivingRef = useRef(false);
   // Live sidebar geometry for the tour banner (driveTour must not re-create
@@ -93,11 +211,38 @@ export default function App() {
   const originalBodyStylesRef = useRef<{ marginRight: string; transition: string } | null>(null);
 
   // Validate the stored token at mount: decides login form vs main UI.
+  // Estratta da useEffect perché il pulsante "Riprova" della schermata offline
+  // rifà esattamente questo controllo.
+  const checkSession = useCallback(async (): Promise<void> => {
+    setAuthPhase('checking');
+    setAuthError('');
+    const result = await fetchMe(await getProxyUrl());
+    if (result.state === 'offline') {
+      setMe(null);
+      setAuthError(result.message);
+      setAuthPhase('offline');
+      return;
+    }
+    if (result.state === 'loggedOut') {
+      setMe(null);
+      setAuthPhase('loggedOut');
+      return;
+    }
+    setMe(result.user);
+    setAuthPhase(result.user.mustChangePassword ? 'mustChange' : 'in');
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const user = await fetchMe(await getProxyUrl());
+      const result = await fetchMe(await getProxyUrl());
       if (cancelled) return;
+      if (result.state === 'offline') {
+        setAuthError(result.message);
+        setAuthPhase('offline');
+        return;
+      }
+      const user = result.state === 'in' ? result.user : null;
       setMe(user);
       setAuthPhase(user ? (user.mustChangePassword ? 'mustChange' : 'in') : 'loggedOut');
     })();
@@ -121,10 +266,16 @@ export default function App() {
     let cancelled = false;
     (async () => {
       try {
-        const stored = await browser.storage.local.get(SIDEBAR_WIDTH_KEY);
+        const stored = await browser.storage.local.get([SIDEBAR_WIDTH_KEY, LANGUAGE_KEY]);
         const width = stored[SIDEBAR_WIDTH_KEY];
         if (!cancelled && typeof width === 'number') {
           setSidebarWidth(clampSidebarWidth(width));
+        }
+        // Whitelist anche in lettura: storage.local è scrivibile da chiunque
+        // abbia accesso al profilo, e questo valore finisce nel prompt di sistema.
+        const stored_lang = stored[LANGUAGE_KEY];
+        if (!cancelled && LANGUAGES.some((l) => l.value === stored_lang)) {
+          setLanguage(stored_lang as AnswerLanguage);
         }
       } catch {
         /* keep default */
@@ -136,9 +287,73 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const stored = await browser.storage.local.get(DEBUG_KEY);
+        if (!cancelled) setDebug(stored[DEBUG_KEY] === true);
+      } catch {
+        /* niente diagnostica: è il default */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     openRef.current = open;
     sidebarWidthRef.current = sidebarWidth;
   }, [open, sidebarWidth]);
+
+  useEffect(() => {
+    threadRef.current = thread;
+  }, [thread]);
+
+  useEffect(() => {
+    languageRef.current = language;
+  }, [language]);
+
+  // Misura la banda blu della KB e la tiene aggiornata. L'header della sidebar e
+  // la barra del tour si allineano a questo valore: senza, la sidebar è più bassa
+  // della banda del sito e le tre superfici non sono incolonnate.
+  useEffect(() => {
+    let dispose = () => {};
+    let cancelled = false;
+    (async () => {
+      let override: number | null = null;
+      try {
+        const stored = await browser.storage.local.get(HOST_HEADER_OVERRIDE_KEY);
+        const value = stored[HOST_HEADER_OVERRIDE_KEY];
+        if (typeof value === 'number' && value > 0) override = value;
+      } catch {
+        /* nessun override: si misura */
+      }
+      if (cancelled) return;
+      dispose = observeHostHeader(setHostHeaderHeight, { override });
+    })();
+    return () => {
+      cancelled = true;
+      dispose();
+    };
+  }, []);
+
+  // La barra del tour vive nella pagina host, fuori dallo shadow root: l'altezza
+  // le arriva da una custom property su <html>.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (hostHeaderHeight > 0) root.style.setProperty('--rs-host-header-h', `${hostHeaderHeight}px`);
+    else root.style.removeProperty('--rs-host-header-h');
+  }, [hostHeaderHeight]);
+
+  // La barra del tour vive nel DOM della pagina host e non conosce la geometria
+  // della sidebar. Prima l'offset veniva calcolato solo al mount del banner, così
+  // un resize o una chiusura a metà tour lo lasciavano disallineato per tutto il
+  // passo. Qui lo teniamo aggiornato mentre il tour è vivo.
+  useEffect(() => {
+    if (!tour) return;
+    setBannerOffset(open ? sidebarWidth : 0);
+  }, [tour, open, sidebarWidth]);
 
   useEffect(() => {
     if (!open) return;
@@ -200,8 +415,15 @@ export default function App() {
     setPlan(null);
     setOutcome('');
     setError('');
+    setNotice('');
+    setRedaction('');
     setPagesUsed([]);
+    setThread([]);
+    threadRef.current = [];
+    setFormDraft(emptyFormDraft());
     setTour(null);
+    setTourDetail('');
+    setStopping(false);
     setStatus('idle');
   }, []);
 
@@ -211,6 +433,7 @@ export default function App() {
       q: string,
       pages: KbPage[],
       linksOverride = extractInternalLinks(),
+      form?: ScheduleChangeRequest,
     ): Promise<AskResult> => {
       abortRef.current?.abort();
       const controller = new AbortController();
@@ -219,6 +442,9 @@ export default function App() {
       let receivedPlan: AiPlan | null = null;
 
       setStatus('streaming');
+      // Azzera SOLO il turno in corso: i turni conclusi vivono in `thread` e
+      // restano a schermo, altrimenti un approfondimento cancellerebbe la
+      // risposta che l'agente sta ancora leggendo.
       setOutcome('');
       setPlan(null);
       setError('');
@@ -226,9 +452,20 @@ export default function App() {
 
       const proxyUrl = await getProxyUrl();
       const token = await getToken();
+      // Lo storico viaggia dal client: il backend resta stateless e la tabella di
+      // audit è privacy-minimised, quindi non potrebbe ricostruirlo. Il tetto sui
+      // turni lo applica il server (setting max_history_turns).
+      let streamFailed = false;
       await streamAsk(
         proxyUrl,
-        { query: q.trim(), pages, links: linksOverride },
+        {
+          query: q.trim(),
+          pages,
+          links: linksOverride,
+          history: threadRef.current,
+          form,
+          language: languageRef.current,
+        },
         (event) => {
           switch (event.type) {
             case 'plan':
@@ -238,16 +475,24 @@ export default function App() {
             case 'delta':
               accumulatedOutcome += event.text;
               setOutcome((prev) => prev + event.text);
+              // Segnale concreto durante la generazione: la risposta cresce.
+              // Letto dalla timeline del tour, dove la barra è indeterminata.
+              setTourDetail(`ricevuti ${accumulatedOutcome.length} caratteri...`);
               break;
             case 'done':
+              // Un backend più vecchio non manda il campo: `?? false` mantiene
+              // il comportamento precedente invece di mostrare un avviso a caso.
+              setTruncated(event.truncated ?? false);
               setStatus('done');
               break;
             case 'error':
+              streamFailed = true;
               setError(event.message);
               setStatus('error');
               break;
             case 'auth-required':
               // Session expired or revoked: back to the login form.
+              streamFailed = true;
               void clearToken();
               setMe(null);
               setAuthPhase('loggedOut');
@@ -259,7 +504,13 @@ export default function App() {
         token,
       );
       setStatus((s) => (s === 'streaming' ? 'done' : s));
-      return { outcome: accumulatedOutcome, plan: receivedPlan };
+      // Turno concluso: entra nello storico solo se ha prodotto una risposta e
+      // non è stato interrotto, così un abort non inquina il contesto successivo.
+      if (accumulatedOutcome.trim() && !controller.signal.aborted) {
+        setThread((prev) => [...prev, { query: q.trim(), answer: accumulatedOutcome }]);
+        setLastAnsweredQuery(q.trim());
+      }
+      return { outcome: accumulatedOutcome, plan: receivedPlan, failed: streamFailed };
     },
     [],
   );
@@ -275,6 +526,7 @@ export default function App() {
     setQuery,
     setPagesUsed,
     setStatus,
+    setTourDetail,
   });
 
   useEffect(() => {
@@ -299,6 +551,7 @@ export default function App() {
       setError('');
       setStatus('done');
       setTour(null);
+      setTourDetail('');
       await clearTourResult();
     })();
     return () => {
@@ -314,20 +567,153 @@ export default function App() {
     void clearTour();
   }, []);
 
-  const run = useCallback(async () => {
-    if (!query.trim() || status === 'reading' || status === 'streaming') return;
+  /**
+   * Cerca in TUTTA la Knowledge Base e legge gli articoli scelti.
+   *
+   * Prefiltro locale sull'indice (2964 articoli, costo-token zero) → shortlist →
+   * `/rank` che fa scegliere all'AI → lettura via fetch e, per gli articoli non
+   * linkati in pagina, via iframe nascosto. Estratta perché serve a tre chiamanti:
+   * la modalità Background, la richiesta strutturata e l'allargamento automatico
+   * quando la pagina aperta non c'entra con la domanda.
+   */
+  /**
+   * Cambia la lingua della risposta e la ricorda. La scrittura è best-effort come
+   * per la larghezza della sidebar: se storage.local non è disponibile la scelta
+   * vale per questa sessione, che è meglio di un errore in faccia all'agente.
+   */
+  const selectLanguage = useCallback(async (value: AnswerLanguage) => {
+    setLanguage(value);
+    try {
+      await browser.storage.local.set({ [LANGUAGE_KEY]: value });
+    } catch {
+      /* best-effort */
+    }
+  }, []);
 
-    // Guardia sessione: se la pagina corrente è la login KB (SSO scaduto) o un
-    // "record non trovato", non ha senso leggerla né mandarla all'AI. Vale per
-    // tutte le modalità → prima dello split.
+  const searchWholeKb = useCallback(
+    async (
+      searchQuery: string,
+      links: KbLink[],
+      alreadyRead: KbPage[],
+    ): Promise<{ pages: KbPage[]; askLinks: KbLink[] }> => {
+      const shortlist = shortlistCandidates(links, searchQuery);
+      const rankCtrl = new AbortController();
+      const rankTimer = setTimeout(() => rankCtrl.abort(), 5_000);
+      let selectedUrls: string[] = [];
+      try {
+        const proxyUrl = await getProxyUrl();
+        const token = await getToken();
+        const sel = await rankCandidates(
+          proxyUrl,
+          { query: searchQuery, candidates: shortlist },
+          rankCtrl.signal,
+          token,
+        );
+        selectedUrls = sel?.selectedUrls ?? [];
+      } finally {
+        clearTimeout(rankTimer);
+      }
+      // Fallback su selezione locale se il rerank non dà nulla di usabile.
+      const askLinks = resolveFollowLinks(
+        shortlist,
+        selectedUrls,
+        pickCandidatesWithKbIndex(links, searchQuery),
+      );
+
+      const pages: KbPage[] = [];
+      const followed = await shallowFollow(askLinks, searchQuery, askLinks.length);
+      pages.push(...followed);
+      // I candidati SOLO-INDICE (non presenti come anchor in pagina, quindi né
+      // seguibili dal tour né leggibili via fetch sulla KB Aura) si aprono via
+      // navigazione SPA in un iframe nascosto e si leggono dal DOM renderizzato.
+      const pageIds = new Set(links.map((l) => identityOf(l.url)));
+      const readIds = new Set([...alreadyRead, ...pages].map((p) => identityOf(p.url)));
+      const indexOnly = askLinks.filter(
+        (l) => !pageIds.has(identityOf(l.url)) && !readIds.has(identityOf(l.url)),
+      );
+      const spaBudget = MAX_FOLLOW - followed.length;
+      if (spaBudget > 0 && indexOnly.length) {
+        const controller = new AbortController();
+        abortRef.current = controller;
+        const viaSpa = await readIndexOnlyArticles(indexOnly, searchQuery, spaBudget, {
+          shouldAbort: () => controller.signal.aborted,
+        });
+        pages.push(...viaSpa);
+      }
+      return { pages, askLinks };
+    },
+    [],
+  );
+
+  const run = useCallback(async () => {
+    if (status === 'reading' || status === 'streaming') return;
+    // Con il form compilato la prosa libera è opzionale: i campi SONO la domanda.
+    const formReady = structured && isFormComplete(formDraft);
+    if (!query.trim() && !formReady) return;
+    setNotice('');
+
+    // REDAZIONE, prima di qualunque uso. `safeQuery` sostituisce la query grezza
+    // in TUTTO ciò che segue — ricerca in KB, estrazione della pagina, prompt,
+    // storico del thread — così il dato del cliente non esiste già da qui in poi.
+    // Il testo nella textarea resta quello scritto dall'agente: vede ciò che ha
+    // digitato, ma non è quello che parte.
+    const { text: safeQuery, redacted } = scrubPii(query.trim());
+    setRedaction(redactionNotice(redacted));
+
+    // Suggerimento, NON blocco: una domanda senza termini di contenuto oggi
+    // partirebbe comunque e la risposta si appoggerebbe alla pagina aperta per
+    // caso, senza che nessuno lo dica. L'agente resta liberissimo di procedere:
+    // a volte sa lui cosa sta cercando.
+    // L'evidenza è calcolata sul solo indice KB (nessun link di pagina): la
+    // domanda a cui rispondere è «la KB ha qualcosa per questi termini?», e va
+    // posta QUI, prima di qualunque lettura e prima di spendere una chiamata.
+    const assessment = assessQuery(safeQuery, retrievalEvidence([], safeQuery));
+    if (assessment.vague && !formReady) setNotice(assessment.hint);
+
+    // Guardia sessione: se la pagina corrente è la login KB (SSO scaduto) niente
+    // è leggibile, nemmeno gli altri articoli (serve la stessa sessione).
     const unreadable = detectUnreadablePage();
-    if (unreadable) {
+    if (unreadable === 'login') {
       setError(
-        unreadable === 'login'
-          ? 'Sembra la pagina di login della KB (sessione scaduta): apri un articolo da loggato e riprova.'
-          : 'Questa pagina non sembra un articolo leggibile (contenuto non trovato).',
+        'Sembra la pagina di login della KB (sessione scaduta): apri un articolo da loggato e riprova.',
       );
       setStatus('error');
+      return;
+    }
+    // "Non è un articolo leggibile" blocca solo chi ha bisogno di QUESTA pagina:
+    // una richiesta strutturata cerca comunque in tutta la KB.
+    if (unreadable && !formReady) {
+      setError('Questa pagina non sembra un articolo leggibile (contenuto non trovato).');
+      setStatus('error');
+      return;
+    }
+
+    // Richiesta strutturata: la risposta sta negli articoli di policy del vettore,
+    // quasi certamente NON in quello aperto. Si cerca in tutta la KB usando i
+    // campi del form come quesito.
+    if (formReady) {
+      setStatus('reading');
+      setOutcome('');
+      setPlan(null);
+      setError('');
+      const searchQuery = [
+        formDraft.requestType,
+        formDraft.airline,
+        formDraft.cityPair,
+        formDraft.flightType,
+        safeQuery,
+      ]
+        .filter(Boolean)
+        .join(' ');
+      const links = extractInternalLinks();
+      const { pages, askLinks } = await searchWholeKb(searchQuery, links, []);
+      if (!pages.length) {
+        setNotice(
+          'Nessun articolo pertinente trovato in Knowledge Base per questi parametri: la risposta userà solo la pagina aperta.',
+        );
+        pages.push(extractCurrentPage(searchQuery));
+      }
+      await runAsk(safeQuery, pages, askLinks, { kind: 'schedule-change', ...formDraft });
       return;
     }
 
@@ -345,93 +731,132 @@ export default function App() {
       setOutcome('');
       setPlan(null);
       setError('');
-      const t = startTour(query.trim());
+      setTourDetail('');
+      setStopping(false);
+      // Follow-up: le pagine già lette entrano nel tour invece di essere buttate,
+      // e la camminata si salta se la pagina aperta copre già la domanda. Prima il
+      // ramo visual ignorava `pagesUsed` e rifaceva l'intero giro a ogni domanda,
+      // rileggendo articoli che aveva già in memoria.
+      const visualLinks = extractInternalLinks();
+      const t = startTour(safeQuery, {
+        alreadyRead: pagesUsed,
+        currentPageCovers: !isOffTopic(
+          extractCurrentPage(safeQuery),
+          safeQuery,
+          shortlistCandidates(visualLinks, safeQuery),
+        ),
+      });
       await driveTour(t);
       return;
     }
 
     setStatus('reading');
-    const current = extractCurrentPage(query);
+    const current = extractCurrentPage(safeQuery);
     const links = extractInternalLinks();
     const pages: KbPage[] = [current];
-    // E4 · in follow mode i candidati non vengono solo dai link della pagina ma
-    // dall'intero indice KB (a costo-token zero): l'articolo giusto emerge anche
-    // se non è linkato qui. shallowFollow legge il corpo solo di quelli
-    // effettivamente fetchabili (pagine renderizzate same-origin); i candidati
-    // dell'indice non leggibili restano come suggerimenti per la risposta.
-    //
-    // RERANK · lo scoring locale fa da PREFILTRO (shortlist ampia); la scelta
-    // finale dei 3 da leggere la fa il backend /rank (guidato dall'AI col provider
-    // reale, deterministico col mock). Su qualunque intoppo `resolveFollowLinks`
-    // ricade sulla selezione locale di oggi → mai peggio di prima.
     let askLinks = links;
-    if (mode === 'follow') {
-      // Prefiltro locale → shortlist ampia; rerank remoto sceglie i 3 da leggere.
-      const shortlist = shortlistCandidates(links, query);
-      const rankCtrl = new AbortController();
-      const rankTimer = setTimeout(() => rankCtrl.abort(), 5_000);
-      let selectedUrls: string[] = [];
-      try {
-        const proxyUrl = await getProxyUrl();
-        const token = await getToken();
-        const sel = await rankCandidates(
-          proxyUrl,
-          { query: query.trim(), candidates: shortlist },
-          rankCtrl.signal,
-          token,
-        );
-        selectedUrls = sel?.selectedUrls ?? [];
-      } finally {
-        clearTimeout(rankTimer);
-      }
-      // Fallback su selezione locale se il rerank non dà nulla di usabile.
-      askLinks = resolveFollowLinks(shortlist, selectedUrls, pickCandidatesWithKbIndex(links, query));
 
-      const followed = await shallowFollow(askLinks, query, askLinks.length);
-      pages.push(...followed);
-      // B2 · i candidati SOLO-INDICE (non presenti come anchor in pagina, quindi
-      // né seguibili dal tour né leggibili via fetch sulla KB Aura) vengono aperti
-      // via navigazione SPA e letti dal DOM renderizzato. È additivo: sul demo
-      // (indice KB vuoto) `indexOnly` è vuoto e questo ramo non fa nulla. Cap
-      // invariato a MAX_FOLLOW considerando le pagine già lette dal fetch.
-      const pageIds = new Set(links.map((l) => identityOf(l.url)));
-      const readIds = new Set(pages.map((p) => identityOf(p.url)));
-      const indexOnly = askLinks.filter(
-        (l) => !pageIds.has(identityOf(l.url)) && !readIds.has(identityOf(l.url)),
-      );
-      const spaBudget = MAX_FOLLOW - followed.length;
-      if (spaBudget > 0 && indexOnly.length) {
-        const controller = new AbortController();
-        abortRef.current = controller;
-        const viaSpa = await readIndexOnlyArticles(indexOnly, query, spaBudget, {
-          shouldAbort: () => controller.signal.aborted,
-        });
-        pages.push(...viaSpa);
+    if (mode === 'follow') {
+      // I candidati non vengono solo dai link della pagina ma dall'intero indice
+      // KB (a costo-token zero): l'articolo giusto emerge anche se non è linkato
+      // qui. Lo scoring locale fa da prefiltro, la scelta finale la fa `/rank`.
+      const found = await searchWholeKb(safeQuery, links, pages);
+      pages.push(...found.pages);
+      askLinks = found.askLinks;
+    } else if (isOffTopic(current, safeQuery, shortlistCandidates(links, safeQuery))) {
+      // ALLARGAMENTO AUTOMATICO. La modalità Analisi Articolo legge solo la pagina
+      // aperta: se la domanda non c'entra con essa, la risposta sarebbe
+      // strutturalmente sbagliata. Meglio cercare in tutta la KB — e DIRLO, perché
+      // un allargamento silenzioso lascerebbe l'agente senza sapere da dove viene
+      // la risposta.
+      const found = await searchWholeKb(safeQuery, links, pages);
+      if (found.pages.length) {
+        pages.push(...found.pages);
+        askLinks = found.askLinks;
+        setNotice('La pagina aperta non copre la domanda: ho cercato in tutta la Knowledge Base.');
       }
     }
-    await runAsk(query, pages, askLinks);
-  }, [query, mode, status, driveTour, runAsk]);
+    // Follow-up: le pagine già lette nei turni precedenti si RIUSANO invece di
+    // essere rilette. Il cap lo applica il server (max_request_pages), quindi la
+    // pagina corrente resta prima in lista ed è l'ultima a essere tagliata.
+    // `p.text` vuoto = pagina ricostruita da un risultato di tour persistito, che
+    // non porta più il corpo dell'articolo (vedi saveTourResult): rimandarla
+    // costerebbe token senza aggiungere contesto.
+    const reused = pagesUsed.filter(
+      (p) => p.text.trim() && !pages.some((fresh) => identityOf(fresh.url) === identityOf(p.url)),
+    );
+    await runAsk(safeQuery, thread.length ? [...pages, ...reused] : pages, askLinks);
+  }, [
+    query,
+    mode,
+    status,
+    driveTour,
+    runAsk,
+    searchWholeKb,
+    structured,
+    formDraft,
+    thread.length,
+    pagesUsed,
+  ]);
 
+  // Rete di sicurezza attorno a `run`. La catena fa await su lettura pagine,
+  // /rank, iframe nascosti e /ask: se un qualunque passo lancia, senza questo
+  // catch l'eccezione muore dentro l'onClick, `status` resta su
+  // 'reading'/'streaming' e il pulsante NON torna più cliccabile — l'agente può
+  // solo ricaricare la pagina. Non deve esistere un percorso che lascia la
+  // sidebar bloccata in silenzio.
+  const runSafely = useCallback(() => {
+    void run().catch((e: unknown) => {
+      console.error('[rs] ricerca interrotta da un errore inatteso:', e);
+      setError('Errore inatteso durante la ricerca. Riprova; se continua, segnalalo.');
+      setStatus('error');
+    });
+  }, [run]);
+
+  /**
+   * Invia il feedback. `false` se non è partito: il pannello lo dice e resta
+   * aperto, ma l'errore NON interrompe nulla — l'agente è al telefono.
+   */
+  const submitFeedback = useCallback(
+    async (rating: 'up' | 'down', comment: string): Promise<boolean> => {
+      const proxyUrl = await getProxyUrl();
+      const token = await getToken();
+      return sendFeedback(
+        proxyUrl,
+        {
+          rating,
+          requestId: plan?.requestId,
+          comment: comment || undefined,
+          query: lastAnsweredQuery || undefined,
+          model: plan?.model,
+          mode,
+        },
+        token,
+      );
+    },
+    [lastAnsweredQuery, mode, plan],
+  );
+
+  // Unico punto di stop del tour: il pulsante nella timeline. (Prima esisteva
+  // anche nel banner della pagina host, che parlava a React via evento DOM.)
+  // `setStopping` dà il riscontro immediato al click, mentre l'abort vero
+  // attraversa ancora animazioni e storage.
   const stopTour = useCallback(async () => {
+    setStopping(true);
     tourAbortRef.current = true;
     drivingRef.current = false;
     abortRef.current?.abort();
     teardownFx();
+    // Copre la corsa "stop mentre la navigazione finale sta committando": il
+    // flag su storage sopravvive alla morte della pagina (vedi markTourAborted).
     await markTourAborted();
     await clearTour();
     await clearTourResult();
     setTour(null);
+    setTourDetail('');
+    setStopping(false);
     setStatus('idle');
   }, []);
-
-  // The banner's stop button lives in the host DOM (outside React): it fires
-  // this event for a live abort; the storage flag it also writes covers the
-  // click-during-navigation race (see markTourAborted).
-  useEffect(() => {
-    const onAbort = () => void stopTour();
-    window.addEventListener(TOUR_ABORT_EVENT, onAbort);
-    return () => window.removeEventListener(TOUR_ABORT_EVENT, onAbort);
-  }, [stopTour]);
 
   const startResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -457,7 +882,11 @@ export default function App() {
     window.addEventListener('pointercancel', stop);
   }, []);
 
+  useAutoGrow(queryRef, query);
+
   const busy = status === 'reading' || status === 'streaming';
+  // Col form compilato non serve prosa: i campi sono la domanda.
+  const canRun = Boolean(query.trim()) || (structured && isFormComplete(formDraft));
   const tourActive = tour !== null && tour.phase !== 'done' && tour.phase !== 'error';
   const hasSession = Boolean(query || outcome || plan || pagesUsed.length);
   const currentStatusLabel = statusLabel(status, mode);
@@ -466,17 +895,27 @@ export default function App() {
     return (
       <button
         className="rs-launcher"
+        type="button"
         onClick={() => setOpen(true)}
-        title="Riapri RunwaySurfer: il contenuto resta stabile fino al reload"
+        title="Riapri Runway Surfer: il contenuto resta stabile fino al reload"
       >
-        <span className="rs-launcher-mark">RS</span>
-        <span>{hasSession ? 'Riprendi' : 'RunwaySurfer'}</span>
+        <Logo size={30} />
+        <span>{hasSession ? 'Riprendi' : 'Runway Surfer'}</span>
       </button>
     );
   }
 
   return (
-    <div className="rs-panel" style={{ width: `${sidebarWidth}px` }}>
+    <div
+      className="rs-panel"
+      style={
+        {
+          width: `${sidebarWidth}px`,
+          // Ereditata da .rs-header: allinea la nostra banda a quella della KB.
+          ...(hostHeaderHeight > 0 ? { '--rs-host-header-h': `${hostHeaderHeight}px` } : {}),
+        } as React.CSSProperties
+      }
+    >
       <div
         className="rs-resize"
         onPointerDown={startResize}
@@ -487,29 +926,355 @@ export default function App() {
       />
       <header className="rs-header">
         <div className="rs-brand">
-          <span className="rs-title">RunwaySurfer</span>
-          <span className="rs-subtitle">KB copilot</span>
+          <Logo size={28} />
+          <span className="rs-title">Runway Surfer</span>
         </div>
         <div className="rs-header-actions">
-          <span className={`rs-status rs-status-${status}`}>{currentStatusLabel}</span>
+          <span className={`rs-status rs-status-${status}`} aria-live="polite">
+            <span className="rs-status-dot" aria-hidden="true" />
+            <span className="rs-status-text">{currentStatusLabel}</span>
+          </span>
           <button
             className="rs-close"
+            type="button"
+            aria-label="Chiudi sidebar"
             onClick={() => setOpen(false)}
             title="Nascondi sidebar: il contenuto resta stabile fino al reload"
           >
-            x
+            <CloseIcon />
           </button>
         </div>
       </header>
 
       <div className="rs-body">
         {authPhase === 'checking' && <div className="rs-auth-note">Verifica sessione...</div>}
+        {authPhase === 'offline' && (
+          <div className="rs-offline">
+            <div className="rs-offline-title">Backend non raggiungibile</div>
+            <p className="rs-offline-text">{authError || BACKEND_UNREACHABLE}</p>
+            <p className="rs-offline-hint">
+              La tua sessione è ancora valida: non serve rifare il login, basta che il servizio
+              torni raggiungibile.
+            </p>
+            <button className="rs-submit" onClick={() => void checkSession()}>
+              Riprova
+            </button>
+          </div>
+        )}
         {authPhase === 'loggedOut' && <LoginForm onLoggedIn={onLoggedIn} />}
         {authPhase === 'mustChange' && <ChangePasswordForm onChanged={onLoggedIn} />}
         {authPhase === 'in' && (
           <>
-            <div className="rs-whoami">
-              <span>{me?.name || me?.username}</span>
+            {/* La riga dell'etichetta aveva spazio vuoto a destra, e la lingua
+                della risposta è una scelta binaria: le due pillole ci stanno
+                dentro a costo verticale ZERO. Tre agenti su nove cercano in
+                inglese, e il prompt di sistema era «Rispondi in italiano»
+                hardcoded, senza override nemmeno manuale. */}
+            <div className="rs-label-row">
+              <span className="rs-label" id="rs-mode-label">
+                Modalità di ricerca
+              </span>
+              <div
+                className="rs-lang"
+                role="radiogroup"
+                aria-label="Lingua della risposta"
+                title="Lingua in cui l’AI scrive la risposta"
+              >
+                {LANGUAGES.map((l) => (
+                  <button
+                    key={l.value}
+                    className={`rs-lang-pill${language === l.value ? ' is-active' : ''}`}
+                    type="button"
+                    role="radio"
+                    aria-checked={language === l.value}
+                    aria-label={l.hint}
+                    disabled={busy}
+                    title={l.hint}
+                    onClick={() => void selectLanguage(l.value)}
+                  >
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="rs-segmented" role="radiogroup" aria-labelledby="rs-mode-label">
+              {MODES.map((m) => (
+                <button
+                  key={m.value}
+                  className={`rs-seg${mode === m.value ? ' is-active' : ''}`}
+                  type="button"
+                  role="radio"
+                  aria-checked={mode === m.value}
+                  disabled={busy}
+                  title={m.hint}
+                  onClick={() => setMode(m.value)}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Compare SOLO col provider finto. Prima era un banner fisso che
+                l'agente avrebbe letto ogni giorno in produzione: informazione
+                per noi, rumore per lui. */}
+            {plan?.provider === 'mock' && (
+              <div className="rs-provider-note">
+                <strong>Modalità dimostrativa.</strong> Le risposte non arrivano dall’AI reale.
+              </div>
+            )}
+
+            {/* Il caso Schedule Change non è una domanda in prosa: è un insieme
+                di campi. L'interruttore scambia il box libero con il form. */}
+            <div className="rs-switch-row">
+              <span id="rs-structured-label">È un caso Schedule Change?</span>
+              <button
+                className={`rs-switch${structured ? ' is-on' : ''}`}
+                type="button"
+                role="switch"
+                aria-checked={structured}
+                aria-labelledby="rs-structured-label"
+                disabled={busy}
+                onClick={() => setStructured((on) => !on)}
+              >
+                <span className="rs-switch-knob" aria-hidden="true" />
+              </button>
+            </div>
+
+            <label className="rs-label" htmlFor="rs-query">
+              {structured ? 'Nota per la ricerca (opzionale)' : 'Ricerca con Runway Surfer'}
+            </label>
+            <textarea
+              id="rs-query"
+              className="rs-input"
+              ref={queryRef}
+              rows={1}
+              // I placeholder insegnano cosa scrivere: nessuno dei due invita a
+              // incollare dati del cliente. Chiedi la regola, non il caso.
+              placeholder={
+                structured
+                  ? 'es. il cliente ha già accettato la riprotezione'
+                  : 'es. si può cambiare il nome sul biglietto dopo il check-in?'
+              }
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) runSafely();
+              }}
+            />
+
+            {structured && (
+              <ScheduleChangeForm draft={formDraft} onChange={setFormDraft} disabled={busy} />
+            )}
+
+            <div className="rs-actions">
+              <button className="rs-submit" onClick={runSafely} disabled={busy || !canRun}>
+                {status === 'reading'
+                  ? mode === 'visual'
+                    ? 'Tour in corso...'
+                    : 'Lettura pagina...'
+                  : status === 'streaming'
+                    ? 'Generazione...'
+                    : 'Ricerca'}
+              </button>
+              <button
+                className="rs-secondary rs-new"
+                type="button"
+                aria-label="Nuova ricerca"
+                title="Nuova ricerca: azzera domanda e risposta"
+                onClick={() => void resetSession()}
+                disabled={busy || !hasSession}
+              >
+                +
+              </button>
+            </div>
+
+            {tourActive && (
+              <TourTimeline
+                tour={tour}
+                pagesUsed={pagesUsed}
+                detail={tourDetail}
+                onStop={() => void stopTour()}
+                stopping={stopping}
+              />
+            )}
+
+            {/* Un agente al telefono non deve leggere "Stima costo $0.0004" né
+                l'host di egress: sono dati per il CED, e stanno nella dashboard.
+                Qui resta ciò che gli dice qualcosa — quante pagine ha letto e se
+                la risposta tiene conto dei turni precedenti. Il dettaglio tecnico
+                completo torna a schermo solo con `rs:debug` in storage. */}
+            {plan && (
+              <div className="rs-plan" title="Come è stata costruita questa risposta">
+                {/* Tre agenti su nove hanno detto che il LINK è ciò che serve di
+                    più, e prima era a 2-4 schermate di distanza: questa riga
+                    diceva «Fonti lette: 3 articoli» senza un solo link, e
+                    l'elenco stava in fondo, dentro un <details> chiuso. Ora si
+                    apre qui, in cima. Nessun elemento nuovo, nessuna altezza in
+                    più quando è chiuso. */}
+                {pagesUsed.length > 0 ? (
+                  <button
+                    className="rs-plan-row rs-plan-row-button"
+                    type="button"
+                    aria-expanded={sourcesOpen}
+                    onClick={() => setSourcesOpen((open) => !open)}
+                    title={
+                      sourcesOpen ? 'Nascondi gli articoli letti' : 'Mostra gli articoli letti'
+                    }
+                  >
+                    <span>Fonti lette</span>
+                    <strong>
+                      {pagesUsed.length === 1 ? '1 articolo' : `${pagesUsed.length} articoli`}
+                      <span aria-hidden="true" className="rs-plan-caret">
+                        {sourcesOpen ? '▾' : '▸'}
+                      </span>
+                    </strong>
+                  </button>
+                ) : (
+                  <div className="rs-plan-row">
+                    <span>Fonti lette</span>
+                    <strong>nessun articolo</strong>
+                  </div>
+                )}
+                {sourcesOpen && pagesUsed.length > 0 && (
+                  <ul className="rs-plan-sources">
+                    {pagesUsed.map((p) => (
+                      <li key={p.url}>
+                        <a
+                          className="rs-page-link"
+                          href={p.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {p.title}
+                        </a>{' '}
+                        <span className={`rs-badge rs-${p.origin}`}>{p.origin}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {plan.historyTurnsUsed ? (
+                  <div className="rs-plan-row">
+                    <span>Memoria</span>
+                    <strong>
+                      {plan.historyTurnsUsed === 1
+                        ? '1 domanda precedente'
+                        : `${plan.historyTurnsUsed} domande precedenti`}
+                    </strong>
+                  </div>
+                ) : null}
+                {debug && (
+                  <>
+                    <div className="rs-plan-row">
+                      <span>Modello</span>
+                      <strong>{plan.model}</strong>
+                    </div>
+                    <div className="rs-plan-row">
+                      <span>Stima token</span>
+                      <strong>
+                        {plan.estimatedInputTokens} in / {plan.estimatedOutputTokens} out
+                      </strong>
+                    </div>
+                    <div className="rs-plan-row">
+                      <span>Stima costo</span>
+                      <strong>${plan.estimatedCostUsd.toFixed(4)}</strong>
+                    </div>
+                    <div className="rs-plan-row">
+                      <span>Egress</span>
+                      <code>{plan.egress}</code>
+                    </div>
+                    <div className="rs-plan-reason">{plan.routingReason}</div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {error && <div className="rs-error">{error}</div>}
+            {redaction && (
+              <div className="rs-notice" role="status">
+                {redaction}
+              </div>
+            )}
+            {notice && (
+              <div className="rs-notice" role="status">
+                {notice}
+              </div>
+            )}
+            {/* Città non riconosciute nella coppia: il backend le calcolava già e
+                nessuno le mostrava, così un refuso passava per un itinerario
+                valido. */}
+            {plan?.itineraryUnresolved?.length ? (
+              <div className="rs-notice" role="status">
+                Non ho riconosciuto come città:{' '}
+                <strong>{plan.itineraryUnresolved.join(', ')}</strong>. Controlla la scrittura,
+                oppure usa i codici (es. MIL-PAR).
+              </div>
+            ) : null}
+
+            <ThreadView turns={thread} pages={pagesUsed} contextTurns={plan?.historyTurnsUsed} />
+
+            {/* Una risposta senza fonti citate è il modo in cui il modello dice
+                «non l'ho trovato nella KB» — ma senza questo avviso veniva resa
+                identica a una risposta piena, e l'unico indizio era l'assenza dei
+                chip in fondo. Si mostra a stream CONCLUSO: durante la generazione
+                la sezione Fonti non è ancora arrivata. */}
+            {status === 'done' &&
+              outcome.trim() &&
+              parseSources(outcome, pagesUsed).length === 0 && (
+                <div className="rs-notice" role="status">
+                  <strong>Nessuna fonte citata.</strong> Il modello non ha trovato la risposta negli
+                  articoli letti: prova a riformulare, o cerca con un altro termine.
+                </div>
+              )}
+
+            {/* La risposta ha raggiunto il tetto di output. Senza questo avviso
+                un elenco troncato a metà sembrava un elenco completo: il segnale
+                (`stop_reason`) arrivava dal provider e veniva buttato. */}
+            {truncated && status === 'done' && (
+              <div className="rs-notice" role="status">
+                <strong>Risposta incompleta.</strong> Era troppo lunga per il limite di una singola
+                risposta e si interrompe qui. Chiedi il pezzo che ti manca — per esempio un solo
+                vettore, o una sola casistica alla volta.
+              </div>
+            )}
+
+            {outcome && (
+              <article className="rs-outcome">
+                <OutcomeView outcome={outcome} pages={pagesUsed} />
+              </article>
+            )}
+
+            {/* L'elenco delle pagine lette stava QUI, in fondo e dentro un
+                <details> chiuso: ora è in cima, nella riga «Fonti lette» del
+                pannello. Tenerne due copie voleva dire due posti da aggiornare e
+                una schermata in più da scorrere. */}
+          </>
+        )}
+      </div>
+
+      {/* Fuori da .rs-body, così resta ancorato in basso invece di scorrere via
+          insieme a una risposta lunga. */}
+      {authPhase === 'in' && (
+        <>
+          {feedbackOpen && (
+            <FeedbackPanel
+              context={{ query: lastAnsweredQuery, requestId: plan?.requestId }}
+              onClose={() => setFeedbackOpen(false)}
+              onSend={submitFeedback}
+            />
+          )}
+          <footer className="rs-footer">
+            <span className="rs-footer-user" title={me?.username}>
+              {me?.name || me?.username}
+            </span>
+            <div className="rs-footer-actions">
+              <button
+                className="rs-footer-link"
+                type="button"
+                aria-expanded={feedbackOpen}
+                onClick={() => setFeedbackOpen((open) => !open)}
+              >
+                Feedback
+              </button>
               <button
                 className="rs-logout"
                 type="button"
@@ -521,129 +1286,9 @@ export default function App() {
                 Logout
               </button>
             </div>
-            <div className="rs-provider-note">
-              <strong>Demo mock.</strong> I link sono scelti con scoring locale; il provider AI
-              reale si collega lato backend senza esporre chiavi nell'estensione.
-            </div>
-
-            <label className="rs-label" htmlFor="rs-query">
-              Cosa ti serve?
-            </label>
-            <textarea
-              id="rs-query"
-              className="rs-input"
-              rows={3}
-              placeholder="es. cliente vuole cambiare indirizzo ordine"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) run();
-              }}
-            />
-
-            <label className="rs-label" htmlFor="rs-mode">
-              Modalita lettura
-            </label>
-            <select
-              id="rs-mode"
-              className="rs-select"
-              value={mode}
-              disabled={busy}
-              onChange={(e) => setMode(e.target.value as Mode)}
-            >
-              <option value="visual">Tour visivo (automatico)</option>
-              <option value="follow">Pagine collegate in background</option>
-              <option value="single">Solo pagina corrente</option>
-            </select>
-
-            <div className="rs-actions">
-              <button className="rs-submit" onClick={run} disabled={busy || !query.trim()}>
-                {status === 'reading'
-                  ? mode === 'visual'
-                    ? 'Tour in corso...'
-                    : 'Lettura pagina...'
-                  : status === 'streaming'
-                    ? 'Generazione...'
-                    : 'Chiedi'}
-              </button>
-              <button
-                className="rs-secondary"
-                onClick={() => void resetSession()}
-                disabled={busy || !hasSession}
-              >
-                Nuova
-              </button>
-            </div>
-
-            {tourActive && (
-              <div className="rs-tour">
-                <span>
-                  {tour.phase === 'asking'
-                    ? 'Analisi delle pagine visitate...'
-                    : `Tour visivo - passo ${Math.min(tour.index + 1, tour.targets.length)}/${
-                        tour.targets.length
-                      }: apro "${tour.targets[Math.min(tour.index, tour.targets.length - 1)]?.text}"`}
-                </span>
-                <button className="rs-abort" onClick={stopTour}>
-                  Interrompi tour
-                </button>
-              </div>
-            )}
-
-            {plan && (
-              <div className="rs-plan" title="Richiesta che il backend invierebbe al modello AI">
-                <div className="rs-plan-row">
-                  <span>Modello</span>
-                  <strong>{plan.model}</strong>
-                </div>
-                <div className="rs-plan-row">
-                  <span>Stima token</span>
-                  <strong>
-                    {plan.estimatedInputTokens} in / {plan.estimatedOutputTokens} out
-                  </strong>
-                </div>
-                <div className="rs-plan-row">
-                  <span>Stima costo</span>
-                  <strong>${plan.estimatedCostUsd.toFixed(4)}</strong>
-                </div>
-                <div className="rs-plan-row">
-                  <span>Egress</span>
-                  <code>{plan.egress}</code>
-                </div>
-                <div className="rs-plan-reason">
-                  {plan.provider === 'mock' ? 'Risposta MOCK - ' : 'Provider reale - '}
-                  {plan.routingReason}
-                </div>
-              </div>
-            )}
-
-            {error && <div className="rs-error">{error}</div>}
-
-            {outcome && (
-              <article className="rs-outcome">
-                {outcome.split('\n').map((line, i) => (
-                  <p key={i} className={line.startsWith('## ') ? 'rs-h' : ''}>
-                    {line.replace(/^##\s*/, '')}
-                  </p>
-                ))}
-              </article>
-            )}
-
-            {pagesUsed.length > 0 && (
-              <details className="rs-pages">
-                <summary>{pagesUsed.length} pagina/e lette</summary>
-                <ul>
-                  {pagesUsed.map((p) => (
-                    <li key={p.url}>
-                      <span className={`rs-badge rs-${p.origin}`}>{p.origin}</span> {p.title}
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            )}
-          </>
-        )}
-      </div>
+          </footer>
+        </>
+      )}
     </div>
   );
 }

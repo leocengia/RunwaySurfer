@@ -20,14 +20,68 @@ export interface AskStreamMessage {
 
 export type RuntimeMessage = AskMessage | AskStreamMessage;
 
-/** Default backend URL; overridable via extension storage (settings). */
+/**
+ * URL del backend usato se nessuno lo configura.
+ *
+ * Resta `localhost` di proposito, e ci resta: è l'unico valore che funziona senza
+ * infrastruttura, e un default sbagliato che "quasi" funziona è peggio di uno
+ * palesemente locale.
+ *
+ * In produzione l'hostname NON arriva da qui ma da `storage.managed`, cioè dalla
+ * GPO del CED (vedi getProxyUrl sotto e docs/INSTALLAZIONE-PILOTA.md). Tenerlo
+ * fuori dal codice significa che un cambio di hostname è un valore di policy, non
+ * una nuova build da ridistribuire su ogni postazione.
+ */
 export const DEFAULT_PROXY_URL = 'http://localhost:8787';
 
+/** Chiave usata sia in storage.managed (policy) sia in storage.local (manuale). */
+export const PROXY_URL_KEY = 'proxyUrl';
+
+function validUrl(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  try {
+    const url = new URL(value.trim());
+    // Solo http/https: un valore incollato male non deve diventare una fetch
+    // verso uno schema inatteso.
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    return url.origin + url.pathname.replace(/\/+$/, '');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Risolve l'URL del backend, in ordine di precedenza:
+ *
+ *  1. `storage.managed` — impostato dal CED via policy aziendale. Vince sempre:
+ *     durante un rollout la configurazione centrale non deve poter essere
+ *     scavalcata da un valore rimasto sulla postazione.
+ *  2. `storage.local` — impostato a mano dalla pagina di configurazione.
+ *  3. il default qui sopra.
+ *
+ * `storage.managed` è in sola lettura e su un profilo senza policy non esiste
+ * affatto: l'accesso va protetto, non è un errore che manchi.
+ */
 export async function getProxyUrl(): Promise<string> {
   try {
-    const { proxyUrl } = await browser.storage.local.get('proxyUrl');
-    return typeof proxyUrl === 'string' && proxyUrl ? proxyUrl : DEFAULT_PROXY_URL;
+    const managed = await browser.storage.managed?.get(PROXY_URL_KEY);
+    const fromPolicy = validUrl(managed?.[PROXY_URL_KEY]);
+    if (fromPolicy) return fromPolicy;
+  } catch {
+    /* nessuna policy su questo profilo: si prosegue */
+  }
+  try {
+    const local = await browser.storage.local.get(PROXY_URL_KEY);
+    return validUrl(local[PROXY_URL_KEY]) ?? DEFAULT_PROXY_URL;
   } catch {
     return DEFAULT_PROXY_URL;
   }
+}
+
+/** Salva l'URL scelto dalla pagina di configurazione. Ritorna il valore normalizzato. */
+export async function setProxyUrl(value: string): Promise<string> {
+  const normalized = validUrl(value);
+  if (!normalized) throw new Error('URL non valido: usa http:// o https://');
+  await browser.storage.local.set({ [PROXY_URL_KEY]: normalized });
+  return normalized;
 }

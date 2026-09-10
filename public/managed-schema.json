@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Runway Surfer — configurazione gestita",
+  "description": "Impostazioni imponibili dal CED via policy aziendale (Windows: HKLM\\Software\\Policies\\Google\\Chrome\\3rdparty\\extensions\\<extension-id>\\policy). Un valore impostato qui vince su quello scelto in locale sulla postazione.",
+  "type": "object",
+  "properties": {
+    "proxyUrl": {
+      "title": "URL del backend Runway Surfer",
+      "description": "Indirizzo https del servizio, es. https://runway-surfer.example.local. Deve essere https: una pagina sicura non può chiamare un indirizzo http.",
+      "type": "string"
+    }
+  }
+}

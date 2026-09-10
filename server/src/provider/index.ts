@@ -5,12 +5,21 @@ import type { AiProvider } from './shared.js';
 import { MockProvider } from './mock.js';
 import { AnthropicProvider } from './anthropic.js';
 
-export type { AiProvider, GenerateInput, StreamResult, TokenUsage } from './shared.js';
+export type {
+  AiProvider,
+  GenerateInput,
+  StreamResult,
+  SystemPromptOptions,
+  TokenUsage,
+} from './shared.js';
 export {
   ANTHROPIC_EGRESS,
   ASSUMED_OUTPUT_TOKENS,
   buildSystemPrompt,
   buildUserContent,
+  maxOutputTokens,
+  outcomeSections,
+  systemPromptOptionsFor,
 } from './shared.js';
 
 let cached: AiProvider | null = null;

@@ -134,6 +134,20 @@ describe('POST /ask', () => {
     expect(metrics.activeRequests).toBe(0);
   });
 
+  it('dice ai reverse proxy di non bufferizzare lo stream', async () => {
+    // Senza questo header nginx (default `proxy_buffering on`) accumula la
+    // risposta e la consegna tutta alla fine: la sidebar sembra piantata per
+    // venti secondi e poi stampa il testo di colpo. Non è un errore
+    // diagnosticabile dall'agente, quindi va prevenuto qui.
+    const res = await request(app)
+      .post('/ask')
+      .set('Authorization', `Bearer ${agentToken}`)
+      .send(validBody)
+      .expect(200);
+    expect(res.headers['x-accel-buffering']).toBe('no');
+    expect(res.headers['cache-control']).toContain('no-cache');
+  });
+
   it('registra la richiesta nello storico consultabile via /requests', async () => {
     const res = await request(app)
       .get('/requests?agentId=agente@test')

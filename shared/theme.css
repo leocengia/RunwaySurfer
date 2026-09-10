@@ -1,0 +1,92 @@
+/* Design token di Runway Surfer — UNICA fonte di verità.
+ *
+ * Consumato da tutte e tre le superfici UI, così le palette non possono più
+ * divergere (prima esistevano quattro copie, già disallineate):
+ *   - sidebar          → importato da entrypoints/sidebar.content/index.tsx
+ *                        (finisce nello shadow root, quindi serve `:host`)
+ *   - dashboard e auth → letto a runtime da server/src/views/theme.ts
+ *   - FX del tour      → importato come stringa da lib/fx/index.ts e iniettato
+ *                        nel DOM della pagina host (dove `:root` è <html>)
+ *
+ * Il doppio selettore `:root, :host` copre i tre contesti con un solo blocco.
+ * Il prefisso `--rs-` evita collisioni quando i token finiscono sulla pagina
+ * host della KB.
+ */
+:root,
+:host {
+  /* --- Tono principale: header e superfici che "portano" uno sfondo --- */
+  --rs-primary: #000099;
+  --rs-primary-deep: #000066;
+  --rs-primary-soft: #e8e8f7;
+
+  /* --- Supporto, dalla palette Expedia --- */
+  --rs-blue: #1668e3; /* action blue: link, hover, accenti secondari */
+  --rs-navy: #191e3b; /* dark: testo forte su fondo chiaro */
+
+  /* --- Accento: bottoni, banner, bordi --- */
+  --rs-yellow: #ffcc00;
+  --rs-yellow-hi: #ffd84d; /* alto del gradiente bottone */
+  --rs-yellow-lite: #ffe680; /* luce dello shimmer di progresso */
+  --rs-yellow-line: #d8ad00; /* bordo bottone */
+  --rs-yellow-soft: #fff6cc;
+  --rs-yellow-ink: #4a3a00; /* testo leggibile su superfici gialle */
+
+  /* --- Neutri e stati --- */
+  --rs-surface: #ffffff;
+  --rs-soft: #f2f5f9;
+  --rs-line: #dce3ed;
+  --rs-muted: #5f6f82;
+  --rs-success: #127c56;
+  --rs-success-soft: #dff7eb;
+  --rs-warn: #9f6b00;
+  --rs-warn-soft: #fff3cf;
+  --rs-danger: #b42318;
+  --rs-danger-soft: #fdeeec;
+
+  /* --- Liquid glass --- */
+  --rs-glass: rgba(255, 255, 255, 0.7);
+  --rs-glass-strong: rgba(255, 255, 255, 0.86);
+  /* Vetro "in rilievo" per i contenitori di CONTROLLI (segmented control,
+     interruttore): sulla banda chiara della sidebar il vetro normale spariva e i
+     riquadri non si leggevano come riquadri. Token a parte e non `--rs-glass` più
+     opaco, perché quello è condiviso col pannello della risposta, dove più
+     opacità peggiora la lettura del testo lungo. */
+  --rs-glass-raised: rgba(255, 255, 255, 0.92);
+  --rs-glass-raised-border: rgba(0, 0, 153, 0.16);
+  --rs-glass-raised-shadow: 0 2px 10px rgba(0, 0, 153, 0.1);
+  --rs-glass-yellow: rgba(255, 246, 204, 0.66);
+  --rs-glass-primary: rgba(0, 0, 153, 0.82);
+  --rs-glass-border: rgba(255, 255, 255, 0.55);
+  --rs-glass-hairline: rgba(0, 0, 153, 0.1);
+  --rs-glass-blur: blur(18px) saturate(170%) brightness(1.04);
+  --rs-glass-shadow: 0 8px 30px rgba(0, 0, 153, 0.14);
+  --rs-glass-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  /* Bordo rifrattivo: luce in alto, rimbalzo tenue in basso. */
+  --rs-glass-edge:
+    inset 0 1px 0 rgba(255, 255, 255, 0.62), inset 0 -1px 0 rgba(255, 255, 255, 0.16);
+  --rs-focus-ring: 0 0 0 3px rgba(0, 0, 153, 0.22);
+
+  /* --- Tipografia ---
+     Un solo posto per il font. Prima lo stesso stack era ricopiato a mano in
+     sette punti, e la pagina Options ne usava già una variante diversa.
+
+     Font di SISTEMA, non incorporato: un file remoto verrebbe bloccato dalla CSP
+     della pagina KB, e uno in base64 andrebbe sia nel bundle del content script
+     sia in OGNI caricamento della dashboard. Le postazioni sono Windows 11, dove
+     `Segoe UI Variable` esiste in due tagli disegnati per usi diversi. */
+
+  /* Testo: il taglio "Text" è ottimizzato per le misure piccole. */
+  --rs-font: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+  /* Marchio e titoli: il taglio "Display" è disegnato per le misure grandi. */
+  --rs-font-brand:
+    'Segoe UI Variable Display', 'Segoe UI Semibold', 'Segoe UI', system-ui, sans-serif;
+  --rs-font-mono: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+
+  /* --- Forma e movimento --- */
+  --rs-r-sm: 10px;
+  --rs-r-md: 14px;
+  --rs-r-lg: 18px;
+  --rs-r-pill: 999px;
+  --rs-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --rs-dur: 180ms;
+}

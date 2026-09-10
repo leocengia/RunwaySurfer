@@ -5,6 +5,14 @@
     "moduleResolution": "Bundler",
     "outDir": "dist",
     "rootDir": "src",
+    // Sul rack l'unica superficie di debug è `journalctl`, e uno stack trace su
+    // dist/routes/ask.js:187 richiede repo e commit esatto per essere letto,
+    // mentre src/routes/ask.ts:214 è azionabile al telefono. `inlineSources`
+    // incorpora i sorgenti nella mappa, così non serve spedire src/ nel
+    // pacchetto. Il costo si paga solo quando qualcosa lancia; l'attivazione è
+    // `--enable-source-maps` in ExecStart (vedi deploy/runwaysurfer.service).
+    "sourceMap": true,
+    "inlineSources": true,
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,

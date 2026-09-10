@@ -2,7 +2,7 @@
 // dal messaggio finale dell'SDK; il mock non chiama alcun modello e non riporta
 // token, e l'assenza di `usage` non deve rompere il flusso.
 import { describe, expect, it } from 'vitest';
-import { usageFromMessage } from '../src/provider/anthropic.js';
+import { truncatedFromMessage, usageFromMessage } from '../src/provider/anthropic.js';
 import { MockProvider } from '../src/provider/mock.js';
 import type { GenerateInput, RankInput } from '../src/provider/shared.js';
 import type { KbLink } from '../src/types.js';
@@ -36,6 +36,26 @@ describe('usageFromMessage', () => {
     expect(
       usageFromMessage({ usage: { input_tokens: null, output_tokens: null } }),
     ).toBeUndefined();
+  });
+});
+
+describe('truncatedFromMessage', () => {
+  it('riconosce il taglio: solo max_tokens è un taglio', () => {
+    expect(truncatedFromMessage({ stop_reason: 'max_tokens' })).toBe(true);
+  });
+
+  it('una risposta finita non è tagliata', () => {
+    expect(truncatedFromMessage({ stop_reason: 'end_turn' })).toBe(false);
+  });
+
+  it('un rifiuto non è un taglio: ha già la sua strada', () => {
+    expect(truncatedFromMessage({ stop_reason: 'refusal' })).toBe(false);
+  });
+
+  it('assente o sconosciuto non viene interpretato come guasto', () => {
+    expect(truncatedFromMessage({})).toBe(false);
+    expect(truncatedFromMessage({ stop_reason: null })).toBe(false);
+    expect(truncatedFromMessage({ stop_reason: 'qualcosa_di_nuovo' })).toBe(false);
   });
 });
 

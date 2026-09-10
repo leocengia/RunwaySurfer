@@ -1,24 +1,36 @@
-// Tour progress banner injected at the top of the HOST page: brand mark,
-// step pill, typewriter narration, stop button and a progress bar. Visible
-// even when the sidebar is closed, so the agent always knows what the tour
-// is doing and can stop it.
+// Tour progress banner injected at the top of the HOST page: brand mark, step
+// pill, typewriter narration and a progress bar with its percentage. Visible
+// even when the sidebar is closed, so the agent always knows what the tour is
+// doing.
+//
+// Non porta il pulsante di stop: interrompere il tour si fa dalla timeline in
+// sidebar (TourTimeline), dove vive anche il resto dello stato. Un solo posto da
+// cui fermare, invece di due comandi identici su due superfici.
+import { LOGO_MARK } from '../../shared/logo-mark';
 import type { KbLink } from '../outcome';
-import { markTourAborted } from '../tour';
 import { prefersReducedMotion } from './motion';
 
 const BANNER_ID = 'rs-fx-banner';
-/** DOM event the sidebar listens to for a live abort (see App.tsx). */
-export const TOUR_ABORT_EVENT = 'rs-tour-abort';
 
 export interface BannerOptions {
   step: number;
   total: number;
-  /** Width (px) taken by the sidebar so the stop button is never covered. */
+  /** Width (px) taken by the sidebar: il vetro della barra si ferma lì. */
   rightOffsetPx: number;
 }
 
 function bannerEl(): HTMLElement | null {
   return document.getElementById(BANNER_ID);
+}
+
+/**
+ * Larghezza riservata alla sidebar. Vive come custom property su <html> (non
+ * come padding del banner) così la sidebar può aggiornarla a ogni resize senza
+ * rimontare la barra: prima l'offset veniva calcolato solo in mountBanner e
+ * restava disallineato per tutto il passo successivo.
+ */
+export function setBannerOffset(rightOffsetPx: number): void {
+  document.documentElement.style.setProperty('--rs-fx-right', `${Math.max(0, rightOffsetPx)}px`);
 }
 
 /** Mount (or update) the tour banner. Idempotent across driveTour iterations. */
@@ -28,29 +40,16 @@ export function mountBanner(options: BannerOptions): void {
     banner = document.createElement('div');
     banner.id = BANNER_ID;
     banner.innerHTML = `
-      <span class="rs-fx-banner-mark">RS</span>
-      <span class="rs-fx-banner-title">RunwaySurfer · Tour visivo</span>
+      <img class="rs-fx-banner-mark" src="${LOGO_MARK}" alt="" aria-hidden="true" />
+      <span class="rs-fx-banner-title">Runway Surfer · Immersiva</span>
       <span class="rs-fx-banner-step"></span>
       <span class="rs-fx-banner-narr" aria-live="polite"></span>
-      <button class="rs-fx-banner-stop" type="button">Interrompi</button>
+      <span class="rs-fx-banner-pct"></span>
       <div class="rs-fx-banner-bar"><div class="rs-fx-banner-fill"></div></div>
     `;
-    banner.querySelector('.rs-fx-banner-stop')?.addEventListener('click', (event) => {
-      // Instant feedback: the actual teardown/navigation-stop happens via the
-      // event below, but disabling the button and narrating right away makes the
-      // click feel responsive even while an animation is still winding down.
-      const stopBtn = event.currentTarget as HTMLButtonElement;
-      stopBtn.disabled = true;
-      stopBtn.textContent = 'Interrompo…';
-      void narrate('Interrompo il tour…');
-      // Live layer: wake the sidebar's stopTour. Cross-navigation layer: the
-      // storage stamp survives even if this page dies mid-click.
-      window.dispatchEvent(new CustomEvent(TOUR_ABORT_EVENT));
-      void markTourAborted();
-    });
     document.documentElement.appendChild(banner);
   }
-  banner.style.paddingRight = `${options.rightOffsetPx + 16}px`;
+  setBannerOffset(options.rightOffsetPx);
   setBannerStep(options.step, options.total);
 }
 
@@ -70,7 +69,8 @@ export function setBannerProgress(
   indeterminate = false,
   durationMs?: number,
 ): void {
-  const fill = bannerEl()?.querySelector('.rs-fx-banner-fill') as HTMLElement | null;
+  const banner = bannerEl();
+  const fill = banner?.querySelector('.rs-fx-banner-fill') as HTMLElement | null;
   if (!fill) return;
   fill.classList.toggle('rs-fx-indeterminate', indeterminate && !prefersReducedMotion());
   if (typeof durationMs === 'number' && !prefersReducedMotion()) {
@@ -80,7 +80,11 @@ export function setBannerProgress(
     fill.style.transitionDuration = '';
     fill.style.transitionTimingFunction = '';
   }
-  fill.style.width = `${Math.round(Math.min(1, Math.max(0, fraction)) * 100)}%`;
+  const clamped = Math.min(1, Math.max(0, fraction));
+  fill.style.width = `${Math.round(clamped * 100)}%`;
+  const pct = banner?.querySelector('.rs-fx-banner-pct');
+  // Con lo shimmer indeterminato la percentuale mentirebbe: meglio niente.
+  if (pct) pct.textContent = indeterminate ? '' : `${Math.round(clamped * 100)}%`;
 }
 
 /** Fill the bar, flash the banner and show the closing message. */

@@ -1,0 +1,204 @@
+/* Pagina di configurazione. Usa gli stessi token di sidebar e dashboard
+   (shared/theme.css): un'unica fonte per la palette, nessun colore inventato qui. */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 32px 20px 48px;
+  background: var(--rs-soft);
+  color: var(--rs-navy);
+  /* Token condiviso: prima questa pagina usava uno stack tutto suo, diverso da
+     quello di sidebar e dashboard. */
+  font-family: var(--rs-font);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.wrap {
+  max-width: 620px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: var(--rs-r-lg);
+  background: var(--rs-primary);
+  color: #fff;
+  box-shadow: var(--rs-glass-shadow);
+}
+
+.mark {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border-radius: 22%;
+}
+
+.head h1 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: 0.2px;
+}
+
+.sub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.card {
+  padding: 18px;
+  border: 1px solid var(--rs-line);
+  border-radius: var(--rs-r-lg);
+  background: var(--rs-surface);
+}
+
+.card h2 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: var(--rs-primary);
+}
+
+.hint {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  color: var(--rs-muted);
+}
+
+code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--rs-yellow-soft);
+  font-size: 12px;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--rs-muted);
+}
+
+.input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--rs-line);
+  border-radius: var(--rs-r-md);
+  background: #fff;
+  color: var(--rs-navy);
+  font: inherit;
+}
+
+.input:focus-visible {
+  outline: none;
+  border-color: var(--rs-primary);
+  box-shadow: var(--rs-focus-ring);
+}
+
+.input[readonly] {
+  background: var(--rs-soft);
+  color: var(--rs-muted);
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.btn {
+  padding: 9px 16px;
+  border: 1px solid var(--rs-yellow-line);
+  border-radius: var(--rs-r-pill);
+  background: var(--rs-yellow);
+  color: var(--rs-yellow-ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform var(--rs-dur) var(--rs-ease),
+    filter var(--rs-dur) var(--rs-ease);
+}
+
+.btn:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  border-color: var(--rs-yellow-hi);
+  background: var(--rs-yellow-hi);
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--rs-focus-ring);
+}
+
+.feedback {
+  margin: 12px 0 0;
+  min-height: 18px;
+  font-size: 12.5px;
+  color: var(--rs-muted);
+}
+
+.feedback[data-tone='ok'] {
+  color: var(--rs-success);
+  font-weight: 600;
+}
+
+.feedback[data-tone='error'] {
+  color: var(--rs-danger);
+  font-weight: 600;
+}
+
+.managed {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--rs-yellow-line);
+  border-radius: var(--rs-r-md);
+  background: var(--rs-yellow-soft);
+  font-size: 12px;
+  color: var(--rs-yellow-ink);
+}
+
+.steps {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  font-size: 12.5px;
+  color: var(--rs-muted);
+}
+
+.steps li + li {
+  margin-top: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn {
+    transition: none;
+  }
+}

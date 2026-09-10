@@ -1,0 +1,89 @@
+{
+  "source": "Sviluppo Runway Surfer (Risposte).xlsx — colonne G, H, I",
+  "collected": "2026-08",
+  "respondents": 9,
+  "note": "Le query sono VERBATIM, refusi compresi (FRO per FOR, SAFTY per SAFETY): è quello che gli agenti digiterebbero davvero, e il retrieval deve reggere quello. Riga = rispondente, colonna = domanda 1/2/3. Fonte unica di verità per docs/build-eval-report.mts e per l'etichettatura dei goldens.",
+  "queries": [
+    { "id": "r2-g", "query": "devo cercare la policy di emirates", "lang": "it" },
+    {
+      "id": "r2-h",
+      "query": "posso riproteggere il cliente per un volo LH la prossima settimana?",
+      "lang": "it"
+    },
+    {
+      "id": "r2-i",
+      "query": "posso procedere con il rimborso totale con i segmenti in TK?",
+      "lang": "it"
+    },
+    { "id": "r3-g", "query": "trasferire a relocation", "lang": "it" },
+    { "id": "r3-h", "query": "policy schedule change riprotezione lufthansa", "lang": "mixed" },
+    {
+      "id": "r3-i",
+      "query": "se un cliente hotels.com usa il coupon ha diritto all'accumulo della notte per tier?",
+      "lang": "it",
+      "note": "Fuori perimetro dichiarato: «tier» in accezione loyalty. I 30 label con «tier» sono tutti escalation interna."
+    },
+    {
+      "id": "r4-g",
+      "query": "cercami policy compagnia lufthansa per cancellazione volo involontaria",
+      "lang": "it"
+    },
+    {
+      "id": "r4-h",
+      "query": "dimmi tutte le casistiche di riprotezione per volo cancellato da lufthansa",
+      "lang": "it",
+      "note": "Richiesta di elenco esaustivo: candidata al taglio della risposta (Fase C4)."
+    },
+    {
+      "id": "r4-i",
+      "query": "elencami tutte le regole dei punti cash hotels.com",
+      "lang": "it",
+      "note": "Richiesta di elenco esaustivo."
+    },
+    { "id": "r5-g", "query": "quali sono tutti motivi di relocation?", "lang": "it" },
+    { "id": "r5-h", "query": "che volo posso scegliere a seguito di un asc lhg?", "lang": "it" },
+    { "id": "r5-i", "query": "mi spieghi chiaramente la policy asc lh?", "lang": "it" },
+    { "id": "r6-g", "query": "policy compagnie emea", "lang": "mixed" },
+    { "id": "r6-h", "query": "contatti autonoleggio", "lang": "it" },
+    { "id": "r6-i", "query": "compensazioni per reclami", "lang": "it" },
+    { "id": "r7-g", "query": "ndc", "lang": "en" },
+    { "id": "r7-h", "query": "ndc emea", "lang": "en" },
+    { "id": "r7-i", "query": "ndc refund", "lang": "en" },
+    { "id": "r8-g", "query": "ASC lufthansa policy", "lang": "en" },
+    {
+      "id": "r8-h",
+      "query": "WAIVER CODE FRO REFUND DUE TO ASC",
+      "lang": "en",
+      "note": "Refuso: FRO per FOR."
+    },
+    {
+      "id": "r8-i",
+      "query": "HEALTH AND SAFTY COMPLAIN HOW TO SOLVE",
+      "lang": "en",
+      "note": "Refuso: SAFTY per SAFETY."
+    },
+    { "id": "r9-g", "query": "pacchetti eu", "lang": "it" },
+    { "id": "r9-h", "query": "EU package bookings", "lang": "en" },
+    {
+      "id": "r9-i",
+      "query": "EU package bookings",
+      "lang": "en",
+      "note": "Duplicato di r9-h nel sondaggio: 27 risposte, 26 query distinte."
+    },
+    {
+      "id": "r10-g",
+      "query": "se la piscina dell'hotel è chiusa posso trasferire a relocation?",
+      "lang": "it"
+    },
+    {
+      "id": "r10-h",
+      "query": "posso rimborsare i posti a sedere con lufthansa per volo cancellato?",
+      "lang": "it"
+    },
+    {
+      "id": "r10-i",
+      "query": "se lufthansa modifica il numero di volo è considerato major schedule change?",
+      "lang": "it"
+    }
+  ]
+}

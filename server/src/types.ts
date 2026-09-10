@@ -5,7 +5,10 @@
 export type {
   KbPage,
   KbLink,
+  AnswerLanguage,
   AskRequest,
+  AskTurn,
+  ScheduleChangeRequest,
   AiPlan,
   AskEvent,
   RankRequest,

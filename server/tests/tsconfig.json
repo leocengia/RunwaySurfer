@@ -1,0 +1,23 @@
+{
+  // `../tsconfig.json` ha volutamente `"include": ["src"]`: `tsc` di produzione
+  // (npm run build) non deve compilare i test dentro dist/. Ma questo lascia
+  // `tests/` senza un tsconfig che lo copra, e vitest 4 (pipeline "oxc") ora
+  // rifiuta di trasformare un file .ts se non trova un tsconfig il cui
+  // `include` lo copra esplicitamente — prima falliva SOLO con `npm ci` pulito
+  // (quindi solo in CI, mai in locale con node_modules accumulati da sessioni
+  // precedenti), con l'intera suite backend rossa e un errore che nominava un
+  // "tsconfig not found" pur essendocene uno proprio lì accanto.
+  // Questo file non tocca la build: `tsc` (CLI) legge solo `../tsconfig.json`
+  // e non scopre config annidate a meno che non siano referenziate.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "noEmit": true
+  },
+  "include": ["**/*.ts"]
+}

@@ -27,6 +27,29 @@ interface KbIndexFile {
 
 const index = indexData as KbIndexFile;
 
+/**
+ * Ripara le label con mojibake (14 articoli). `Compensation Combine credit
+ * couponsâ HCOM` nasce da un em-dash che **Salesforce** ha mal codificato quando
+ * ha creato lo slug: l'URL reale contiene `%C3%A2`, quindi `u` e `s` sono
+ * corretti così come sono e NON vanno toccati — riscriverli romperebbe il link.
+ * Si pulisce solo la label, che è ciò che finisce nello scoring, nel prompt del
+ * reranker e sotto gli occhi dell'agente.
+ *
+ * `â` in questa KB è sempre un separatore (em-dash o virgoletta curva) mal
+ * decodificato, e `œ` il resto di una virgoletta di apertura (`â œHojas`) —
+ * quindi diventano spazio. Se un giorno la KB avesse uno slug francese con una
+ * `â` legittima, il costo è una lettera in meno in una label: mai un URL rotto.
+ *
+ * Allineata a `cleanLabel` in docs/build-kb-index.mjs, così una rigenerazione
+ * dell'asset produce label già pulite.
+ */
+export function cleanKbLabel(raw: string): string {
+  return raw
+    .replace(/â\s*œ?/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /** Numero di articoli nell'indice (0 se l'asset è il placeholder). */
 export function kbIndexSize(): number {
   return index.articles.length;
@@ -43,6 +66,17 @@ export function kbIndexSize(): number {
  * popolato). Così sia il candidato mostrato come fonte sia la navigazione B2
  * puntano alla variante inglese, non a quella tedesca/coreana della sitemap.
  */
+let cachedLinks: KbLink[] | null = null;
+
 export function kbIndexAsLinks(): KbLink[] {
-  return index.articles.map((a) => ({ url: withRetrievalLanguage(a.u), text: a.l }));
+  // Memoizzato: l'indice è statico e immutabile per tutta la vita della pagina,
+  // ma questa funzione veniva chiamata da tre punti di lib/crawl.ts a ogni
+  // domanda, e ogni chiamata ricostruiva 2.964 oggetti passando due volte per
+  // una regex. Non era una perdita di memoria, era spazzatura evitabile nella
+  // scheda dell'agente — e il costo si pagava mentre l'agente aspettava.
+  cachedLinks ??= index.articles.map((a) => ({
+    url: withRetrievalLanguage(a.u),
+    text: cleanKbLabel(a.l),
+  }));
+  return cachedLinks;
 }

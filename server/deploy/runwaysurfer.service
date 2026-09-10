@@ -1,27 +1,101 @@
-# Esempio di unit systemd per il proxy RunwaySurfer sul server aziendale.
+# Unit systemd per il proxy RunwaySurfer sul server aziendale (Debian/Ubuntu).
+#
 # Installazione:
+#   sudo useradd --system --no-create-home --shell /usr/sbin/nologin runwaysurfer
+#   sudo install -d -m 0755 -o root -g root /opt/runwaysurfer
+#   sudo install -d -m 0750 -o root -g runwaysurfer /etc/runwaysurfer /etc/runwaysurfer/tls
+#   sudo install -m 0640 -o root -g runwaysurfer \
+#        runwaysurfer.env.example /etc/runwaysurfer/runwaysurfer.env
+#   sudo nano /etc/runwaysurfer/runwaysurfer.env      # compilare, vedi il file
 #   sudo cp runwaysurfer.service /etc/systemd/system/
-#   sudo systemctl daemon-reload && sudo systemctl enable --now runwaysurfer
+#   sudo install -m 0755 runwaysurfer-update.sh /usr/local/sbin/runwaysurfer-update
+#   sudo systemctl daemon-reload && sudo systemctl enable runwaysurfer
+#   sudo runwaysurfer-update /percorso/runwaysurfer-server-<id>.tar.gz
+#
+# L'ultimo comando installa il codice e avvia il servizio: non serve `npm` sulla
+# macchina, né accesso a Internet, né un compilatore.
+#
+# Il codice in /opt/runwaysurfer/server resta di root e in sola lettura per il
+# servizio: l'unica cosa che l'applicativo scrive è il database, e sta altrove
+# (vedi StateDirectory).
 [Unit]
 Description=RunwaySurfer proxy backend
 After=network-online.target
 Wants=network-online.target
+# Un downgrade dello schema o un modulo nativo incompatibile mettono il servizio
+# in restart-loop: dopo 5 tentativi in 60s systemd si arrende e lo lascia in
+# `failed`, dove lo script di aggiornamento lo vede e fa rollback. Un loop
+# infinito, invece, riempie il journal e nasconde la causa.
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=simple
+# /opt/runwaysurfer/server è un SYMLINK verso releases/<id>, gestito da
+# runwaysurfer-update. systemd fa chdir() qui risolvendo il symlink al momento
+# dell'exec, quindi il processo vivo tiene la directory reale come cwd: uno
+# scambio successivo non gli toglie il terreno da sotto.
 WorkingDirectory=/opt/runwaysurfer/server
-# Build una tantum: npm install && npm run build
-ExecStart=/usr/bin/node dist/index.js
+# L'applicativo NON si compila sulla macchina: si installa un pacchetto già
+# costruito dalla CI, che si porta dietro dist/ e node_modules di produzione.
+#   sudo runwaysurfer-update /percorso/runwaysurfer-server-<id>.tar.gz
+# (vedi deploy/runwaysurfer-update.sh; il rack può essere del tutto offline).
+#
+# --enable-source-maps: gli stack trace nel journal puntano al .ts invece che al
+# .js compilato (tsconfig ha sourceMap + inlineSources). Costa solo quando
+# qualcosa lancia. NON va in NODE_OPTIONS: un NODE_OPTIONS nell'EnvironmentFile
+# lo sovrascriverebbe in silenzio.
+ExecStart=/usr/bin/node --enable-source-maps dist/index.js
+# Ricarica del materiale TLS dopo un rinnovo, senza interrompere gli stream
+# /ask aperti (vedi deploy/tls-deploy-hook.sh e src/tls.ts).
+ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
 RestartSec=3
-# Configurazione via file ambiente (contiene ANTHROPIC_API_KEY in prod).
-EnvironmentFile=/opt/runwaysurfer/server/.env
-# Hardening minimo
+# Senza shutdown graceful il processo esce subito su SIGTERM; questo è solo il
+# tetto se un giorno qualcuno ne aggiunge uno (vedi il commento in src/index.ts).
+TimeoutStopSec=10
+Environment=NODE_ENV=production
+
+# Configurazione (contiene ANTHROPIC_API_KEY in produzione): fuori dalla
+# cartella di deploy, così un redeploy non la sovrascrive.
+EnvironmentFile=/etc/runwaysurfer/runwaysurfer.env
+
+# Database SQLite. ProtectSystem=strict monta TUTTO in sola lettura tranne
+# /dev, /proc e /sys: senza una cartella di stato dichiarata, better-sqlite3
+# non riesce ad aprire il file e il servizio muore alla prima scrittura.
+# StateDirectory= crea /var/lib/runwaysurfer scrivibile e di proprietà
+# dell'utente del servizio, e la tiene FUORI da /opt: un rsync o un git pull di
+# redeploy non può più sovrascrivere il database.
+StateDirectory=runwaysurfer
+Environment=RUNWAYSURFER_DB_PATH=/var/lib/runwaysurfer/runwaysurfer.db
+
+# Il TLS è terminato da questo processo (nessun reverse proxy), quindi serve
+# legare la 443 come utente non privilegiato: senza questa riga la listen
+# fallisce con EACCES. Le capability ambient sono concesse all'execve, quindi
+# convivono con NoNewPrivileges; è preferibile a setcap sul binario node, che si
+# romperebbe a ogni aggiornamento di Node.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+# Certificati: sola lettura. Li scrive il deploy hook del client ACME; il
+# servizio non ha e non deve avere accesso a /etc/letsencrypt.
+# Il prefisso `-` non è decorativo: senza, una cartella mancante fa FALLIRE il
+# setup del mount namespace (status=226/NAMESPACE) a ogni avvio — anche in mock,
+# dove il TLS non serve — e brucia il limite di riavvii. Sotto ProtectSystem=strict
+# la riga è comunque ridondante (tutto è già in sola lettura): vale come
+# documentazione, quindi NON togliere il trattino «riordinando».
+ReadOnlyPaths=-/etc/runwaysurfer/tls
+
+# Hardening
 User=runwaysurfer
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 
 [Install]
 WantedBy=multi-user.target

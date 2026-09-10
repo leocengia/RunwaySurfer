@@ -1,27 +1,14 @@
+/* Stile della sidebar. I design token NON stanno qui: arrivano da
+   shared/theme.css, importato prima di questo file in index.tsx, così la
+   palette è la stessa di dashboard, pagine auth e FX del tour. */
+
 :host {
+  /* `all: initial` isola la sidebar dal CSS della pagina host. Per spec non
+     azzera le custom property, quindi i token di shared/theme.css sopravvivono. */
   all: initial;
-  --rs-ink: #0b1f3a;
-  --rs-blue: #00355f;
-  --rs-blue-2: #0a5aa3;
-  --rs-yellow: #ffcc00;
-  --rs-yellow-soft: #fff6cc;
-  --rs-surface: #ffffff;
-  --rs-soft: #f5f7fa;
-  --rs-line: #d8e0ea;
-  --rs-muted: #5f6f82;
-  --rs-success: #127c56;
-  --rs-danger: #b42318;
-  /* Liquid-glass tokens (palette invariata: cambia solo la stratificazione). */
-  --rs-glass: rgba(255, 255, 255, 0.72);
-  --rs-glass-strong: rgba(255, 255, 255, 0.86);
-  --rs-glass-yellow: rgba(255, 246, 204, 0.66);
-  --rs-glass-navy: rgba(11, 31, 58, 0.82);
-  --rs-glass-border: rgba(255, 255, 255, 0.55);
-  --rs-glass-hairline: rgba(11, 31, 58, 0.08);
-  --rs-glass-blur: blur(16px) saturate(160%);
-  --rs-glass-shadow: 0 8px 30px rgba(11, 31, 58, 0.14);
-  --rs-glass-sheen: inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
+
+/* --- Launcher (sidebar chiusa) --- */
 
 .rs-launcher {
   position: fixed;
@@ -30,38 +17,57 @@
   z-index: 2147483647;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-family:
-    system-ui,
-    -apple-system,
-    Segoe UI,
-    Roboto,
-    sans-serif;
+  gap: 9px;
+  /* Ridichiarato perché `:host { all: initial }` riporta font-family al serif di
+     default: questo e `.rs-panel` sono i due soli nodi montati sotto :host, tutto
+     il resto erediterebbe da loro. */
+  font-family: var(--rs-font);
   font-size: 13px;
   font-weight: 700;
-  padding: 9px 12px;
-  border: 1px solid rgba(11, 31, 58, 0.2);
-  border-radius: 999px;
-  background: linear-gradient(180deg, #ffd84d, var(--rs-yellow));
-  color: var(--rs-ink);
+  padding: 8px 14px 8px 9px;
+  border: 1px solid var(--rs-yellow-line);
+  border-radius: var(--rs-r-pill);
+  background: linear-gradient(180deg, var(--rs-yellow-hi), var(--rs-yellow));
+  color: var(--rs-navy);
   cursor: pointer;
+  transition:
+    transform var(--rs-dur) var(--rs-ease),
+    box-shadow var(--rs-dur) var(--rs-ease);
   box-shadow:
-    0 10px 26px rgba(11, 31, 58, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    0 10px 26px rgba(0, 0, 153, 0.28),
+    var(--rs-glass-edge);
 }
 
-.rs-launcher-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
-  background: var(--rs-ink);
-  color: #fff;
-  font-size: 10px;
-  letter-spacing: 0;
+.rs-launcher:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 14px 30px rgba(0, 0, 153, 0.32),
+    var(--rs-glass-edge);
 }
+
+.rs-launcher:active {
+  transform: translateY(1px) scale(0.995);
+}
+
+.rs-launcher:focus-visible {
+  outline: none;
+  box-shadow:
+    var(--rs-focus-ring),
+    0 10px 26px rgba(0, 0, 153, 0.28);
+}
+
+/* --- Marchio --- */
+
+.rs-logo {
+  display: block;
+  flex-shrink: 0;
+  /* Il marchio ha già gli angoli arrotondati e il proprio fondo: l'ombra lo
+     stacca dalla banda blu senza aggiungere un bordo. */
+  border-radius: 22%;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 40, 0.4));
+}
+
+/* --- Pannello --- */
 
 .rs-panel {
   position: fixed;
@@ -74,20 +80,21 @@
   z-index: 2147483647;
   display: flex;
   flex-direction: column;
-  background: rgba(255, 255, 255, 0.9);
+  /* Due luci diffuse sotto il vetro: la rifrazione si vede anche su una pagina
+     host piatta, dove il solo backdrop-filter non avrebbe nulla da piegare. */
+  background:
+    radial-gradient(620px 320px at 8% -6%, rgba(22, 104, 227, 0.16), transparent 62%),
+    radial-gradient(520px 300px at 108% 4%, rgba(255, 204, 0, 0.14), transparent 58%),
+    rgba(255, 255, 255, 0.88);
   -webkit-backdrop-filter: var(--rs-glass-blur);
   backdrop-filter: var(--rs-glass-blur);
   border-left: 1px solid var(--rs-glass-border);
-  color: var(--rs-ink);
-  font-family:
-    system-ui,
-    -apple-system,
-    Segoe UI,
-    Roboto,
-    sans-serif;
+  color: var(--rs-navy);
+  /* Vedi .rs-launcher: `:host { all: initial }` va compensato qui. */
+  font-family: var(--rs-font);
   font-size: 13px;
   line-height: 1.45;
-  box-shadow: -10px 0 28px rgba(11, 31, 58, 0.18);
+  box-shadow: -10px 0 28px rgba(0, 0, 153, 0.18);
 }
 
 .rs-resize {
@@ -107,7 +114,10 @@
   left: 4px;
   width: 1px;
   height: 100%;
-  background: rgba(0, 53, 95, 0.28);
+  background: rgba(0, 0, 153, 0.28);
+  transition:
+    width var(--rs-dur) var(--rs-ease),
+    background var(--rs-dur) var(--rs-ease);
 }
 
 .rs-resize:hover::after {
@@ -115,13 +125,23 @@
   background: var(--rs-yellow);
 }
 
+/* --- Header --- */
+
+/* L'altezza segue la banda blu della KB, misurata a runtime e passata come
+   --rs-host-header-h (vedi lib/host-chrome.ts). Il fallback è 64px perché è
+   l'altezza REALE misurata sulla KB (pagina articolo, 2026-08-14): se la misura
+   non riesce, la sidebar resta comunque allineata invece di sbagliare di 8px. */
 .rs-header {
+  position: relative;
+  box-sizing: border-box;
+  min-height: var(--rs-host-header-h, 64px);
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 14px;
-  background: var(--rs-glass-navy);
+  padding: 10px 14px;
+  background: var(--rs-glass-primary);
   -webkit-backdrop-filter: var(--rs-glass-blur);
   backdrop-filter: var(--rs-glass-blur);
   color: #fff;
@@ -129,20 +149,32 @@
   box-shadow: var(--rs-glass-sheen);
 }
 
+/* Riflesso speculare in cima al vetro dell'header. */
+.rs-header::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 55%;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent);
+}
+
 .rs-brand {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 10px;
   min-width: 0;
 }
 
+/* Wordmark: taglio Display e tracking NEGATIVO. A peso alto le lettere di Segoe
+   respirano troppo in un titolo corto, e il nome si legge come due parole
+   staccate invece che come un marchio. */
 .rs-title {
-  font-weight: 800;
-  font-size: 14px;
-}
-
-.rs-subtitle {
-  color: #c6d3e2;
-  font-size: 11px;
+  font-family: var(--rs-font-brand);
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
 }
 
 .rs-header-actions {
@@ -151,136 +183,512 @@
   gap: 8px;
 }
 
+/* --- Pill di stato --- */
+
 .rs-status {
-  max-width: 96px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 3px 7px;
-  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 112px;
+  padding: 4px 9px 4px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--rs-r-pill);
   background: rgba(255, 255, 255, 0.14);
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(8px) saturate(150%);
+  backdrop-filter: blur(8px) saturate(150%);
+  box-shadow: var(--rs-glass-sheen);
   color: #fff;
   font-size: 11px;
   font-weight: 700;
 }
 
+.rs-status-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rs-status-dot {
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.14);
+}
+
+.rs-status-idle,
 .rs-status-done {
-  background: rgba(18, 124, 86, 0.25);
+  color: #8ef0c4;
+}
+
+.rs-status-reading,
+.rs-status-streaming {
+  color: var(--rs-yellow-hi);
+}
+
+/* Il puntino pulsa solo mentre qualcosa è davvero in corso. */
+.rs-status-reading .rs-status-dot,
+.rs-status-streaming .rs-status-dot {
+  animation: rs-dot-pulse 1.3s ease-in-out infinite;
 }
 
 .rs-status-error {
-  background: rgba(180, 35, 24, 0.28);
+  color: #ffb4a8;
+  border-color: rgba(255, 180, 168, 0.4);
+  background: rgba(180, 35, 24, 0.32);
 }
 
-.rs-close,
-.rs-submit,
-.rs-secondary {
-  cursor: pointer;
+@keyframes rs-dot-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px rgba(255, 216, 77, 0.18);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(255, 216, 77, 0.05);
+  }
 }
+
+/* --- Chiudi --- */
 
 .rs-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  /* Senza border-box l'altezza reale dipende dallo user agent (28 o 30px), e
+     questo pulsante è il figlio più alto dell'header: bastava a spostare la
+     banda di 2px rispetto a quella della KB. */
+  box-sizing: border-box;
   width: 28px;
   height: 28px;
+  padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.24);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--rs-r-sm);
+  background: rgba(255, 255, 255, 0.1);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--rs-glass-sheen);
   color: #fff;
-  font: inherit;
-  font-weight: 800;
+  cursor: pointer;
+  transition:
+    background var(--rs-dur) var(--rs-ease),
+    transform var(--rs-dur) var(--rs-ease);
 }
 
 .rs-close:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.2);
 }
 
+.rs-close:active {
+  transform: scale(0.94);
+}
+
+.rs-close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.35);
+}
+
+.rs-close svg {
+  display: block;
+}
+
+/* --- Corpo --- */
+
 .rs-body {
+  /* flex:1 + min-height:0 servono perché il corpo prenda lo spazio residuo e il
+     footer resti ancorato in basso: senza min-height:0 un contenuto lungo
+     spingerebbe il footer fuori dal pannello invece di far scorrere il corpo. */
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 14px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: rgba(245, 247, 250, 0.55);
+  background: rgba(242, 245, 249, 0.5);
   -webkit-backdrop-filter: var(--rs-glass-blur);
   backdrop-filter: var(--rs-glass-blur);
+}
+
+/* --- Footer: utente e logout, sempre in fondo al pannello --- */
+
+.rs-footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 14px;
+  border-top: 1px solid var(--rs-glass-hairline);
+  background: var(--rs-glass);
+  -webkit-backdrop-filter: var(--rs-glass-blur);
+  backdrop-filter: var(--rs-glass-blur);
+  box-shadow: var(--rs-glass-sheen);
+  font-size: 12px;
+  color: var(--rs-muted);
+}
+
+.rs-footer-user {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+/* Il footer ha tre elementi, non due: nome a sinistra, azioni a destra. */
+.rs-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* Azione secondaria: leggibile ma senza competere col pulsante di ricerca. */
+.rs-footer-link {
+  border: 1px solid transparent;
+  border-radius: var(--rs-r-sm);
+  padding: 4px 8px;
+  background: none;
+  color: var(--rs-primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background var(--rs-dur) var(--rs-ease),
+    border-color var(--rs-dur) var(--rs-ease);
+}
+
+.rs-footer-link:hover,
+.rs-footer-link[aria-expanded='true'] {
+  border-color: var(--rs-yellow-line);
+  background: var(--rs-yellow-soft);
+}
+
+.rs-footer-link:focus-visible {
+  outline: none;
+  box-shadow: var(--rs-focus-ring);
+}
+
+/* --- Pannello del feedback ---
+   Sta FUORI da .rs-body, sopra il footer: così non scorre via con una risposta
+   lunga proprio mentre l'agente vuole commentarla. */
+
+.rs-feedback {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--rs-glass-raised-border);
+  background: var(--rs-glass-raised);
+  -webkit-backdrop-filter: var(--rs-glass-blur);
+  backdrop-filter: var(--rs-glass-blur);
+  box-shadow: 0 -6px 18px rgba(0, 0, 153, 0.1);
+}
+
+.rs-feedback-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--rs-primary);
+  font-size: 13px;
+}
+
+.rs-feedback-close {
+  border: none;
+  background: none;
+  color: var(--rs-muted);
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.rs-feedback-close:hover {
+  color: var(--rs-primary);
+}
+
+.rs-feedback-ref {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--rs-muted);
+}
+
+.rs-feedback-ref em {
+  color: var(--rs-navy);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.rs-feedback-rating {
+  display: flex;
+  gap: 6px;
+}
+
+/* Bersagli grandi: due click e via, che è l'unico modo perché venga usato. */
+.rs-feedback-vote {
+  flex: 1 1 0;
+  padding: 9px 10px;
+  border: 1px solid var(--rs-line);
+  border-radius: var(--rs-r-md);
+  background: #fff;
+  color: var(--rs-navy);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    border-color var(--rs-dur) var(--rs-ease),
+    background var(--rs-dur) var(--rs-ease),
+    transform var(--rs-dur) var(--rs-ease);
+}
+
+.rs-feedback-vote:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--rs-yellow-line);
+}
+
+.rs-feedback-vote.is-on {
+  border-color: var(--rs-primary);
+  background: var(--rs-primary-soft);
+  box-shadow: var(--rs-focus-ring);
+}
+
+.rs-feedback-vote:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.rs-feedback-vote:focus-visible {
+  outline: none;
+  box-shadow: var(--rs-focus-ring);
 }
 
 .rs-provider-note {
   padding: 9px 10px;
-  border: 1px solid rgba(240, 210, 93, 0.6);
-  border-radius: 12px;
+  border: 1px solid rgba(216, 173, 0, 0.55);
+  border-radius: var(--rs-r-md);
   background: var(--rs-glass-yellow);
   -webkit-backdrop-filter: var(--rs-glass-blur);
   backdrop-filter: var(--rs-glass-blur);
-  box-shadow: var(--rs-glass-sheen);
-  color: #513f00;
+  box-shadow: var(--rs-glass-edge);
+  color: var(--rs-yellow-ink);
   font-size: 12px;
 }
 
 .rs-label {
-  color: var(--rs-ink);
+  color: var(--rs-primary);
   font-weight: 750;
 }
 
+/* L'etichetta della modalità occupava una riga con metà larghezza vuota a
+   destra: le due pillole della lingua ci entrano senza aggiungere una riga.
+   `baseline` e non `center` perché l'etichetta è più alta delle pillole e
+   allinearle al centro le faceva sembrare fuori asse. */
+.rs-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* Stesso linguaggio visivo del segmented control accanto, in miniatura: due
+   valori non giustificano un secondo stile, e vanno letti come lo stesso tipo di
+   scelta. */
+.rs-lang {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--rs-glass-raised-border);
+  border-radius: var(--rs-r-pill);
+  background: var(--rs-glass-raised);
+}
+
+.rs-lang-pill {
+  min-width: 24px;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--rs-r-pill);
+  background: transparent;
+  color: var(--rs-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.02em;
+  transition:
+    background var(--rs-dur) var(--rs-ease),
+    box-shadow var(--rs-dur) var(--rs-ease);
+}
+
+.rs-lang-pill:hover:not(:disabled):not(.is-active) {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.rs-lang-pill:focus-visible {
+  outline: none;
+  box-shadow: var(--rs-focus-ring);
+}
+
+.rs-lang-pill.is-active {
+  border-color: var(--rs-yellow-line);
+  background: linear-gradient(180deg, var(--rs-yellow-hi), var(--rs-yellow));
+  color: var(--rs-navy);
+}
+
+.rs-lang:has(.rs-lang-pill:disabled) {
+  opacity: 0.62;
+}
+
+.rs-lang-pill:disabled {
+  cursor: not-allowed;
+}
+
+/* L'altezza la gestisce useAutoGrow leggendo scrollHeight: qui serve solo un
+   pavimento, un tetto e nessun resize manuale (che combatterebbe con l'hook). */
+/* min-height a due righe: `useAutoGrow` dimensiona sul VALORE, e il segnaposto
+   non è un valore. Con una riga sola il placeholder d'esempio (che va a capo in
+   320px) veniva tagliato a metà dal bordo — visto sulla KB reale. Appena
+   l'agente scrive, l'auto-grow prende il comando come prima. */
 .rs-input {
   width: 100%;
   box-sizing: border-box;
-  resize: vertical;
-  min-height: 84px;
-  max-height: 240px;
+  resize: none;
+  min-height: 62px;
+  max-height: 200px;
   flex-shrink: 0;
-  overflow: auto;
+  overflow-y: hidden;
   padding: 9px 10px;
   border: 1px solid var(--rs-line);
-  border-radius: 10px;
+  border-radius: var(--rs-r-sm);
   background: var(--rs-glass-strong);
   -webkit-backdrop-filter: var(--rs-glass-blur);
   backdrop-filter: var(--rs-glass-blur);
-  color: var(--rs-ink);
+  box-shadow: var(--rs-glass-sheen);
+  color: var(--rs-navy);
   font: inherit;
+  transition:
+    border-color var(--rs-dur) var(--rs-ease),
+    box-shadow var(--rs-dur) var(--rs-ease);
 }
 
 .rs-input:focus,
-.rs-select:focus {
-  border-color: var(--rs-blue-2);
-  outline: 2px solid rgba(10, 90, 163, 0.18);
+.rs-field:focus {
+  outline: none;
+  border-color: var(--rs-primary);
+  box-shadow: var(--rs-focus-ring);
 }
 
-.rs-select {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 8px 9px;
-  border: 1px solid var(--rs-line);
-  border-radius: 10px;
-  font: inherit;
-  background: var(--rs-glass-strong);
+/* --- Segmented control della modalità --- */
+
+.rs-segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--rs-glass-raised-border);
+  border-radius: var(--rs-r-md);
+  background: var(--rs-glass-raised);
   -webkit-backdrop-filter: var(--rs-glass-blur);
   backdrop-filter: var(--rs-glass-blur);
-  color: var(--rs-ink);
+  box-shadow: var(--rs-glass-edge), var(--rs-glass-raised-shadow);
 }
+
+/* `flex: 1 1 auto` invece di una base fissa: "Analisi Articolo" è più larga
+   delle altre due, e con una base di 88px il gruppo andava a capo male a 320px. */
+.rs-seg {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 30px;
+  padding: 5px 5px;
+  border: 1px solid transparent;
+  border-radius: var(--rs-r-sm);
+  background: transparent;
+  color: var(--rs-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  transition:
+    background var(--rs-dur) var(--rs-ease),
+    box-shadow var(--rs-dur) var(--rs-ease),
+    transform var(--rs-dur) var(--rs-ease);
+}
+
+.rs-seg:hover:not(:disabled):not(.is-active) {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.rs-seg:active:not(:disabled) {
+  transform: translateY(1px) scale(0.995);
+}
+
+.rs-seg:focus-visible {
+  outline: none;
+  box-shadow: var(--rs-focus-ring);
+}
+
+.rs-seg.is-active {
+  border-color: var(--rs-yellow-line);
+  background: linear-gradient(180deg, var(--rs-yellow-hi), var(--rs-yellow));
+  color: var(--rs-navy);
+  box-shadow:
+    var(--rs-glass-edge),
+    0 3px 10px rgba(216, 173, 0, 0.32);
+}
+
+.rs-segmented:has(.rs-seg:disabled) {
+  opacity: 0.62;
+}
+
+.rs-seg:disabled {
+  cursor: not-allowed;
+}
+
+/* --- Azioni --- */
 
 .rs-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 82px;
+  grid-template-columns: minmax(0, 1fr) 44px;
   gap: 8px;
+}
+
+/* "+" al posto di "Nuova": il glifo ha bisogno di respiro e di essere centrato. */
+.rs-new {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1;
 }
 
 .rs-submit,
 .rs-secondary,
 .rs-abort {
   min-height: 36px;
-  border-radius: 10px;
+  border-radius: var(--rs-r-sm);
   font: inherit;
   font-weight: 800;
+  cursor: pointer;
+  transition:
+    background var(--rs-dur) var(--rs-ease),
+    box-shadow var(--rs-dur) var(--rs-ease),
+    transform var(--rs-dur) var(--rs-ease);
 }
 
 .rs-submit {
-  border: 1px solid #d8ad00;
-  background: linear-gradient(180deg, #ffd84d, var(--rs-yellow));
-  color: var(--rs-ink);
+  border: 1px solid var(--rs-yellow-line);
+  background: linear-gradient(180deg, var(--rs-yellow-hi), var(--rs-yellow));
+  color: var(--rs-navy);
   box-shadow:
-    var(--rs-glass-sheen),
+    var(--rs-glass-edge),
     0 4px 14px rgba(216, 173, 0, 0.28);
 }
 
@@ -293,8 +701,27 @@
   background: var(--rs-glass);
   -webkit-backdrop-filter: var(--rs-glass-blur);
   backdrop-filter: var(--rs-glass-blur);
-  color: var(--rs-blue);
-  box-shadow: var(--rs-glass-sheen);
+  color: var(--rs-primary);
+  box-shadow: var(--rs-glass-edge);
+}
+
+.rs-secondary:hover:not(:disabled) {
+  background: var(--rs-glass-strong);
+}
+
+.rs-submit:active:not(:disabled),
+.rs-secondary:active:not(:disabled),
+.rs-abort:active {
+  transform: translateY(1px) scale(0.995);
+}
+
+.rs-submit:focus-visible,
+.rs-secondary:focus-visible,
+.rs-abort:focus-visible,
+.rs-logout:focus-visible,
+.rs-source:focus-visible {
+  outline: none;
+  box-shadow: var(--rs-focus-ring);
 }
 
 .rs-submit:disabled,
@@ -303,44 +730,180 @@
   cursor: not-allowed;
 }
 
-.rs-tour {
+/* --- Timeline del tour --- */
+
+.rs-timeline {
+  padding: 10px 11px;
+  border: 1px solid rgba(216, 173, 0, 0.5);
+  border-radius: var(--rs-r-md);
+  background: var(--rs-glass-yellow);
+  -webkit-backdrop-filter: var(--rs-glass-blur);
+  backdrop-filter: var(--rs-glass-blur);
+  box-shadow: var(--rs-glass-edge);
+  color: var(--rs-yellow-ink);
+  font-size: 12px;
+}
+
+.rs-timeline-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.rs-timeline-count {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+.rs-timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rs-tl-item {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+
+.rs-tl-dot {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  margin-top: 3px;
+  border: 2px solid rgba(74, 58, 0, 0.35);
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+
+.rs-tl-done .rs-tl-dot {
+  border-color: var(--rs-success);
+  background: var(--rs-success);
+}
+
+/* Spunta disegnata in CSS: niente glifo, niente dipendenza dal font. */
+.rs-tl-done .rs-tl-dot::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 0;
+  width: 3px;
+  height: 6px;
+  border: solid #fff;
+  border-width: 0 1.6px 1.6px 0;
+  transform: rotate(42deg);
+}
+
+.rs-tl-current .rs-tl-dot {
+  border-color: var(--rs-primary);
+  background: var(--rs-yellow);
+  animation: rs-tl-ring 1.4s ease-in-out infinite;
+}
+
+@keyframes rs-tl-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 0, 153, 0.35);
+  }
+  60% {
+    box-shadow: 0 0 0 5px rgba(0, 0, 153, 0);
+  }
+}
+
+.rs-tl-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rs-tl-current .rs-tl-title {
+  font-weight: 800;
+}
+
+.rs-tl-pending {
+  opacity: 0.6;
+}
+
+.rs-tl-skipped .rs-tl-title {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.rs-tl-detail {
+  display: block;
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
+}
+
+.rs-tl-link {
+  color: var(--rs-primary);
+  font-weight: 700;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(0, 0, 153, 0.28);
+}
+
+.rs-tl-link:hover {
+  border-bottom-color: var(--rs-primary);
+}
+
+.rs-timeline-foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 9px 10px;
-  border: 1px solid rgba(240, 210, 93, 0.6);
-  border-radius: 12px;
-  background: var(--rs-glass-yellow);
-  -webkit-backdrop-filter: var(--rs-glass-blur);
-  backdrop-filter: var(--rs-glass-blur);
-  box-shadow: var(--rs-glass-sheen);
-  color: #513f00;
-  font-size: 12px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(74, 58, 0, 0.18);
 }
 
 .rs-abort {
   flex-shrink: 0;
-  cursor: pointer;
-  min-height: 28px;
-  padding: 4px 8px;
+  min-height: 30px;
+  padding: 5px 12px;
   border: 1px solid var(--rs-glass-border);
-  border-radius: 999px;
+  border-radius: var(--rs-r-pill);
   background: var(--rs-glass-strong);
   -webkit-backdrop-filter: var(--rs-glass-blur);
   backdrop-filter: var(--rs-glass-blur);
-  color: var(--rs-ink);
+  box-shadow: var(--rs-glass-edge);
+  color: var(--rs-primary);
   font-size: 11px;
 }
 
+.rs-abort:hover:not(:disabled) {
+  background: #fff;
+}
+
+.rs-abort:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* --- Piano AI --- */
+
 .rs-plan {
   border: 1px solid var(--rs-glass-border);
-  border-radius: 12px;
+  border-radius: var(--rs-r-md);
   padding: 9px 10px;
   background: var(--rs-glass);
   -webkit-backdrop-filter: var(--rs-glass-blur);
   backdrop-filter: var(--rs-glass-blur);
-  box-shadow: var(--rs-glass-sheen), var(--rs-glass-shadow);
+  box-shadow: var(--rs-glass-edge), var(--rs-glass-shadow);
   font-size: 12px;
 }
 
@@ -358,45 +921,481 @@
   font-size: 11px;
 }
 
+/* La riga «Fonti lette» è un bottone: apre l'elenco degli articoli letti dove
+   l'agente sta già guardando. È un <button> e non un <details> perché deve stare
+   nel flusso delle altre righe del pannello, con la stessa geometria — quindi si
+   azzerano gli stili nativi del bottone e si eredita la tipografia. */
+.rs-plan-row-button {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rs-plan-row-button:hover strong {
+  color: var(--rs-primary);
+}
+
+.rs-plan-row-button:focus-visible {
+  outline: 2px solid var(--rs-primary);
+  outline-offset: 2px;
+  border-radius: var(--rs-r-sm);
+}
+
+.rs-plan-caret {
+  margin-left: 5px;
+  color: var(--rs-muted);
+  font-size: 9px;
+}
+
+.rs-plan-sources {
+  margin: 6px 0 0;
+  padding-left: 14px;
+  font-size: 12px;
+}
+
+.rs-plan-sources li {
+  margin-bottom: 3px;
+  /* I titoli degli articoli KB sono lunghi e non hanno spazi utili dove andare a
+     capo: senza questo escono dai 320px della sidebar. */
+  overflow-wrap: anywhere;
+}
+
 .rs-plan-reason {
   margin-top: 6px;
-  color: var(--rs-blue);
+  padding-top: 6px;
+  border-top: 1px solid var(--rs-glass-hairline);
+  color: var(--rs-primary);
   font-size: 11px;
 }
 
 .rs-error {
   color: var(--rs-danger);
-  background: rgba(253, 232, 228, 0.8);
+  background: rgba(253, 238, 236, 0.82);
   -webkit-backdrop-filter: var(--rs-glass-blur);
   backdrop-filter: var(--rs-glass-blur);
   padding: 8px 10px;
-  border-radius: 12px;
+  border: 1px solid rgba(180, 35, 24, 0.22);
+  border-radius: var(--rs-r-md);
   box-shadow: var(--rs-glass-sheen);
 }
 
-.rs-outcome {
+/* --- Interruttore Schedule Change --- */
+
+.rs-switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid var(--rs-glass-raised-border);
+  border-radius: var(--rs-r-md);
+  background: var(--rs-glass-raised);
+  -webkit-backdrop-filter: var(--rs-glass-blur);
+  backdrop-filter: var(--rs-glass-blur);
+  box-shadow: var(--rs-glass-edge), var(--rs-glass-raised-shadow);
+  color: var(--rs-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rs-switch {
+  flex-shrink: 0;
+  position: relative;
+  width: 42px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--rs-line);
+  border-radius: var(--rs-r-pill);
+  background: #e6ebf2;
+  cursor: pointer;
+  transition:
+    background var(--rs-dur) var(--rs-ease),
+    border-color var(--rs-dur) var(--rs-ease);
+}
+
+.rs-switch.is-on {
+  border-color: var(--rs-primary);
+  background: var(--rs-primary);
+}
+
+.rs-switch:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.rs-switch:focus-visible {
+  outline: none;
+  box-shadow: var(--rs-focus-ring);
+}
+
+.rs-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 40, 0.3);
+  transition: transform var(--rs-dur) var(--rs-ease);
+}
+
+.rs-switch.is-on .rs-switch-knob {
+  transform: translateX(18px);
+}
+
+/* --- Form della richiesta strutturata --- */
+
+.rs-form {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 11px;
   border: 1px solid var(--rs-glass-border);
-  border-radius: 12px;
-  padding: 10px;
+  border-radius: var(--rs-r-md);
   background: var(--rs-glass);
   -webkit-backdrop-filter: var(--rs-glass-blur);
   backdrop-filter: var(--rs-glass-blur);
-  box-shadow: var(--rs-glass-sheen), var(--rs-glass-shadow);
+  box-shadow: var(--rs-glass-edge);
+}
+
+.rs-form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Airline e data stanno sulla stessa riga: sono entrambi corti. */
+.rs-form-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+  gap: 8px;
+}
+
+.rs-form-label {
+  color: var(--rs-primary);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.rs-form-hint {
+  color: var(--rs-muted);
+  font-size: 11px;
+}
+
+.rs-form-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 2px 0 0;
+  padding: 9px 0 0;
+  border: 0;
+  border-top: 1px solid var(--rs-glass-hairline);
+}
+
+.rs-form-sections:disabled {
+  opacity: 0.6;
+}
+
+.rs-form-sections > legend {
+  padding: 0;
+  margin-bottom: 6px;
+}
+
+.rs-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.rs-check input {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--rs-primary);
+  cursor: pointer;
+}
+
+/* --- Avviso non bloccante --- */
+
+.rs-notice {
+  padding: 8px 10px;
+  border: 1px solid rgba(216, 173, 0, 0.5);
+  border-radius: var(--rs-r-md);
+  background: var(--rs-glass-yellow);
+  -webkit-backdrop-filter: var(--rs-glass-blur);
+  backdrop-filter: var(--rs-glass-blur);
+  box-shadow: var(--rs-glass-edge);
+  color: var(--rs-yellow-ink);
+  font-size: 12px;
+}
+
+/* --- Thread: turni conclusi, collassati --- */
+
+.rs-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rs-turn {
+  border: 1px solid var(--rs-glass-border);
+  border-radius: var(--rs-r-md);
+  background: var(--rs-glass);
+  -webkit-backdrop-filter: var(--rs-glass-blur);
+  backdrop-filter: var(--rs-glass-blur);
+  box-shadow: var(--rs-glass-edge);
+  font-size: 12px;
+}
+
+.rs-turn > summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  cursor: pointer;
+  color: var(--rs-primary);
+  font-weight: 700;
+  list-style: none;
+}
+
+.rs-turn > summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Freccia disegnata in CSS, che ruota all'apertura. */
+.rs-turn > summary::after {
+  content: '';
+  flex-shrink: 0;
+  margin-left: auto;
+  width: 6px;
+  height: 6px;
+  border: solid currentColor;
+  border-width: 0 1.6px 1.6px 0;
+  transform: rotate(45deg);
+  transition: transform var(--rs-dur) var(--rs-ease);
+}
+
+.rs-turn[open] > summary::after {
+  transform: rotate(-135deg);
+}
+
+.rs-turn-index {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--rs-primary-soft);
+  color: var(--rs-primary);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.rs-turn-query {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rs-turn-stale {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: var(--rs-r-pill);
+  background: var(--rs-warn-soft);
+  color: var(--rs-warn);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.rs-turn-answer {
+  padding: 0 10px 10px;
+  border-top: 1px solid var(--rs-glass-hairline);
+  font-size: 13px;
+  line-height: 1.58;
+}
+
+.rs-turn-answer .rs-h {
+  margin: 12px 0 6px;
+  padding-top: 0;
+  border-top: 0;
+  color: var(--rs-primary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* --- Risposta --- */
+
+.rs-outcome {
+  position: relative;
+  border: 1px solid var(--rs-glass-border);
+  border-radius: var(--rs-r-md);
+  padding: 11px;
+  background: var(--rs-glass);
+  -webkit-backdrop-filter: var(--rs-glass-blur);
+  backdrop-filter: var(--rs-glass-blur);
+  box-shadow: var(--rs-glass-edge), var(--rs-glass-shadow);
+}
+
+/* Corpo un filo più grande e molto più arioso del resto della sidebar: qui si
+   legge una procedura, non si scorre un'etichetta. */
+.rs-outcome {
+  font-size: 13.5px;
+  line-height: 1.62;
 }
 
 .rs-outcome p {
-  margin: 0 0 6px;
+  margin: 0 0 8px;
 }
 
-.rs-outcome .rs-h {
-  font-weight: 800;
-  margin-top: 10px;
-  color: var(--rs-blue);
+.rs-outcome p:last-child {
+  margin-bottom: 0;
 }
+
+/* Le sezioni erano 13px come il corpo, distinte solo dal peso: a colpo d'occhio
+   non si vedeva dove cominciava "Eccezioni". Ora sono etichette con un filetto. */
+.rs-outcome .rs-h {
+  margin: 16px 0 7px;
+  padding-top: 9px;
+  border-top: 1px solid var(--rs-glass-hairline);
+  color: var(--rs-primary);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.3;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rs-outcome .rs-h:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.rs-outcome strong {
+  font-weight: 750;
+  color: var(--rs-navy);
+}
+
+/* Gli elenchi arrivano dal modello come `- voce`: prima erano paragrafi piatti,
+   quindi ogni passo di una procedura si confondeva col successivo. */
+.rs-list {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.rs-list li {
+  margin-bottom: 5px;
+}
+
+.rs-list li::marker {
+  color: var(--rs-primary);
+  font-weight: 700;
+}
+
+/* Fonti: solo il titolo, come chip di vetro cliccabile.
+   I titoli degli articoli KB sono lunghi ("Flight | Policies | ASC—Global—I-L"),
+   quindi il chip DEVE poter andare a capo: prima veniva troncato con i puntini e
+   l'agente non riusciva a distinguere due fonti che iniziano allo stesso modo. */
+.rs-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Senza `min-width: 0` un <li> flex resta larghezza min-content: un titolo con
+   una parola lunga sfondava il pannello. `flex-basis: 100%` mette una fonte per
+   riga, che a 360px è l'unico modo di leggerle tutte. */
+.rs-sources > li {
+  min-width: 0;
+  max-width: 100%;
+  flex: 1 1 100%;
+}
+
+.rs-source {
+  display: inline-flex;
+  /* flex-start e non center: con due righe di titolo la freccia deve restare in
+     alto, allineata alla prima riga, non fluttuare a metà. */
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--rs-glass-border);
+  /* Non più a pillola: un raggio da 999px su un chip a due righe fa una capsula
+     deforme. */
+  border-radius: var(--rs-r-md);
+  background: var(--rs-glass-strong);
+  -webkit-backdrop-filter: var(--rs-glass-blur);
+  backdrop-filter: var(--rs-glass-blur);
+  box-shadow: var(--rs-glass-edge);
+  color: var(--rs-primary);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  transition:
+    transform var(--rs-dur) var(--rs-ease),
+    box-shadow var(--rs-dur) var(--rs-ease),
+    border-color var(--rs-dur) var(--rs-ease);
+}
+
+.rs-source:hover {
+  transform: translateY(-1px);
+  border-color: var(--rs-yellow-line);
+  box-shadow:
+    var(--rs-glass-edge),
+    0 6px 16px rgba(0, 0, 153, 0.16);
+}
+
+/* `overflow-wrap: anywhere` e non `break-word`: i titoli KB contengono sequenze
+   senza spazi ("ASC—Global—I-L") che `break-word` non spezzerebbe. */
+.rs-source-title {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+/* Freccia "apre in una nuova scheda", disegnata in CSS. */
+.rs-source::after {
+  content: '';
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  /* Allineata alla prima riga del titolo invece che al centro del chip. */
+  margin-top: 4px;
+  border: solid currentColor;
+  border-width: 1.6px 1.6px 0 0;
+  transform: rotate(45deg);
+  opacity: 0.7;
+}
+
+/* --- Pagine lette --- */
 
 .rs-pages {
   font-size: 12px;
-  color: #34465b;
+  color: var(--rs-muted);
+}
+
+.rs-pages summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--rs-primary);
 }
 
 .rs-pages ul {
@@ -404,22 +1403,37 @@
   padding-left: 14px;
 }
 
+.rs-pages li {
+  margin-bottom: 3px;
+}
+
+.rs-page-link {
+  color: var(--rs-primary);
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(0, 0, 153, 0.25);
+}
+
+.rs-page-link:hover {
+  border-bottom-color: var(--rs-primary);
+}
+
 .rs-badge {
   display: inline-block;
   font-size: 10px;
   padding: 1px 5px;
-  border-radius: 4px;
+  border-radius: 5px;
   margin-right: 4px;
   font-weight: 800;
 }
 
 .rs-current {
-  background: #dbeafe;
-  color: var(--rs-blue);
+  background: var(--rs-primary-soft);
+  color: var(--rs-primary);
 }
 
 .rs-followed {
-  background: #dff7eb;
+  background: var(--rs-success-soft);
   color: var(--rs-success);
 }
 
@@ -430,17 +1444,16 @@
   box-sizing: border-box;
   padding: 9px 10px;
   border: 1px solid var(--rs-line);
-  border-radius: 10px;
+  border-radius: var(--rs-r-sm);
   background: var(--rs-glass-strong);
   -webkit-backdrop-filter: var(--rs-glass-blur);
   backdrop-filter: var(--rs-glass-blur);
-  color: var(--rs-ink);
+  box-shadow: var(--rs-glass-sheen);
+  color: var(--rs-navy);
   font: inherit;
-}
-
-.rs-field:focus {
-  border-color: var(--rs-blue-2);
-  outline: 2px solid rgba(10, 90, 163, 0.18);
+  transition:
+    border-color var(--rs-dur) var(--rs-ease),
+    box-shadow var(--rs-dur) var(--rs-ease);
 }
 
 .rs-auth {
@@ -454,6 +1467,42 @@
   color: var(--rs-muted);
 }
 
+/* Backend non raggiungibile: schermata di attesa, NON un form di login. La
+   sessione è ancora valida, quindi il tono è "riprova", non "riautenticati". */
+.rs-offline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--rs-yellow-line);
+  border-radius: var(--rs-r-md);
+  background: var(--rs-yellow-soft);
+}
+
+.rs-offline-title {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--rs-yellow-ink);
+}
+
+.rs-offline-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--rs-navy);
+}
+
+.rs-offline-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--rs-muted);
+}
+
+.rs-offline .rs-submit {
+  align-self: flex-start;
+}
+
 .rs-whoami {
   display: flex;
   align-items: center;
@@ -465,16 +1514,22 @@
 
 .rs-logout {
   border: 1px solid var(--rs-glass-border);
-  border-radius: 10px;
+  border-radius: var(--rs-r-sm);
   background: var(--rs-glass);
   -webkit-backdrop-filter: var(--rs-glass-blur);
   backdrop-filter: var(--rs-glass-blur);
-  color: var(--rs-blue);
+  box-shadow: var(--rs-glass-sheen);
+  color: var(--rs-primary);
   font: inherit;
   font-size: 12px;
   font-weight: 700;
-  padding: 4px 8px;
+  padding: 4px 9px;
   cursor: pointer;
+  transition: background var(--rs-dur) var(--rs-ease);
+}
+
+.rs-logout:hover {
+  background: var(--rs-glass-strong);
 }
 
 /* Fallback: senza backdrop-filter, o se l'utente riduce la trasparenza, le
@@ -490,20 +1545,29 @@
   .rs-outcome,
   .rs-secondary,
   .rs-abort,
-  .rs-logout {
+  .rs-logout,
+  .rs-source,
+  .rs-segmented,
+  .rs-footer,
+  .rs-feedback,
+  .rs-turn,
+  .rs-switch-row,
+  .rs-form {
     background: #fff;
   }
   .rs-input,
-  .rs-select,
   .rs-field {
     background: #fff;
   }
   .rs-provider-note,
-  .rs-tour {
+  .rs-timeline,
+  .rs-notice {
     background: var(--rs-yellow-soft);
   }
-  .rs-header {
-    background: var(--rs-ink);
+  .rs-header,
+  .rs-status,
+  .rs-close {
+    background: var(--rs-primary);
   }
 }
 
@@ -519,7 +1583,16 @@
     backdrop-filter: none;
   }
   .rs-header {
-    background: var(--rs-ink);
+    background: var(--rs-primary);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .rs-header::before {
+    display: none;
+  }
+  .rs-status,
+  .rs-close {
+    background: var(--rs-primary-deep);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
@@ -528,17 +1601,52 @@
   .rs-secondary,
   .rs-abort,
   .rs-logout,
+  .rs-source,
+  .rs-segmented,
+  .rs-footer,
+  .rs-feedback,
+  .rs-turn,
+  .rs-switch-row,
+  .rs-form,
   .rs-input,
-  .rs-select,
   .rs-field {
     background: #fff;
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
   .rs-provider-note,
-  .rs-tour {
+  .rs-timeline,
+  .rs-notice {
     background: var(--rs-yellow-soft);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
+  }
+}
+
+/* Nessuna animazione decorativa se l'utente ha chiesto meno movimento: gli
+   stati restano leggibili perché sono comunque marcati da colore e forma. */
+@media (prefers-reduced-motion: reduce) {
+  .rs-launcher,
+  .rs-close,
+  .rs-seg,
+  .rs-submit,
+  .rs-secondary,
+  .rs-abort,
+  .rs-source,
+  .rs-logout,
+  .rs-input,
+  .rs-field,
+  .rs-resize::after,
+  .rs-status-dot,
+  .rs-tl-dot,
+  .rs-turn > summary::after,
+  .rs-switch,
+  .rs-switch-knob {
+    animation: none !important;
+    transition: none !important;
+  }
+  .rs-launcher:hover,
+  .rs-source:hover {
+    transform: none;
   }
 }

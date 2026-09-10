@@ -77,13 +77,42 @@ export function normalizeUrl(u: string): string {
   }
 }
 
+export interface StartTourOptions {
+  dwellMs?: number;
+  scanMs?: number;
+  /**
+   * Pagine già lette nei turni precedenti. Entrano nel contesto della risposta e
+   * i loro articoli vengono ESCLUSI dai target: alla seconda domanda il tour non
+   * deve rifare la stessa camminata per rileggere ciò che ha già in mano.
+   */
+  alreadyRead?: KbPage[];
+  /**
+   * `false` quando la pagina aperta non copre la domanda: in quel caso vale la
+   * pena camminare anche se i target sono pochi. `true` (default) permette al
+   * chiamante di dire "la risposta è probabilmente già qui, non camminare".
+   */
+  currentPageCovers?: boolean;
+}
+
 /** Build the initial tour state on the current (start) page. */
-export function startTour(
-  query: string,
-  dwellMs = DEFAULT_DWELL_MS,
-  scanMs = DEFAULT_SCAN_MS,
-): TourState {
-  const targets = pickRelevantLinks(extractInternalLinks(), query);
+export function startTour(query: string, options: StartTourOptions = {}): TourState {
+  const { dwellMs = DEFAULT_DWELL_MS, scanMs = DEFAULT_SCAN_MS, alreadyRead = [] } = options;
+  const current = extractCurrentPage(query);
+  // La pagina di partenza resta sempre prima in lista; le già lette la seguono,
+  // senza duplicarla se il turno precedente era sulla stessa pagina.
+  const currentId = normalizeUrl(current.url);
+  const carried = alreadyRead.filter(
+    (page) => page.text.trim() && normalizeUrl(page.url) !== currentId,
+  );
+  const readIds = new Set([currentId, ...carried.map((page) => normalizeUrl(page.url))]);
+
+  const candidates = extractInternalLinks().filter((link) => !readIds.has(normalizeUrl(link.url)));
+  // `currentPageCovers` a true e nessun articolo nuovo da leggere → niente
+  // camminata: si risponde con quello che c'è. Prima il tour ripartiva sempre da
+  // zero e rivisitava le stesse pagine a ogni domanda di approfondimento.
+  const targets =
+    options.currentPageCovers && carried.length ? [] : pickRelevantLinks(candidates, query);
+
   return {
     // No relevant links to visit → go straight to asking on the current page.
     phase: targets.length ? 'scrolling' : 'asking',
@@ -91,7 +120,7 @@ export function startTour(
     startUrl: location.href,
     targets,
     index: 0,
-    pages: [extractCurrentPage(query)],
+    pages: [current, ...carried],
     dwellMs,
     scanMs,
     startedAt: Date.now(),
@@ -141,17 +170,40 @@ export async function loadTourResult(): Promise<TourResultState | null> {
     const abortedAt = stored[ABORT_KEY];
     if (typeof abortedAt === 'number' && abortedAt >= result.startedAt) {
       await clearTourResult();
+      await clearTourAbort();
       return null;
     }
+    // Il flag ha finito il suo compito: se resta, sopravvive indefinitamente su
+    // disco (nessun codice lo rimuoveva) e al primo riavvio del browser può
+    // scartare il risultato di un tour successivo con `startedAt` più basso.
+    await clearTourAbort();
     return result;
   } catch {
     return null;
   }
 }
 
+/** Rimuove il flag di abort dopo che è stato consumato. */
+export async function clearTourAbort(): Promise<void> {
+  try {
+    await browser.storage.local.remove(ABORT_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function saveTourResult(state: TourResultState): Promise<void> {
   try {
-    await browser.storage.local.set({ [RESULT_KEY]: state });
+    // Il TESTO INTEGRALE degli articoli non va su disco. Questo record serve
+    // solo a ricomporre la risposta e l'elenco delle fonti dopo l'unica
+    // navigazione finale: url e titolo bastano. Il corpo degli articoli, invece,
+    // resterebbe in storage.local anche se l'agente chiude il tab prima di
+    // atterrare — la scadenza di 5 minuti si applica solo in lettura.
+    const lean: TourResultState = {
+      ...state,
+      pages: state.pages.map((page) => ({ ...page, text: '' })),
+    };
+    await browser.storage.local.set({ [RESULT_KEY]: lean });
   } catch {
     /* best-effort */
   }

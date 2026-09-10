@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SCHEMA_VERSION } from './schema-version.js';
 
 export type UserRole = 'agent' | 'team_lead' | 'admin';
 export type UserStatus = 'pending' | 'active' | 'disabled';
@@ -67,6 +68,37 @@ export interface RequestHistoryRecord {
   sources_json: string;
   // 'ask' = sintesi risposta; 'rank' = rerank/selezione candidati (Fase reranker).
   kind: string;
+  /** Fonti citate dal modello. `null` = non misurato (righe storiche, rank, errori). */
+  cited_sources: number | null;
+  /** 1 = risposta tagliata dal tetto di output. `null` = non misurato. */
+  truncated: number | null;
+}
+
+export type FeedbackRating = 'up' | 'down';
+
+export interface FeedbackRecord {
+  id: string;
+  created_at: string;
+  request_id: string | null;
+  user_id: number | null;
+  agent_id: string;
+  rating: FeedbackRating;
+  comment: string | null;
+  query_preview: string | null;
+  model: string | null;
+  mode: string | null;
+}
+
+export interface FeedbackInput {
+  id: string;
+  requestId?: string | null;
+  userId: number | null;
+  agentId: string;
+  rating: FeedbackRating;
+  comment?: string | null;
+  queryPreview?: string | null;
+  model?: string | null;
+  mode?: string | null;
 }
 
 export interface RequestHistoryInput {
@@ -92,31 +124,103 @@ export interface RequestHistoryInput {
   sources: unknown[];
   /** 'ask' (sintesi, default) o 'rank' (rerank candidati). */
   kind?: 'ask' | 'rank';
+  /**
+   * Fonti citate dal MODELLO nella risposta (vedi outcome-audit.ts). `null` quando
+   * non è misurabile — richiesta respinta, errore, o rerank.
+   */
+  citedSources?: number | null;
+  /**
+   * 1 se la risposta ha raggiunto `max_tokens` ed è stata tagliata, 0 se completa.
+   * `null` quando non è misurabile (errore, respinta, rerank).
+   */
+  truncated?: number | null;
 }
 
 export interface SettingsRecord {
   max_concurrent_requests: number;
   max_concurrent_per_agent: number;
-  max_daily_estimated_cost_usd: number;
+  /**
+   * Budget del MESE in corso, in euro. Il listino del modello è in dollari
+   * (router.ts), quindi la spesa si accumula in USD e viene convertita al
+   * confronto con `USD_PER_EUR`: vedi canAcceptRequest.
+   */
+  max_monthly_estimated_cost_eur: number;
+  /**
+   * Richieste a pagamento per agente per ora. La concorrenza limita quante
+   * partono INSIEME, non quante in sequenza: senza questo tetto un ciclo
+   * impazzito (o un agente che tiene premuto) brucia budget indisturbato.
+   */
+  max_requests_per_hour_per_agent: number;
   max_request_pages: number;
   max_request_links: number;
   max_page_text_chars: number;
+  /** Turni precedenti rimandati al modello nei follow-up (0 = thread disattivati). */
+  max_history_turns: number;
   retention_days: number;
 }
 
+/**
+ * Una variabile impostata a vuoto vale come assente.
+ *
+ * `??` da solo NON basta, e la differenza è costata una perdita silenziosa di
+ * dati: `EnvironmentFile=` di systemd sovrascrive `Environment=`, quindi una riga
+ * `RUNWAYSURFER_DB_PATH=` copiata da un modello di configurazione vinceva sul
+ * percorso dichiarato nella unit; `??` non scatta sulla stringa vuota; e
+ * better-sqlite3 tratta il nome file `''` come **database anonimo in memoria**. Il
+ * servizio partiva, /health rispondeva `ok`, e ogni riavvio cancellava utenti,
+ * sessioni, storico e impostazioni.
+ *
+ * Lo stesso valeva per i `Number(...)`: `Number('') === 0`, e i settings vengono
+ * seminati con INSERT OR IGNORE una volta sola al primo avvio — una riga vuota
+ * fissava il budget mensile a 0 in modo permanente.
+ *
+ * config.ts applica già questa regola con il suo `str()`; qui mancava.
+ */
+function envValue(name: string): string | undefined {
+  const raw = process.env[name];
+  if (raw === undefined) return undefined;
+  const trimmed = raw.trim();
+  return trimmed === '' ? undefined : trimmed;
+}
+
+/** Come envValue, ma per i numeri: un valore non numerico non deve diventare NaN. */
+function envNumber(name: string, fallback: number): number {
+  const raw = envValue(name);
+  if (raw === undefined) return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) {
+    console.warn(`[config] ${name}="${raw}" non è un numero: uso il default ${fallback}.`);
+    return fallback;
+  }
+  return value;
+}
+
 const DEFAULT_SETTINGS: SettingsRecord = {
-  max_concurrent_requests: Number(process.env.MAX_CONCURRENT_REQUESTS ?? 30),
-  max_concurrent_per_agent: Number(process.env.MAX_CONCURRENT_PER_AGENT ?? 2),
-  max_daily_estimated_cost_usd: Number(process.env.MAX_DAILY_ESTIMATED_COST_USD ?? 50),
-  max_request_pages: Number(process.env.MAX_REQUEST_PAGES ?? 4),
-  max_request_links: Number(process.env.MAX_REQUEST_LINKS ?? 12),
-  max_page_text_chars: Number(process.env.MAX_PAGE_TEXT_CHARS ?? 6_000),
-  retention_days: Number(process.env.REQUEST_RETENTION_DAYS ?? 90),
+  max_concurrent_requests: envNumber('MAX_CONCURRENT_REQUESTS', 30),
+  max_concurrent_per_agent: envNumber('MAX_CONCURRENT_PER_AGENT', 2),
+  max_monthly_estimated_cost_eur: envNumber('MAX_MONTHLY_ESTIMATED_COST_EUR', 70),
+  max_requests_per_hour_per_agent: envNumber('MAX_REQUESTS_PER_HOUR_PER_AGENT', 30),
+  max_request_pages: envNumber('MAX_REQUEST_PAGES', 4),
+  max_request_links: envNumber('MAX_REQUEST_LINKS', 12),
+  max_page_text_chars: envNumber('MAX_PAGE_TEXT_CHARS', 6_000),
+  max_history_turns: envNumber('MAX_HISTORY_TURNS', 3),
+  retention_days: envNumber('REQUEST_RETENTION_DAYS', 90),
 };
 
 const here = dirname(fileURLToPath(import.meta.url));
-const dbPath = process.env.RUNWAYSURFER_DB_PATH ?? join(here, '..', 'data', 'runwaysurfer.db');
+const dbPath = envValue('RUNWAYSURFER_DB_PATH') ?? join(here, '..', 'data', 'runwaysurfer.db');
 mkdirSync(dirname(dbPath), { recursive: true });
+
+/**
+ * Percorso effettivo del database, esportato per poterlo stampare all'avvio.
+ *
+ * Non è decorazione: il default punta dentro la cartella del codice
+ * (`<dist>/../data/`), che in produzione sta dentro una directory di release e
+ * verrebbe cancellata dalla potatura delle release vecchie. La unit systemd
+ * imposta RUNWAYSURFER_DB_PATH, quindi oggi è al sicuro; loggarlo è ciò che
+ * rende visibile l'errore il giorno in cui quella riga sparisce dall'env file.
+ */
+export const DB_PATH = dbPath;
 
 export const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
@@ -138,7 +242,41 @@ function json(value: unknown): string {
   return JSON.stringify(value ?? null);
 }
 
+/**
+ * Rifiuta un database scritto da una build PIÙ RECENTE di questa.
+ *
+ * Le migrazioni sono forward-only: il gradino inverso non esiste. Se
+ * `user_version` supera SCHEMA_VERSION, la scala in migrate() è tutta falsa,
+ * migrate() esce in silenzio e il servizio parte su uno schema che non conosce —
+ * che è il modo peggiore di rompersi, perché sembra funzionare e il danno si
+ * vede giorni dopo. Succede in un caso concreto e prevedibile: un rollback a una
+ * release precedente dopo che quella nuova ha già migrato il database.
+ *
+ * Fatale di proposito. Un servizio visibilmente giù si sistema in dieci minuti;
+ * uno schema disallineato scoperto una settimana dopo può non essere più
+ * recuperabile. È lo stesso argomento già usato per il certificato scaduto in
+ * index.ts.
+ */
+export function assertSchemaNotNewer(): void {
+  const version = db.pragma('user_version', { simple: true }) as number;
+  if (version > SCHEMA_VERSION) {
+    throw new Error(
+      `il database (${dbPath}) è allo schema ${version}, ma questa build ne conosce al ` +
+        `massimo ${SCHEMA_VERSION}: è stato scritto da una versione PIÙ RECENTE di Runway ` +
+        'Surfer. Non parto — le migrazioni sono a senso unico e proseguire corromperebbe i ' +
+        'dati senza dare segno. Rimetti la release più recente (sudo runwaysurfer-update ' +
+        "--list) oppure ripristina il backup del database preso prima di quell'aggiornamento " +
+        '(vedi docs/RUNBOOK-BACKEND.md, sezione «Backup del database»).',
+    );
+  }
+}
+
 export function initDb(): void {
+  // PRIMA di qualunque altra cosa: le CREATE INDEX del blocco qui sotto hanno
+  // già causato un mancato avvio reale su un database esistente (vedi
+  // tests/migration.test.ts), e contro uno schema futuro darebbero un
+  // SqliteError confuso invece del messaggio che spiega cosa è successo.
+  assertSchemaNotNewer();
   db.exec(`
     CREATE TABLE IF NOT EXISTS teams (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -191,7 +329,16 @@ export function initDb(): void {
       error TEXT,
       selected_links_json TEXT NOT NULL,
       sources_json TEXT NOT NULL,
-      kind TEXT NOT NULL DEFAULT 'ask'
+      kind TEXT NOT NULL DEFAULT 'ask',
+      -- Quante fonti il MODELLO ha citato (≠ pagine fornite, che stanno in
+      -- sources_json). 0 su una risposta 'ok' = «non l'ho trovato in KB»: è la
+      -- regola con cui la dashboard segnala i buchi della Knowledge Base.
+      -- NULL sulle righe scritte prima di questa colonna e sulle 'rank'.
+      cited_sources INTEGER,
+      -- 1 = la risposta ha raggiunto max_tokens ed e' stata tagliata. Serve a
+      -- capire se il tetto di output e' troppo basso: se capita spesso, va alzato.
+      -- NULL sulle righe scritte prima di questa colonna, sulle 'rank' e sugli errori.
+      truncated INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS settings (
@@ -200,6 +347,30 @@ export function initDb(): void {
       updated_at TEXT NOT NULL
     );
 
+    -- Feedback degli agenti sulle risposte. Tabella a parte e non colonne su
+    -- requests: un feedback può arrivare molto dopo la richiesta, può mancare
+    -- del tutto, e una segnalazione generica ("la sidebar non si apre") non ha
+    -- nessuna richiesta a cui agganciarsi — da qui request_id nullable.
+    CREATE TABLE IF NOT EXISTS feedback (
+      id TEXT PRIMARY KEY,
+      created_at TEXT NOT NULL,
+      request_id TEXT,
+      user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      agent_id TEXT NOT NULL,
+      rating TEXT NOT NULL CHECK (rating IN ('up', 'down')),
+      -- Già passato da scrubPii nel browser dell'agente, poi troncato qui.
+      comment TEXT,
+      query_preview TEXT,
+      model TEXT,
+      mode TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at);
+    CREATE INDEX IF NOT EXISTS idx_feedback_request ON feedback(request_id);
+    -- NIENTE indici su colonne aggiunte da una migrazione, qui. Questo blocco gira
+    -- PRIMA di migrate(): su un database che esiste già la CREATE TABLE non fa
+    -- nulla, la colonna non c'è ancora, e l'indice fallirebbe al boot. L'indice su
+    -- cited_sources sta nel blocco della migrazione 4, dopo la sua ALTER.
     CREATE INDEX IF NOT EXISTS idx_requests_created_at ON requests(created_at);
     CREATE INDEX IF NOT EXISTS idx_requests_agent ON requests(agent_id);
     CREATE INDEX IF NOT EXISTS idx_requests_user ON requests(user_id);
@@ -271,6 +442,51 @@ function migrate(): void {
       db.pragma('user_version = 3');
     })();
   }
+  if (version < 4) {
+    db.transaction(() => {
+      const columns = (db.pragma('table_info(requests)') as Array<{ name: string }>).map(
+        (c) => c.name,
+      );
+      // Nullable e senza backfill: per le richieste già archiviate non sappiamo
+      // quante fonti fossero citate, e NULL dice esattamente questo. La dashboard
+      // segnala `= 0`, non `IS NULL`, quindi lo storico non produce falsi allarmi.
+      if (!columns.includes('cited_sources')) {
+        db.exec('ALTER TABLE requests ADD COLUMN cited_sources INTEGER');
+      }
+      // L'indice va QUI e non nel blocco di initDb: lì girerebbe prima di questa
+      // ALTER e su un DB esistente il boot fallirebbe con "no such column".
+      db.exec('CREATE INDEX IF NOT EXISTS idx_requests_cited_sources ON requests(cited_sources)');
+      db.pragma('user_version = 4');
+    })();
+  }
+  if (version < 5) {
+    db.transaction(() => {
+      const columns = (db.pragma('table_info(requests)') as Array<{ name: string }>).map(
+        (c) => c.name,
+      );
+      // La risposta ha raggiunto il tetto di output ed è stata tagliata. Come
+      // cited_sources: nullable e senza backfill, perché delle righe archiviate
+      // non lo sappiamo. Nessun indice — non si filtra su questa colonna, si
+      // conta, e un indice su un booleano quasi sempre 0 non aiuterebbe.
+      if (!columns.includes('truncated')) {
+        db.exec('ALTER TABLE requests ADD COLUMN truncated INTEGER');
+      }
+      db.pragma('user_version = 5');
+    })();
+  }
+
+  // Rete di sicurezza: se qualcuno aggiunge un gradino alla scala e dimentica di
+  // aggiornare SCHEMA_VERSION (o viceversa), il pacchetto dichiarerebbe uno
+  // schema diverso da quello che il database ha davvero, e la guardia
+  // anti-downgrade lavorerebbe su un numero sbagliato. Meglio accorgersene qui,
+  // dove il test di migrazione lo vede subito.
+  const reached = db.pragma('user_version', { simple: true }) as number;
+  if (reached !== SCHEMA_VERSION) {
+    throw new Error(
+      `dopo le migrazioni il database è allo schema ${reached} ma SCHEMA_VERSION dice ` +
+        `${SCHEMA_VERSION}: aggiornare src/schema-version.ts insieme alla scala in migrate().`,
+    );
+  }
 }
 
 /** Strips credential material before a user row leaves the server. */
@@ -291,11 +507,14 @@ export function getSettings(): SettingsRecord {
       values.max_concurrent_requests ?? DEFAULT_SETTINGS.max_concurrent_requests,
     max_concurrent_per_agent:
       values.max_concurrent_per_agent ?? DEFAULT_SETTINGS.max_concurrent_per_agent,
-    max_daily_estimated_cost_usd:
-      values.max_daily_estimated_cost_usd ?? DEFAULT_SETTINGS.max_daily_estimated_cost_usd,
+    max_monthly_estimated_cost_eur:
+      values.max_monthly_estimated_cost_eur ?? DEFAULT_SETTINGS.max_monthly_estimated_cost_eur,
+    max_requests_per_hour_per_agent:
+      values.max_requests_per_hour_per_agent ?? DEFAULT_SETTINGS.max_requests_per_hour_per_agent,
     max_request_pages: values.max_request_pages ?? DEFAULT_SETTINGS.max_request_pages,
     max_request_links: values.max_request_links ?? DEFAULT_SETTINGS.max_request_links,
     max_page_text_chars: values.max_page_text_chars ?? DEFAULT_SETTINGS.max_page_text_chars,
+    max_history_turns: values.max_history_turns ?? DEFAULT_SETTINGS.max_history_turns,
     retention_days: values.retention_days ?? DEFAULT_SETTINGS.retention_days,
   };
 }
@@ -511,8 +730,8 @@ export function insertRequestHistory(input: RequestHistoryInput): void {
       provider, model, pages_count, links_count, estimated_input_tokens,
       estimated_output_tokens, estimated_cost_usd, actual_input_tokens,
       actual_output_tokens, duration_ms, status, error,
-      selected_links_json, sources_json, kind
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      selected_links_json, sources_json, kind, cited_sources, truncated
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     input.id,
     now(),
@@ -536,7 +755,60 @@ export function insertRequestHistory(input: RequestHistoryInput): void {
     json(input.selectedLinks),
     json(input.sources),
     input.kind ?? 'ask',
+    input.citedSources ?? null,
+    input.truncated ?? null,
   );
+}
+
+export function insertFeedback(input: FeedbackInput): void {
+  db.prepare(
+    `INSERT INTO feedback (
+      id, created_at, request_id, user_id, agent_id, rating, comment,
+      query_preview, model, mode
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    input.id,
+    now(),
+    input.requestId ?? null,
+    input.userId,
+    input.agentId,
+    input.rating,
+    input.comment ?? null,
+    input.queryPreview ?? null,
+    input.model ?? null,
+    input.mode ?? null,
+  );
+}
+
+export function listFeedback(filters: { limit?: number } = {}): FeedbackRecord[] {
+  const limit = Math.min(Math.max(filters.limit ?? 50, 1), 500);
+  return db
+    .prepare('SELECT * FROM feedback ORDER BY created_at DESC LIMIT ?')
+    .all(limit) as FeedbackRecord[];
+}
+
+/**
+ * Richieste che il SISTEMA segnala da sé, in due categorie:
+ *  - 'guasto'  → status 'error' o 'rejected': un fallimento tecnico;
+ *  - 'nofonti' → risposta riuscita in cui il modello non ha citato alcun articolo,
+ *                cioè il modo in cui dice «non l'ho trovato nella KB».
+ *
+ * `cited_sources = 0` e non `IS NULL`: NULL sono le righe archiviate prima che la
+ * colonna esistesse, e non devono comparire come segnalazioni.
+ */
+export function listFlaggedRequests(
+  filters: { limit?: number } = {},
+): Array<RequestHistoryRecord & { flag: 'guasto' | 'nofonti' }> {
+  const limit = Math.min(Math.max(filters.limit ?? 50, 1), 500);
+  return db
+    .prepare(
+      `SELECT *, CASE WHEN status IN ('error','rejected') THEN 'guasto' ELSE 'nofonti' END AS flag
+       FROM requests
+       WHERE kind = 'ask'
+         AND (status IN ('error','rejected') OR (status = 'ok' AND cited_sources = 0))
+       ORDER BY created_at DESC LIMIT ?`,
+    )
+    .all(limit) as Array<RequestHistoryRecord & { flag: 'guasto' | 'nofonti' }>;
 }
 
 export function listRequests(filters: {
@@ -611,6 +883,58 @@ export function analyticsSummary() {
     )
     .all();
   return { totals, byModel, byAgent };
+}
+
+/** Inizio della giornata corrente in UTC, in ISO — lo stesso formato di created_at. */
+export function startOfTodayIso(now = new Date()): string {
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  ).toISOString();
+}
+
+/** Inizio del mese corrente in UTC, in ISO. */
+export function startOfMonthIso(now = new Date()): string {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+}
+
+/** Somma dei costi stimati (USD) delle richieste create da `sinceIso` in poi. */
+function estimatedCostSince(sinceIso: string): number {
+  const row = db
+    .prepare(
+      `SELECT COALESCE(SUM(estimated_cost_usd), 0) as cost
+       FROM requests WHERE created_at >= ?`,
+    )
+    .get(sinceIso) as { cost: number } | undefined;
+  return row?.cost ?? 0;
+}
+
+/**
+ * Costo stimato (USD) di oggi. Informativo: lo mostra la dashboard accanto al
+ * mese, ma il tetto che blocca è quello mensile (vedi sotto).
+ */
+export function estimatedCostToday(now = new Date()): number {
+  return estimatedCostSince(startOfTodayIso(now));
+}
+
+/**
+ * Costo stimato (USD) dall'inizio del mese corrente (UTC).
+ *
+ * È il numero che il guardrail applica E che la dashboard mostra. Prima erano due
+ * valori diversi e nessuno dei due era un periodo definito: l'enforcement
+ * guardava un contatore in memoria azzerato a ogni riavvio, la dashboard il
+ * totale di sempre da SQLite. Con un provider a pagamento questo blocca tutti
+ * per sempre oppure non scatta mai, e la dashboard non dice quale dei due.
+ *
+ * Fonte unica: la tabella `requests`, che sopravvive ai riavvii. Le richieste
+ * respinte hanno costo 0, quindi un 429 non rende più probabile il successivo.
+ *
+ * ATTENZIONE alla retention: `pruneOldRequests` cancella lo storico oltre
+ * `retention_days` (default 90). Finché la retention resta ben sopra i 31 giorni
+ * il mese in corso è sempre integro; abbassarla sotto il mese falserebbe il
+ * tetto verso il basso, cioè renderebbe il guardrail più permissivo.
+ */
+export function estimatedCostMonthToDate(now = new Date()): number {
+  return estimatedCostSince(startOfMonthIso(now));
 }
 
 export function pruneOldRequests(retentionDays = getSettings().retention_days): number {

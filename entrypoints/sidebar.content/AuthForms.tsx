@@ -32,7 +32,7 @@ export function LoginForm({ onLoggedIn }: { onLoggedIn: (user: AuthUser) => void
       }}
     >
       <div className="rs-auth-note">
-        Accedi con le credenziali fornite dal tuo amministratore per usare RunwaySurfer.
+        Accedi con le credenziali fornite dal tuo amministratore per usare Runway Surfer.
       </div>
       <label className="rs-label" htmlFor="rs-username">
         Username

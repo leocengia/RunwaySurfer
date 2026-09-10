@@ -4,21 +4,34 @@
 export type {
   KbPage,
   KbLink,
+  AnswerLanguage,
   AskRequest,
+  AskTurn,
+  ScheduleChangeRequest,
   AiPlan,
   AskEvent,
   RankRequest,
   RankResponse,
 } from '../shared/contracts';
 
+// Vocabolario delle sezioni di output. La sorgente è shared/sections.json, lo
+// stesso file che il server legge da disco (server/src/shared-assets.ts): prima
+// gli stessi titoli erano scritti in quattro posti e OUTCOME_SECTIONS era
+// dichiarato senza essere usato da nessuno.
+import sections from '../shared/sections.json';
+
+/** Sezioni di una risposta libera, escluse le fonti. */
+export const STANDARD_SECTIONS: readonly string[] = sections.standard;
+
 /**
- * The operational outcome is streamed as markdown with these four sections.
- * Kept as a documented convention (rendered by the sidebar) rather than a rigid
- * schema, so the streaming UX stays simple.
+ * Titolo della sezione delle fonti: sempre ultima e mai opzionale, perché è
+ * l'aggancio con cui lib/sources.ts rende i link come chip cliccabili.
  */
-export const OUTCOME_SECTIONS = [
-  'Procedura',
-  'Eccezioni',
-  'Risposta suggerita al cliente',
-  'Fonti',
-] as const;
+export const SOURCES_SECTION: string = sections.sources;
+
+/** Campi selezionabili nella risposta a una richiesta Schedule Change. */
+export const SCHEDULE_CHANGE_FIELDS: readonly { id: string; label: string }[] =
+  sections.scheduleChangeFields;
+
+/** Le sezioni di una risposta libera, fonti incluse, nell'ordine. */
+export const OUTCOME_SECTIONS: readonly string[] = [...sections.standard, sections.sources];

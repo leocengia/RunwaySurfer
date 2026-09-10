@@ -14,6 +14,7 @@ reload completo (il content script si rimonta → flash, contesto perso). Per un
 percorso risulta **scattoso e "confusionario"** per via di questi continui avanti-e-indietro.
 
 Decisione presa con l'utente: trasformare il tour in una **camminata in-page**:
+
 - La sidebar **resta sulla pagina di partenza** per tutta la camminata: nessuna navigazione
   per-link, nessun "ritorno". Il content script non si ricarica → niente flash, lo stato
   React sopravvive naturalmente.
@@ -35,7 +36,7 @@ Sostituire la macchina `while(true){ switch(phase) }` con un'unica funzione asyn
 `drivingRef` nel `finally`). Flusso:
 
 1. **Setup una volta**: `ensureFxStyles()`, `installFxSafetyNet()`, `setTour/setQuery/
-   setPagesUsed/setStatus('reading')`. `total = targets.length`, `units = total + 1`.
+setPagesUsed/setStatus('reading')`. `total = targets.length`, `units = total + 1`.
 2. **Prefetch subito** (prima del loop, così si sovrappone alle animazioni):
    `const followedPromise = shallowFollow(t.targets, t.query, t.targets.length);`
    (i target hanno già `score` da `pickRelevantLinks`, quindi `shallowFollow` li usa
@@ -52,16 +53,16 @@ Sostituire la macchina `while(true){ switch(phase) }` con un'unica funzione asyn
        cursore — **senza navigare** (differenza chiave dall'attuale fallback che faceva
        `location.href`). La pagina viene comunque raccolta dal prefetch.
    - **Beam di lettura sulla pagina corrente**: `setBannerProgress((i+1)/units,false,scanMs)`
-     + `runReadingScan({keywords: target.matchedKeywords, durationMs: scanMs, shouldAbort})`.
-     Nessuna modifica a `runReadingScan`: il beam scorre la pagina di partenza; le keyword
-     dei target semplicemente non vengono evidenziate se assenti (no-op, visivamente uguale).
-     Per legare meglio la "lettura" al link, opzionalmente tenere lo `spotlight` sul link
-     durante lo scan (rifinitura minore, da valutare in test).
+     - `runReadingScan({keywords: target.matchedKeywords, durationMs: scanMs, shouldAbort})`.
+       Nessuna modifica a `runReadingScan`: il beam scorre la pagina di partenza; le keyword
+       dei target semplicemente non vengono evidenziate se assenti (no-op, visivamente uguale).
+       Per legare meglio la "lettura" al link, opzionalmente tenere lo `spotlight` sul link
+       durante lo scan (rifinitura minore, da valutare in test).
    - abort-check dopo lo scan.
 4. **Await prefetch** prima dell'analisi: `const followed = await followedPromise;`
    `const pages = [...t.pages, ...followed]; setPagesUsed(pages);` (in pratica già risolto).
 5. **Fase asking** (come oggi, senza persistenza): banner "analisi", `setBannerProgress(
-   total/units, true)`, `result = await runAsk(query, pages, targets)`;
+total/units, true)`, `result = await runAsk(query, pages, targets)`;
    **guard post-ask** `if (tourAbortRef.current) { setTour(null); teardownFx(); return; }`;
    `bannerComplete`, `sleep(500)`, `unmountBanner`, `teardownFx`.
 6. **Unica navigazione finale**: `targetUrl = findTourTargetUrl(result.outcome, pages)`; se
@@ -73,6 +74,7 @@ Sostituire la macchina `while(true){ switch(phase) }` con un'unica funzione asyn
 `saveTourResult`, `DEFAULT_SCAN_MS`, `normalizeUrl`, `type TourState`.
 
 ## Semplificazione `lib/tour.ts`
+
 - **Rimuovere** i `TourPhase` `'navigating'` e `'returning'` (nuova union:
   `'idle' | 'scrolling' | 'asking' | 'done' | 'error'`); eliminare `saveTour` e `loadTour`
   (nessun chiamante dopo il rewrite); aggiornare i commenti di intestazione/fase (descrivono
@@ -87,6 +89,7 @@ Sostituire la macchina `while(true){ switch(phase) }` con un'unica funzione asyn
   `clearTourResult()` e `return null`.
 
 ## Cambi in `App.tsx`
+
 - `run()` ramo visual: **rimuovere `await saveTour(t)`**; il resto invariato (i reset di
   `drivingRef`/`tourAbortRef`, `clearTour`, `clearTourResult` restano — preservano il fix Bug 0).
 - **Rimuovere la `useEffect` di resume** (`loadTour` + `driveTour`): la camminata non attraversa
@@ -98,6 +101,7 @@ Sostituire la macchina `while(true){ switch(phase) }` con un'unica funzione asyn
 - Import da `../../lib/tour`: rimuovere `loadTour`, `saveTour`.
 
 ## Test
+
 - Invariati: `tests/tour-target.test.ts`, `tests/crawl.test.ts`, `tests/extract.test.ts`,
   `tests/client.test.ts`.
 - **Nuovo `tests/tour-walk.test.ts`**: stub di `fetch` (pattern già in `client.test.ts`),
@@ -107,6 +111,7 @@ Sostituire la macchina `while(true){ switch(phase) }` con un'unica funzione asyn
   viene saltato; (d) **`location.href` invariato** (invariante "legge senza navigare").
 
 ## File da modificare
+
 - `lib/tour.ts` — sfoltire phase/persistenza, check `ABORT_KEY` in `loadTourResult`.
 - `entrypoints/sidebar.content/useTourDriver.ts` — rewrite del flusso (loop in-page).
 - `entrypoints/sidebar.content/App.tsx` — togliere `saveTour`, sostituire la effect di resume,
@@ -117,6 +122,7 @@ Sostituire la macchina `while(true){ switch(phase) }` con un'unica funzione asyn
 - Nessun cambio a `lib/fx/*`, `lib/highlight.ts`, `lib/tour-target.ts`.
 
 ## Verifica
+
 1. `npm run compile` (verifica che i `TourPhase`/import rimossi non lascino riferimenti
    pendenti), `npm run lint`, `npm run test` (suite verdi + nuovo test), `npm run build`;
    Prettier solo sui file toccati (il checkout Windows è CRLF: usare `--end-of-line auto`).

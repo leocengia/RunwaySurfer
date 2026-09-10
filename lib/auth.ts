@@ -3,8 +3,42 @@
 // /ask request. The token is an opaque session id issued by POST /auth/login
 // (client: 'extension'); the backend can revoke it at any time.
 import { browser } from 'wxt/browser';
+import { withTimeout } from './abort';
+import { BACKEND_UNREACHABLE } from './client';
 
 const TOKEN_KEY = 'rs:authToken';
+
+/**
+ * Le chiamate di autenticazione sono corte per natura: se dopo 10 secondi non c'è
+ * risposta il backend è appeso, e far aspettare l'agente davanti a "Verifica
+ * sessione..." senza via d'uscita è peggio che dirgli che non si raggiunge.
+ */
+const AUTH_TIMEOUT_MS = 10_000;
+
+/**
+ * Esito della verifica della sessione. Prima era `AuthUser | null`, e `null`
+ * significava sia "sessione scaduta" sia "backend spento": l'agente vedeva il
+ * form di login, digitava le credenziali e riceveva "Failed to fetch".
+ */
+export type SessionCheck =
+  { state: 'in'; user: AuthUser } | { state: 'loggedOut' } | { state: 'offline'; message: string };
+
+/** fetch con scadenza che traduce i guasti di rete in un messaggio leggibile. */
+async function authFetch(url: string, init: RequestInit = {}): Promise<Response> {
+  const deadline = withTimeout(AUTH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: deadline.signal });
+  } catch (e) {
+    throw new Error(
+      deadline.expired()
+        ? 'Il backend non ha risposto in tempo. Riprova; se continua, segnalalo.'
+        : BACKEND_UNREACHABLE,
+      { cause: e },
+    );
+  } finally {
+    deadline.dispose();
+  }
+}
 
 export interface AuthUser {
   id: number;
@@ -59,7 +93,7 @@ export async function login(
   username: string,
   password: string,
 ): Promise<AuthUser> {
-  const res = await fetch(`${base(proxyUrl)}/auth/login`, {
+  const res = await authFetch(`${base(proxyUrl)}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password, client: 'extension' }),
@@ -75,7 +109,7 @@ export async function logout(proxyUrl: string): Promise<void> {
   const token = await getToken();
   if (token) {
     try {
-      await fetch(`${base(proxyUrl)}/auth/logout`, {
+      await authFetch(`${base(proxyUrl)}/auth/logout`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -86,27 +120,37 @@ export async function logout(proxyUrl: string): Promise<void> {
   await clearToken();
 }
 
-/** Validates the stored token; clears it and returns null on 401. */
-export async function fetchMe(proxyUrl: string): Promise<AuthUser | null> {
+/**
+ * Verifica il token salvato. Il 401 lo cancella (sessione morta sul server), un
+ * guasto di rete lo TIENE: al ritorno della rete l'agente non deve rifare login.
+ */
+export async function fetchMe(proxyUrl: string): Promise<SessionCheck> {
   const token = await getToken();
-  if (!token) return null;
+  if (!token) return { state: 'loggedOut' };
   let res: Response;
   try {
-    res = await fetch(`${base(proxyUrl)}/auth/me`, {
+    res = await authFetch(`${base(proxyUrl)}/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
     });
   } catch (e) {
-    // backend unreachable: keep the token, report logged-out for now
-    console.warn('[rs] backend non raggiungibile durante la verifica della sessione:', e);
-    return null;
+    return { state: 'offline', message: e instanceof Error ? e.message : BACKEND_UNREACHABLE };
   }
   if (res.status === 401) {
     await clearToken();
-    return null;
+    return { state: 'loggedOut' };
   }
-  if (!res.ok) return null;
-  const data = (await res.json()) as { user: AuthUser };
-  return data.user;
+  // 5xx o body illeggibile: il backend c'è ma non sta bene. Non è una sessione
+  // scaduta, quindi nemmeno qui si manda l'agente al form di login.
+  if (!res.ok) {
+    return { state: 'offline', message: `Il backend ha risposto ${res.status}. Riprova.` };
+  }
+  try {
+    const data = (await res.json()) as { user: AuthUser };
+    if (!data?.user) return { state: 'offline', message: 'Risposta del backend non valida.' };
+    return { state: 'in', user: data.user };
+  } catch {
+    return { state: 'offline', message: 'Risposta del backend non valida.' };
+  }
 }
 
 export async function changePassword(
@@ -115,7 +159,7 @@ export async function changePassword(
   newPassword: string,
 ): Promise<AuthUser> {
   const token = await getToken();
-  const res = await fetch(`${base(proxyUrl)}/auth/change-password`, {
+  const res = await authFetch(`${base(proxyUrl)}/auth/change-password`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

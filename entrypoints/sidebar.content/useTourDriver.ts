@@ -14,8 +14,8 @@ import { extractCurrentPage } from '../../lib/extract';
 import type { AiPlan, KbLink, KbPage } from '../../lib/outcome';
 import { DEFAULT_SCAN_MS, saveTourResult, type TourState } from '../../lib/tour';
 import { linkIdentity } from '../../lib/site-profile';
-import { waitForSpaRender } from '../../lib/spa-nav';
-import { findLinkElement } from '../../lib/highlight';
+import { waitForSpaRender, type SpaRenderProgress } from '../../lib/spa-nav';
+import { clickInSameTab, findLinkElement } from '../../lib/highlight';
 import { findTourTargetUrl } from '../../lib/tour-target';
 import {
   abortableSleep,
@@ -27,6 +27,7 @@ import {
   mountBanner,
   narrate,
   narrationOpen,
+  removeSpotlight,
   runReadingScan,
   setBannerProgress,
   sleep,
@@ -36,7 +37,15 @@ import {
   unmountBanner,
 } from '../../lib/fx';
 
-export type AskResult = { outcome: string; plan: AiPlan | null };
+export type AskResult = {
+  outcome: string;
+  plan: AiPlan | null;
+  /**
+   * Lo stream è finito male (errore di rete, timeout, sessione scaduta). Il tour
+   * lo legge per fermarsi invece di proseguire verso una fonte che non esiste.
+   */
+  failed: boolean;
+};
 
 export interface TourDriverDeps {
   /** Avvia lo stream della risposta per le pagine raccolte (definito in App). */
@@ -50,6 +59,8 @@ export interface TourDriverDeps {
   setQuery: (query: string) => void;
   setPagesUsed: (pages: KbPage[]) => void;
   setStatus: (status: 'reading' | 'streaming') => void;
+  /** Dettaglio del passo corrente per la timeline in sidebar. */
+  setTourDetail: (detail: string) => void;
 }
 
 const idOf = (url: string): string | null => {
@@ -59,6 +70,40 @@ const idOf = (url: string): string | null => {
     return null;
   }
 };
+
+/** "3.4k" invece di "3421": la cifra esatta non aggiunge nulla, la scala sì. */
+function humanChars(chars: number): string {
+  return chars >= 1000 ? `${(chars / 1000).toFixed(1)}k` : String(chars);
+}
+
+/** Riga leggibile per un poll di attesa SPA: dove siamo, non solo "attendo". */
+function renderWaitDetail(p: SpaRenderProgress, what: string): string {
+  const seconds = (p.elapsedMs / 1000).toFixed(1);
+  if (!p.arrived) return `${what}: attendo la route · ${seconds}s`;
+  if (p.stable > 0) return `${what}: stabilizzo · ${humanChars(p.chars)} caratteri · ${seconds}s`;
+  return `${what}: contenuto in arrivo · ${humanChars(p.chars)} caratteri · ${seconds}s`;
+}
+
+/** Poll consecutivi identici che waitForSpaRender richiede per dire "stabile". */
+const STABLE_POLLS = 4;
+
+/**
+ * Frazione di barra per un'attesa SPA, confinata alla fetta `span` del passo che
+ * comincia a `base` (in unità di passo). Non è una stima del tempo residuo — non
+ * ne esiste una onesta — ma una funzione monotona dei fatti osservati: prima
+ * l'arrivo della route, poi la stabilizzazione del contenuto. Non torna mai
+ * indietro e non raggiunge il fondo della fetta prima che l'attesa finisca.
+ */
+function waitFraction(base: number, span: number, units: number, p: SpaRenderProgress): number {
+  if (!p.arrived) {
+    // Prima dell'arrivo si può solo misurare il tempo: sale in fretta all'inizio
+    // e poi si appiattisce, così un timeout lungo non sembra un blocco.
+    const elapsed = Math.min(1, p.elapsedMs / Math.max(1, p.timeoutMs / 6));
+    return (base + span * 0.5 * elapsed) / units;
+  }
+  const stability = Math.min(1, p.stable / STABLE_POLLS);
+  return (base + span * (0.5 + 0.5 * stability)) / units;
+}
 
 export function useTourDriver(deps: TourDriverDeps): (initial: TourState) => Promise<void> {
   const {
@@ -71,6 +116,7 @@ export function useTourDriver(deps: TourDriverDeps): (initial: TourState) => Pro
     setQuery,
     setPagesUsed,
     setStatus,
+    setTourDetail,
   } = deps;
 
   return useCallback(
@@ -111,21 +157,29 @@ export function useTourDriver(deps: TourDriverDeps): (initial: TourState) => Pro
           const target = t.targets[i];
           const step = Math.min(i + 1, total);
           setTour({ ...t, index: i, phase: 'scrolling' });
+          setTourDetail('cerco il link in pagina...');
           mountBanner({ step, total, rightOffsetPx: rightOffset() });
           setBannerProgress(i / units);
+          // Una route SPA precedente può aver ridisegnato la pagina lasciando
+          // attaccato un velo la cui closure di cleanup non è più raggiungibile.
+          removeSpotlight();
 
           const el = findLinkElement(target.url);
           const rect = el?.getBoundingClientRect();
-          const visible = el && !((rect?.width ?? 0) === 0 && (rect?.height ?? 0) === 0);
+          // `||` e non `&&`: un anchor 0×20 non è cliccabile né inquadrabile più
+          // di uno 0×0, e dava coordinate degeneri alle animazioni.
+          const visible = el && (rect?.width ?? 0) > 0 && (rect?.height ?? 0) > 0;
           if (!el || !visible) {
             // Il link collegato non è (più) in pagina: non possiamo navigarci.
             void narrate(`Non trovo il link «${target.text}» in pagina, lo salto…`);
+            setTourDetail('link non trovato in pagina');
             continue;
           }
 
           // Avvicinamento cinematografico all'hub, poi click VERO che innesca la
           // route SPA (cursorClick è solo l'animazione del ripple).
           void narrate(narrationOpen(target, step, total));
+          setTourDetail('avvicino il cursore al link...');
           const offSpotlight = spotlightOn(el);
           setBannerProgress((i + 0.4) / units, false, 700);
           await Promise.all([
@@ -137,17 +191,27 @@ export function useTourDriver(deps: TourDriverDeps): (initial: TourState) => Pro
           if (aborted(offSpotlight)) return;
           await cursorClick(el);
           offSpotlight();
-          el.click();
+          clickInSameTab(el);
 
           // Attendi che la SPA renderizzi l'articolo collegato (route + stabilità).
+          // L'attesa è la parte lunga e imprevedibile del passo (~1s tipici, fino
+          // a 9s): onProgress la rende determinata invece di uno shimmer che non
+          // dice se stia succedendo qualcosa.
           void narrate(`Apro e leggo «${target.text}»…`);
-          setBannerProgress((i + 0.7) / units, true);
           const wantId = idOf(target.url);
-          const rendered = wantId ? await waitForSpaRender(wantId, shouldAbort) : false;
+          const rendered = wantId
+            ? await waitForSpaRender(wantId, shouldAbort, {
+                onProgress: (p) => {
+                  setTourDetail(renderWaitDetail(p, 'apro l’articolo'));
+                  setBannerProgress(waitFraction(i + 0.4, 0.3, units, p), false, 150);
+                },
+              })
+            : false;
           if (aborted()) return;
 
           if (rendered) {
-            setBannerProgress((i + 1) / units, false, scanMs);
+            setBannerProgress((i + 0.85) / units, false, scanMs);
+            setTourDetail('leggo il contenuto...');
             await runReadingScan({
               keywords: target.matchedKeywords ?? [],
               durationMs: scanMs,
@@ -159,27 +223,58 @@ export function useTourDriver(deps: TourDriverDeps): (initial: TourState) => Pro
             setPagesUsed([...pages]);
           } else {
             void narrate('Render non riuscito, salto questo articolo…');
+            setTourDetail('render non riuscito');
+          }
+
+          // NON tornare indietro se non si è andati avanti. Se il render non è
+          // arrivato la pagina non ha cambiato route (caso reale: il click ha
+          // aperto una scheda nuova), e un `history.back()` qui porterebbe
+          // l'agente sulla pagina PRECEDENTE a quella di partenza — cioè fuori
+          // dall'hub, che è esattamente il modo in cui il tour si perdeva.
+          if (!rendered) {
+            if (idOf(location.href) !== startIdentity) {
+              // Route cambiata comunque, ma non in quella attesa: rientrare è
+              // giusto, la condizione sopra non si applica.
+              history.back();
+              await waitForSpaRender(startIdentity ?? '', shouldAbort);
+            }
+            continue;
           }
 
           // Torna sempre all'hub (client-side), anche dopo l'ultimo target: così
           // l'analisi e la navigazione finale avvengono dove i link esistono.
           void narrate('Torno alla pagina di partenza…');
           history.back();
-          const back = startIdentity ? await waitForSpaRender(startIdentity, shouldAbort) : false;
+          const back = startIdentity
+            ? await waitForSpaRender(startIdentity, shouldAbort, {
+                onProgress: (p) => {
+                  setTourDetail(renderWaitDetail(p, 'torno indietro'));
+                  setBannerProgress(waitFraction(i + 0.85, 0.15, units, p), false, 150);
+                },
+              })
+            : false;
           if (aborted()) return;
           if (!back) {
             // Non siamo tornati all'hub in modo affidabile: interrompi la
             // camminata e passa comunque all'analisi con quanto raccolto.
             void narrate('Non torno alla pagina di partenza, procedo con l’analisi…');
+            setTourDetail('ritorno non riuscito, procedo con l’analisi');
             break;
           }
+          setBannerProgress((i + 1) / units);
         }
 
         // Analisi sull'hub, con le pagine effettivamente lette.
         setPagesUsed([...pages]);
         setTour({ ...t, index: total, phase: 'asking', pages });
         mountBanner({ step: total, total, rightOffsetPx: rightOffset() });
+        // Qui l'attesa dipende dal modello: nessuna stima onesta è possibile,
+        // quindi la barra resta indeterminata. Il segnale concreto lo dà lo
+        // stream (runAsk aggiorna il dettaglio coi caratteri ricevuti).
         setBannerProgress(total / units, true);
+        setTourDetail(
+          pages.length > 1 ? `analizzo ${pages.length} pagine lette...` : 'analizzo la pagina...',
+        );
         void narrate(
           pages.length > 1
             ? `Analizzo le ${pages.length} pagine lette e scrivo la risposta…`
@@ -190,9 +285,25 @@ export function useTourDriver(deps: TourDriverDeps): (initial: TourState) => Pro
         // guard il driver navigherebbe comunque dopo l'abort.
         if (aborted()) {
           setTour(null);
+          setTourDetail('');
+          return;
+        }
+        // Stream finito male (rete caduta, timeout, sessione scaduta a metà
+        // tour): la risposta non esiste. Navigare comunque verso la "fonte
+        // scelta" porterebbe l'agente su un'altra pagina — dove trova il form di
+        // login e nessuna spiegazione, dopo minuti di tour. Si chiude qui, dove
+        // il messaggio d'errore è visibile nella sidebar.
+        if (result.failed) {
+          setTour(null);
+          setTourDetail('');
+          bannerComplete('Tour interrotto: vedi il messaggio nella sidebar.');
+          await sleep(900);
+          unmountBanner();
+          teardownFx();
           return;
         }
         setTour(null);
+        setTourDetail('');
         bannerComplete('Fatto! Risposta pronta nella sidebar.');
         await sleep(500);
         unmountBanner();
@@ -205,7 +316,7 @@ export function useTourDriver(deps: TourDriverDeps): (initial: TourState) => Pro
         if (targetUrl && idOf(targetUrl) !== startIdentity) {
           const el = findLinkElement(targetUrl);
           if (el) {
-            el.click();
+            clickInSameTab(el);
           } else {
             await saveTourResult({
               query: t.query,

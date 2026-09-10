@@ -31,11 +31,57 @@ export interface KbLink {
   matchedKeywords?: string[];
 }
 
+/**
+ * Un turno già concluso della conversazione, rimandato al modello per i
+ * follow-up. Lo storico vive nel CLIENT: il backend resta stateless, e la tabella
+ * di audit è volutamente privacy-minimised (solo hash della query, nessuna
+ * risposta), quindi non potrebbe farne da sorgente.
+ */
+export interface AskTurn {
+  query: string;
+  answer: string;
+}
+
+/**
+ * Richiesta operativa strutturata al posto del prompt libero: l'agente compila
+ * campi invece di descrivere il caso in prosa. `sections` sono le sezioni che
+ * vuole nella risposta (le fonti vengono sempre aggiunte a parte).
+ */
+export interface ScheduleChangeRequest {
+  kind: 'schedule-change';
+  requestType: 'Schedule Change' | 'Name Correction';
+  /** Codice vettore come lo scrive l'agente (LH, W8, ...), normalizzato maiuscolo. */
+  airline: string;
+  /** Coppia di città in un unico campo: "MIL-PAR" oppure "Milano-Parigi". */
+  cityPair: string;
+  flightType: 'Online' | 'Codeshare';
+  /** Data di partenza originale, ISO `YYYY-MM-DD`. */
+  originalDate: string;
+  /** Sezioni richieste nella risposta, dall'elenco in shared/sections.json. */
+  sections: string[];
+}
+
+/**
+ * Lingua in cui l'AI scrive la risposta. Insieme CHIUSO di due valori, e non una
+ * stringa libera, perché finisce dentro le istruzioni di sistema: il server la
+ * valida contro questa stessa lista (vedi la sanificazione in routes/ask.ts).
+ *
+ * Nel sondaggio agenti 3 su 9 cercano in inglese, e il prompt diceva «Rispondi in
+ * italiano» hardcoded, senza alcun override.
+ */
+export type AnswerLanguage = 'it' | 'en';
+
 /** Payload the sidebar/background sends to the backend `POST /ask`. */
 export interface AskRequest {
   query: string;
   pages: KbPage[];
   links: KbLink[];
+  /** Turni precedenti della conversazione, dal più vecchio al più recente. */
+  history?: AskTurn[];
+  /** Presente quando l'agente ha compilato il form invece del prompt libero. */
+  form?: ScheduleChangeRequest;
+  /** Lingua della risposta scelta dall'agente. Assente = italiano, com'era prima. */
+  language?: AnswerLanguage;
 }
 
 /**
@@ -67,6 +113,13 @@ export interface RankResponse {
  * cost model and the network egress explicit.
  */
 export interface AiPlan {
+  /**
+   * Id della richiesta lato server. Serve a legare un feedback dell'agente alla
+   * riga di audit corrispondente: senza, «questa risposta è sbagliata» non è
+   * ricollegabile a nulla (la tabella `requests` è privacy-minimised e non
+   * conserva il testo della risposta).
+   */
+  requestId: string;
   /** Model chosen by the difficulty router. */
   model: string;
   /** Why the router picked this model (heuristic explanation). */
@@ -78,6 +131,19 @@ export interface AiPlan {
   egress: string;
   /** Whether this response came from the mock or a real provider. */
   provider: 'mock' | 'anthropic';
+  /**
+   * Turni di storico effettivamente rimandati al modello, DOPO il taglio a
+   * `max_history_turns`. È il numero vero, non quello che il client ha inviato:
+   * serve alla sidebar per dire quali turni sono ancora contesto e quali no.
+   */
+  historyTurnsUsed?: number;
+  /**
+   * Parti della coppia di città che il backend NON ha riconosciuto (Schedule
+   * Change). Prima `parseCityPair` le calcolava e nessuno le leggeva:
+   * «Vattelapesca-Parigi» diventava «(Vattelapesca-PAR)» e l'agente non sapeva
+   * che metà itinerario non era stata interpretata.
+   */
+  itineraryUnresolved?: string[];
 }
 
 /**
@@ -92,6 +158,9 @@ export interface AiPlan {
 export type AskEvent =
   | { type: 'plan'; plan: AiPlan }
   | { type: 'delta'; text: string }
-  | { type: 'done' }
+  // `truncated` = la risposta ha raggiunto il tetto di output ed è stata tagliata.
+  // Opzionale perché il campo è nato dopo: un backend più vecchio non lo manda e
+  // la sidebar lo tratta come "non tagliata", cioè il comportamento precedente.
+  | { type: 'done'; truncated?: boolean }
   | { type: 'error'; message: string }
   | { type: 'auth-required' };

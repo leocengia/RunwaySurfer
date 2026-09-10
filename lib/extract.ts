@@ -25,7 +25,7 @@ function pickContentRoot(doc: Document): Element {
  * colonna 4-of-12, FUORI da `c-runway-article-viewer` che è il root del testo.
  * Usando `[role="main"]` per i link, li catturiamo insieme ai cross-link del corpo.
  */
-function pickLinkRoot(doc: Document): Element {
+export function pickLinkRoot(doc: Document): Element {
   for (const sel of siteProfile.linkRootSelectors) {
     const el = doc.querySelector(sel);
     if (el) return el;

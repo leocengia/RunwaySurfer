@@ -28,7 +28,11 @@ describe('rankCandidates', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () =>
-        jsonResponse({ selectedUrls: [REQUEST.candidates[0].url], model: 'claude-haiku-4-5', provider: 'mock' }),
+        jsonResponse({
+          selectedUrls: [REQUEST.candidates[0].url],
+          model: 'claude-haiku-4-5',
+          provider: 'mock',
+        }),
       ),
     );
     const res = await rankCandidates('http://proxy.test/', REQUEST);
@@ -37,12 +41,18 @@ describe('rankCandidates', () => {
   });
 
   it('null su 401 (il login lo gestisce la /ask successiva)', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ error: 'unauthorized' }, { status: 401 })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ error: 'unauthorized' }, { status: 401 })),
+    );
     expect(await rankCandidates('http://proxy.test/', REQUEST)).toBeNull();
   });
 
   it('null su status non-ok', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('boom', { status: 500 })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('boom', { status: 500 })),
+    );
     expect(await rankCandidates('http://proxy.test/', REQUEST)).toBeNull();
   });
 
@@ -57,7 +67,10 @@ describe('rankCandidates', () => {
   });
 
   it('null se il corpo non ha selectedUrls (forma inattesa)', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ nope: true })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ nope: true })),
+    );
     expect(await rankCandidates('http://proxy.test/', REQUEST)).toBeNull();
   });
 

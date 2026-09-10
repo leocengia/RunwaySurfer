@@ -28,12 +28,27 @@ const repoRoot = resolve(here, '..');
 const inPath = resolve(process.argv[2] ?? join(repoRoot, 'rs-sitemap-inventory.json'));
 const outPath = join(repoRoot, 'lib', 'kb-index.json');
 
-/** slug "RBC-Cancel-24-Hour-GDS-refund-process" → "RBC Cancel 24 Hour GDS refund process" */
-function labelFromSlug(slug) {
-  return decodeURIComponent(slug || '')
-    .replace(/[_-]+/g, ' ')
+/**
+ * Ripara le label con mojibake: `couponsâ HCOM` nasce da un em-dash che
+ * Salesforce ha mal codificato nello slug stesso (l'URL reale contiene
+ * `%C3%A2`). Si pulisce SOLO la label — `u` e `s` restano il vero indirizzo, e
+ * riscriverli romperebbe il link. Allineata a `cleanKbLabel` in lib/kb-index.ts.
+ */
+function cleanLabel(label) {
+  return label
+    .replace(/â\s*œ?/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/** slug "RBC-Cancel-24-Hour-GDS-refund-process" → "RBC Cancel 24 Hour GDS refund process" */
+function labelFromSlug(slug) {
+  return cleanLabel(
+    decodeURIComponent(slug || '')
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  );
 }
 
 /**
