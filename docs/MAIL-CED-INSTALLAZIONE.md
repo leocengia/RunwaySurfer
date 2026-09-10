@@ -314,6 +314,67 @@ Fatemi sapere se potete procedere o se servono richieste separate per WSL, Codex
 Grazie,
 Leonardo
 
-# Prompt per nuova chat
+# Follow-up: i dettagli tecnici esatti per WSL2
 
-alla fine ho mandato al CED la mia versione della mail che mi avevi preparato (la trovi infondo al file docs/MAIL-CED-INSTALLAZIONE.md , c'è altro che possiamo fare mentre aspettiamo risposta?
+_Bozza del 2026-09-10, da mandare in risposta alla mail sopra. La prima chiedeva «abilitare
+WSL2»; verificando il PC è emerso che servono due feature Windows spente e che la richiesta
+non elencava `gnupg`, che serve davvero. Meglio darglieli scritti che farglieli cercare._
+
+Buongiorno,
+
+per agevolare il lavoro, ecco le verifiche che ho fatto sul mio PC e cosa serve nel
+dettaglio. La virtualizzazione è **già abilitata nel firmware** (`HypervisorPresent = True`),
+quindi non serve intervenire sul BIOS.
+
+**1. Due feature Windows, oggi disattivate** (non posso abilitarle da solo: non sono
+amministratore locale della macchina):
+
+- `Microsoft-Windows-Subsystem-Linux`
+- `VirtualMachinePlatform`
+
+```powershell
+dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
+dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
+```
+
+Serve un riavvio dopo.
+
+**2. La distribuzione:**
+
+```powershell
+wsl --install -d Ubuntu-24.04
+```
+
+Ubuntu **24.04 LTS** e non un'altra versione: è la stessa su cui viene costruito il
+pacchetto, e il modulo nativo del database è compatibile solo all'indietro con la versione
+di sistema.
+
+**3. Dentro Ubuntu, `systemd` va acceso esplicitamente** — il servizio è gestito da systemd,
+senza questo non parte:
+
+```ini
+# /etc/wsl.conf
+[boot]
+systemd=true
+```
+
+poi `wsl --shutdown` da Windows e riapertura.
+
+**4. Pacchetti** — rispetto alla lista che vi avevo mandato si aggiungono **`gnupg`** (serve
+a verificare la firma del repository Node) e `shellcheck`:
+
+```bash
+sudo apt-get install -y --no-install-recommends \
+  ca-certificates curl gnupg tar sqlite3 git shellcheck
+```
+
+**5. Node.js 22 — con una richiesta specifica: deve stare in `/usr/bin/node`**, quindi da
+`apt`/NodeSource, **non** da `snap` e non da `nvm`. Il servizio lo invoca per percorso
+assoluto, e un Node installato altrove lo fa fallire all'avvio in un modo poco leggibile. Se
+preferite lasciarlo a me, mi bastano i permessi di `sudo` dentro WSL: da lì lo installo io
+seguendo la procedura che ho già documentato.
+
+Restano validi Codex CLI e OpenCode come da richiesta precedente.
+
+Grazie,
+Leonardo

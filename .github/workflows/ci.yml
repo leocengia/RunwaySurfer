@@ -67,6 +67,15 @@ jobs:
       - run: npm ci
       - run: npm run compile
       - run: npm run lint
+
+      # Gli script di deploy erano l'unica parte del repo senza alcun controllo
+      # automatico: ~700 righe di bash che girano come root sul rack e a cui è
+      # affidato il rollback del servizio, mentre server/tests/ è tutto vitest.
+      # shellcheck è preinstallato sull'immagine ubuntu-24.04.
+      # `find` e non `deploy/*.sh`: il glob non entra nelle sottocartelle.
+      - name: shellcheck sugli script di deploy
+        run: find deploy -name '*.sh' -print0 | xargs -0 --no-run-if-empty shellcheck -S warning
+
       - run: npm test
       - run: npm run build
 

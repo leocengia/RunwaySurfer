@@ -44,6 +44,12 @@ apt-get install -y --no-install-recommends ca-certificates curl gnupg tar sqlite
 
 **2. Node 22 da NodeSource, bloccato**
 
+> **Se Node è già installato** (perché il CED l'ha preinstallato, o su WSL2), la prima cosa
+> da fare è `command -v node`. Se **non** risponde `/usr/bin/node`, non serve a niente:
+> `ExecStart` cabla quel percorso, e uno `snap`/`nvm`/`fnm` sta altrove. Disinstallalo
+> (`snap remove node`, o togliere nvm dal PATH di root) e prosegui da qui — non aggirare la
+> cosa con un symlink, perché `apt-mark hold` non proteggerebbe più niente.
+
 ```bash
 install -d -m 0755 /etc/apt/keyrings
 curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
