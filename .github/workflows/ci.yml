@@ -37,6 +37,13 @@ jobs:
           # 90 giorni (il massimo): se la build che un agente sta usando è già
           # scaduta dalla CI, non se ne può riprodurre il difetto.
           retention-days: 90
+          # Dal 2 settembre 2024 upload-artifact@v4 esclude di default ogni
+          # percorso il cui nome inizia con un punto: .output/ (cartella di
+          # WXT) veniva quindi trattata come nascosta e scartata PRIMA che il
+          # glob venisse valutato — "npm run zip" riusciva, il file esisteva
+          # davvero, ma "No files were found" comunque. Non c'è nulla da
+          # nascondere qui (è solo l'output di build), quindi va riabilitato.
+          include-hidden-files: true
 
   server:
     name: Backend (typecheck + lint + test + build)
