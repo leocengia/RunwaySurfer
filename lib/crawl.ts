@@ -147,7 +147,7 @@ function genericPenalty(link: KbLink): number {
 function scoreLink(
   link: KbLink,
   plan: QueryPlan,
-): { score: number; reason: string; matched: string[] } {
+): { score: number; reason: string; matched: string[]; titleHit: boolean } {
   const { keywords, expansions, anchored, concepts } = plan;
   const slug = slugText(link.url);
   const context = link.context ?? '';
@@ -160,11 +160,11 @@ function scoreLink(
   const contextExp = matchedKeywords(context, expansions, anchored);
   const conceptHits = conceptMatches(combinedText, concepts);
   const phrase = exactPhraseBoost(link, plan.phrase);
-  // A1 · fra i fratelli di un intervallo alfabetico, premia quello che copre
-  // l'iniziale cercata: `lufthansa` → `L` → `… policies I L`.
-  const rangeBoost = rangeInitialBoost(link.text, plan.initials);
   const penalty = genericPenalty(link);
-  const score =
+  // Punteggio lessicale puro: tutto ciò che viene da un match vero (parola,
+  // espansione, concetto, frase). Calcolato PRIMA del bonus di intervallo, che
+  // ne dipende — vedi sotto.
+  const lexical =
     labelMatches.length * 5 +
     slugMatches.length * 3 +
     contextMatches.length * 1.5 +
@@ -178,9 +178,16 @@ function scoreLink(
     slugExp.length * 1.8 +
     contextExp.length * 0.9 +
     conceptHits.length * 3 +
-    phrase +
-    rangeBoost -
-    penalty;
+    phrase;
+  // A1 · fra i fratelli di un intervallo alfabetico, premia quello che copre
+  // l'iniziale cercata: `lufthansa` → `L` → `… policies I L`. SOLO come
+  // tie-break fra candidati che hanno già un aggancio lessicale: senza il
+  // gate `lexical > 0`, un'iniziale spuria (nomi propri riconosciuti troppo
+  // permissivamente da `nameInitials`) regalava punti a candidati a caso —
+  // misurato su query reali del sondaggio, vedi il commento a
+  // RANGE_INITIAL_BOOST in lib/kb-ranges.ts.
+  const rangeBoost = lexical > 0 ? rangeInitialBoost(link.text, plan.initials) : 0;
+  const score = lexical + rangeBoost - penalty;
   const matched = unique([
     ...labelMatches,
     ...slugMatches,
@@ -204,7 +211,15 @@ function scoreLink(
   ]
     .filter(Boolean)
     .join(', ');
-  return { score, reason: reason || 'nessuna corrispondenza', matched };
+  return {
+    score,
+    reason: reason || 'nessuna corrispondenza',
+    matched,
+    // Per assessQuery (A4): ha questo candidato un hit nel TITOLO (diretto o
+    // per espansione)? Distinto da "matched" perché lì slug/contesto/concetti
+    // sarebbero indistinguibili da un hit sul titolo — vedi lib/query-quality.ts.
+    titleHit: labelMatches.length > 0 || labelExp.length > 0,
+  };
 }
 
 function dynamicSelection(
@@ -236,7 +251,7 @@ function dynamicSelection(
 function scoreAll(
   links: KbLink[],
   query: string,
-): Array<{ link: KbLink; score: number; order: number }> {
+): Array<{ link: KbLink; score: number; order: number; titleHit: boolean }> {
   const plan = planQuery(query);
   if (!plan) return [];
   return links.map((link, fallbackOrder) => {
@@ -250,6 +265,7 @@ function scoreAll(
       },
       score: result.score,
       order: link.order ?? fallbackOrder,
+      titleHit: result.titleHit,
     };
   });
 }
@@ -332,8 +348,13 @@ export function retrievalEvidence(pageLinks: KbLink[], query: string): Retrieval
   const indexOnly = index.filter((l) => !pageIds.has(identityOf(l.url)));
   const scored = scoreAll([...pageLinks, ...indexOnly], query).filter((x) => x.score > 0);
   return {
+    // planQuery(query) === null quando la query non produce nemmeno un
+    // termine/acronimo utilizzabile ("e poi?", "???"): un fatto della QUERY,
+    // indipendente da cosa il corpus contiene.
+    hasTerms: planQuery(query) !== null,
     candidates: scored.length,
     topScore: scored.reduce((max, x) => Math.max(max, x.score), 0),
+    titleHits: scored.filter((x) => x.titleHit).length,
   };
 }
 

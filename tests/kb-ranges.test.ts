@@ -109,6 +109,19 @@ describe('nameInitials', () => {
     expect(nameInitials('riprotezione policy')).toEqual([]);
   });
 
+  it.each([
+    ['posso riproteggere il cliente per un volo LH la prossima settimana?', ['C', 'P', 'S']],
+    ['mi spieghi chiaramente la policy asc lh?', ['S', 'C']],
+    ['che volo posso scegliere a seguito di un asc lhg?', ['S']],
+    ['se lufthansa modifica il numero di volo è considerato major schedule change?', ['N', 'C']],
+  ])('scarta le parole italiane comuni in NON_NAME_WORDS: «%s»', (query, spurious) => {
+    // Query reali del sondaggio dove queste parole offrivano un'iniziale
+    // spuria prima che esistesse NON_NAME_WORDS (cliente/prossima/settimana,
+    // spieghi/chiaramente, scegliere/seguito, numero/considerato).
+    const initials = nameInitials(query);
+    for (const letter of spurious) expect(initials).not.toContain(letter);
+  });
+
   it('un codice vettore dà l’iniziale del NOME, non del codice', () => {
     // TK → turkish → T. «turkish» non compare in nessun titolo della KB:
     // senza questo passaggio non c'è modo di raggiungere l'intervallo S-Z.

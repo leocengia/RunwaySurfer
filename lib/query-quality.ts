@@ -44,38 +44,56 @@ export interface QueryAssessment {
  * `retrievalEvidence` in lib/crawl.ts, sull'indice KB reale e senza rete.
  */
 export interface RetrievalEvidence {
+  /**
+   * La query produce almeno un termine/acronimo utilizzabile per la ricerca
+   * (`planQuery` non torna `null`). Falso per "e poi?", "???": pura
+   * punteggiatura o riempitivi, zero parole di contenuto.
+   */
+  hasTerms: boolean;
   /** Quanti articoli hanno punteggio > 0. */
   candidates: number;
   /** Punteggio del candidato migliore. */
   topScore: number;
+  /**
+   * Quanti candidati hanno almeno un hit (diretto o per espansione) nel
+   * TITOLO — non nello slug, non nel contesto, non solo per concetto.
+   */
+  titleHits: number;
 }
 
 /**
- * Sotto questo punteggio nemmeno una keyword della domanda compare nel titolo
- * di un articolo: un hit sul titolo vale 5, quindi 5 è la soglia sotto la quale
- * i pochi candidati vengono solo da frammenti dell'URL. È il caso dei refusi —
- * `SAFTY` arriva a 4 — e va detto, perché l'agente non ha modo di accorgersene.
- */
-const MIN_USEFUL_TOP_SCORE = 5;
-
-/**
- * Giudica la domanda a partire da ciò che il prefiltro ha davvero trovato.
- * Nessun candidato = il retrieval non ha su cosa lavorare e la risposta finirebbe
- * per appoggiarsi alla pagina aperta per caso.
+ * Giudica la domanda a partire da ciò che il prefiltro ha davvero trovato, con
+ * tre segnali ADIMENSIONALI invece di una soglia sul punteggio.
+ *
+ * PERCHÉ NON PIÙ UNA SOGLIA SUL PUNTEGGIO. La versione precedente diceva
+ * «sotto 5 è vaga», perché un hit sul titolo valeva 5. Da quando lo scoring
+ * pesa i match per IDF (Fase 3 del tuning) quel 5 non significa più niente: un
+ * hit sul titolo vale fra 1,75 e 10 a seconda di quanto il termine sia raro
+ * nella KB, e la soglia fissa avrebbe segnalato domande buone o lasciato
+ * passare domande vuote a seconda del termine, non della qualità della
+ * domanda. I tre segnali sotto sono fatti concreti sul retrieval — c'è un
+ * termine? c'è un candidato? il termine sta nel titolo? — indipendenti dalla
+ * scala dei punteggi, quindi non si scordano a ogni intervento sullo scorer.
  */
 export function assessQuery(query: string, evidence: RetrievalEvidence): QueryAssessment {
   if (!query.trim()) return { vague: false, hint: '' };
 
+  if (!evidence.hasTerms) {
+    return {
+      vague: true,
+      hint: 'Aggiungi l’argomento della domanda (il vettore, «rimborso», «cambio nome»): senza almeno una parola di contenuto la risposta si limiterà alla pagina aperta.',
+    };
+  }
   if (evidence.candidates === 0) {
     return {
       vague: true,
-      hint: 'Nessun articolo della KB corrisponde a questa domanda: aggiungi l’argomento (il vettore, «rimborso», «cambio nome») altrimenti la risposta si limiterà alla pagina aperta.',
+      hint: 'Nessun articolo della KB corrisponde a questa domanda: controlla che non ci sia un errore di battitura, o prova con un sinonimo.',
     };
   }
-  if (evidence.topScore < MIN_USEFUL_TOP_SCORE) {
+  if (evidence.titleHits === 0) {
     return {
       vague: true,
-      hint: 'Nessun titolo di articolo contiene i termini di questa domanda: controlla che non ci sia un errore di battitura, o prova con un sinonimo.',
+      hint: 'Nessun titolo di articolo contiene i termini di questa domanda: i pochi candidati vengono solo da frammenti dell’URL o dal contesto — prova a essere più specifico.',
     };
   }
   return { vague: false, hint: '' };
