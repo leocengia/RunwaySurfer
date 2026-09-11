@@ -87,7 +87,7 @@ describe('pickRelevantLinks', () => {
     expect(lcc?.reason ?? '').not.toContain('car');
   });
 
-  it('un\'iniziale di intervallo spuria, SENZA alcun match lessicale, non basta più a entrare in shortlist', () => {
+  it("un'iniziale di intervallo spuria, SENZA alcun match lessicale, non basta più a entrare in shortlist", () => {
     // Il gate di I0: prima, un `rangeInitialBoost` non condizionato bastava a
     // superare `score > 0` e finire nella shortlist inviata al reranker AI,
     // anche se il candidato non condivideva UNA parola con la query — la causa

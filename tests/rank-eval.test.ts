@@ -118,7 +118,8 @@ function evaluate(set: Golden[]): { metrics: Metrics; rows: Array<Record<string,
       id: g.id ?? '',
       query: g.query.slice(0, 42),
       attesi: wantedAll.length,
-      coperti: wantedAll.length > 1 ? `${new Set(foundRanksForQuery).size}/${wantedAll.length}` : '—',
+      coperti:
+        wantedAll.length > 1 ? `${new Set(foundRanksForQuery).size}/${wantedAll.length}` : '—',
       rank: inShortlist ? rank + 1 : '—',
       recall: inShortlist ? '✓' : '✗',
       top6: r6 ? '✓' : '✗',
@@ -209,12 +210,14 @@ describe('rank eval — prefiltro locale (offline)', () => {
 
     // Nessun guard su P@1/P@3: a n=20 sono troppo rumorosi (un solo caso vale 5
     // punti) — si stampano nella tabella sopra e basta.
-    expect(m.recall40, `recall@40 sceso sotto baseline(${b.recall40}) - tolleranza(${tol.recall40})`).toBeGreaterThanOrEqual(
-      b.recall40 - tol.recall40,
-    );
-    expect(m.mrr, `MRR sceso sotto baseline(${b.mrr}) - tolleranza(${tol.mrr})`).toBeGreaterThanOrEqual(
-      b.mrr - tol.mrr,
-    );
+    expect(
+      m.recall40,
+      `recall@40 sceso sotto baseline(${b.recall40}) - tolleranza(${tol.recall40})`,
+    ).toBeGreaterThanOrEqual(b.recall40 - tol.recall40);
+    expect(
+      m.mrr,
+      `MRR sceso sotto baseline(${b.mrr}) - tolleranza(${tol.mrr})`,
+    ).toBeGreaterThanOrEqual(b.mrr - tol.mrr);
 
     // Il misurato ha superato la baseline: si STAMPA il blocco pronto da
     // incollare (mai scritto in automatico — vedi commento in testa al file).
@@ -269,25 +272,21 @@ describe('le query del sondaggio agenti (fixture versionato)', () => {
     expect(survey.queries.every((q) => q.query.trim().length > 0)).toBe(true);
   });
 
-  it(
-    'nessuna produce una shortlist vuota',
-    () => {
-      // Prima del Giro 4 erano 4 a non produrre nulla: `ndc`, `ndc emea`,
-      // `compensazioni per reclami` e la domanda con il refuso SAFTY. Una
-      // shortlist vuota è il caso peggiore, perché nessun reranker AI a valle
-      // può rimediare.
-      const empty = survey.queries.filter(
-        (q) => shortlistCandidates([], q.query, SHORTLIST_SIZE).length === 0,
-      );
-      expect(empty.map((q) => q.id)).toEqual([]);
-    },
-    // Gira lo scorer reale su ~2964 articoli per 27 query: ~3s in isolamento,
-    // di più sotto la contesa della suite intera in parallelo. Il default di
-    // Vitest (5000ms) basta appena in isolamento e non regge nella suite
-    // completa — l'alternativa (indebolire il test) nasconderebbe una
-    // regressione vera dietro un timeout invece di segnalarla.
-    20_000,
-  );
+  it('nessuna produce una shortlist vuota', () => {
+    // Prima del Giro 4 erano 4 a non produrre nulla: `ndc`, `ndc emea`,
+    // `compensazioni per reclami` e la domanda con il refuso SAFTY. Una
+    // shortlist vuota è il caso peggiore, perché nessun reranker AI a valle
+    // può rimediare.
+    const empty = survey.queries.filter(
+      (q) => shortlistCandidates([], q.query, SHORTLIST_SIZE).length === 0,
+    );
+    expect(empty.map((q) => q.id)).toEqual([]);
+  }, // Gira lo scorer reale su ~2964 articoli per 27 query: ~3s in isolamento,
+  // di più sotto la contesa della suite intera in parallelo. Il default di
+  // Vitest (5000ms) basta appena in isolamento e non regge nella suite
+  // completa — l'alternativa (indebolire il test) nasconderebbe una
+  // regressione vera dietro un timeout invece di segnalarla.
+  20_000);
 
   it('26 sono etichettate (curate o respinte); non registra un gate — solo il numero', () => {
     // Le 27 risposte del sondaggio sono 26 query distinte (r9-h/r9-i duplicate).
@@ -298,30 +297,26 @@ describe('le query del sondaggio agenti (fixture versionato)', () => {
     expect(curatedIds.size + rejectedIds.size).toBeGreaterThanOrEqual(distinctQueries.size - 1);
   });
 
-  it(
-    'registra (non impone) la concordanza fra assessQuery e il giudizio degli esperti',
-    () => {
-      // Non è un gate — la soglia "chiedi chiarimento" resta fuori da questo
-      // lavoro per decisione esplicita. È il dato per tararla in futuro: quante
-      // delle query che gli esperti hanno bocciato come incomplete/senza senso
-      // `assessQuery` segnala già oggi come vaghe, a costo zero (nessuna chiamata).
-      const rejectedIds = new Set((goldens.rejected as Array<{ id: string }>).map((r) => r.id));
-      let flaggedByAssess = 0;
-      let flaggedAndRejected = 0;
-      for (const q of survey.queries) {
-        const evidence = retrievalEvidence([], q.query);
-        const vague = assessQuery(q.query, evidence).vague;
-        if (vague) flaggedByAssess++;
-        if (vague && rejectedIds.has(q.id)) flaggedAndRejected++;
-      }
-      console.log(
-        `\n[rank-eval] concordanza assessQuery/esperti: gli esperti hanno respinto ${rejectedIds.size}/27, ` +
-          `assessQuery ne segnala ${flaggedByAssess}/27 (di cui ${flaggedAndRejected} in comune).`,
-      );
-      expect(flaggedByAssess).toBeGreaterThanOrEqual(0); // registra soltanto, non impone soglie
-    },
-    // Stesso costo (e stesso motivo) del test sopra: retrievalEvidence scora
-    // l'indice reale per ognuna delle 27 query.
-    20_000,
-  );
+  it('registra (non impone) la concordanza fra assessQuery e il giudizio degli esperti', () => {
+    // Non è un gate — la soglia "chiedi chiarimento" resta fuori da questo
+    // lavoro per decisione esplicita. È il dato per tararla in futuro: quante
+    // delle query che gli esperti hanno bocciato come incomplete/senza senso
+    // `assessQuery` segnala già oggi come vaghe, a costo zero (nessuna chiamata).
+    const rejectedIds = new Set((goldens.rejected as Array<{ id: string }>).map((r) => r.id));
+    let flaggedByAssess = 0;
+    let flaggedAndRejected = 0;
+    for (const q of survey.queries) {
+      const evidence = retrievalEvidence([], q.query);
+      const vague = assessQuery(q.query, evidence).vague;
+      if (vague) flaggedByAssess++;
+      if (vague && rejectedIds.has(q.id)) flaggedAndRejected++;
+    }
+    console.log(
+      `\n[rank-eval] concordanza assessQuery/esperti: gli esperti hanno respinto ${rejectedIds.size}/27, ` +
+        `assessQuery ne segnala ${flaggedByAssess}/27 (di cui ${flaggedAndRejected} in comune).`,
+    );
+    expect(flaggedByAssess).toBeGreaterThanOrEqual(0); // registra soltanto, non impone soglie
+  }, // Stesso costo (e stesso motivo) del test sopra: retrievalEvidence scora
+  // l'indice reale per ognuna delle 27 query.
+  20_000);
 });

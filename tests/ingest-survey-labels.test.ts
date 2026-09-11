@@ -43,9 +43,7 @@ function candidateParagraphs(tag: string, alias: string, checked: boolean, rId: 
 /** Riga ALTRO con N celle dopo l'etichetta (normalmente 1; l'anomalia Q18 ne ha 2). */
 function altroRow(cellsXml: string[]): string {
   const tc = (inner: string) => `<w:tc><w:p>${inner}</w:p></w:tc>`;
-  return (
-    `<w:tbl><w:tr>${tc('<w:r><w:t>ALTRO</w:t></w:r>')}${cellsXml.map((c) => tc(c)).join('')}</w:tr></w:tbl>`
-  );
+  return `<w:tbl><w:tr>${tc('<w:r><w:t>ALTRO</w:t></w:r>')}${cellsXml.map((c) => tc(c)).join('')}</w:tr></w:tbl>`;
 }
 
 /** Content control ALTRO con testo dentro sdtContent (caso normale, Q1-style). */
@@ -100,7 +98,9 @@ function section(spec: SectionSpec): string {
   const nn = String(spec.n).padStart(2, '0');
   const candidates = spec.candidates ?? [];
   const boxesXml = candidates
-    .map((c, i) => candidateParagraphs(`Q${nn}_C${i + 1}`, c.alias, c.checked ?? false, c.rId ?? `rId${i + 1}`))
+    .map((c, i) =>
+      candidateParagraphs(`Q${nn}_C${i + 1}`, c.alias, c.checked ?? false, c.rId ?? `rId${i + 1}`),
+    )
     .join('');
   const altroXml = altroRow(spec.altroCellsXml ?? [altroSdtPlaceholder(`Q${nn}_ALTRO`)]);
   return heading(spec.n, spec.query) + meta(spec.id) + boxesXml + altroXml;
@@ -114,7 +114,9 @@ function survey(id: string, query: string): SurveyQuery {
 function withSixCandidates(
   first: Array<{ alias: string; checked?: boolean; rId?: string }>,
 ): Array<{ alias: string; checked?: boolean; rId?: string }> {
-  const filler = Array.from({ length: 6 - first.length }, (_, i) => ({ alias: `Riempitivo ${i + 1}` }));
+  const filler = Array.from({ length: 6 - first.length }, (_, i) => ({
+    alias: `Riempitivo ${i + 1}`,
+  }));
   return [...first, ...filler];
 }
 
@@ -143,7 +145,10 @@ const INDEX: KbIndexFile = {
 };
 const byIdentity = indexByIdentity(INDEX);
 const RELS = new Map([
-  ['rId1', 'https://traveler.my.site.com/Runway/s/article/Lufthansa-LH-airline-policies-123?language=en_US'],
+  [
+    'rId1',
+    'https://traveler.my.site.com/Runway/s/article/Lufthansa-LH-airline-policies-123?language=en_US',
+  ],
   ['rId2', 'https://traveler.my.site.com/Runway/s/article/Second-article?language=en_US'],
 ]);
 
@@ -151,7 +156,8 @@ const RELS = new Map([
 
 describe('splitSections', () => {
   it('spezza il documento su ogni intestazione Titolo2', () => {
-    const doc = section({ n: 1, id: 'a', query: 'prima' }) + section({ n: 2, id: 'b', query: 'seconda' });
+    const doc =
+      section({ n: 1, id: 'a', query: 'prima' }) + section({ n: 2, id: 'b', query: 'seconda' });
     const sections = splitSections(doc);
     expect(sections).toHaveLength(2);
     expect(sections[0]).toContain('1. prima');
@@ -159,7 +165,8 @@ describe('splitSections', () => {
   });
 
   it("esclude l'Appendice tecnica (Titolo1) dall'ultima sezione", () => {
-    const appendix = '<w:p><w:pPr><w:pStyle w:val="Titolo1"/></w:pPr><w:r><w:t>Appendice</w:t></w:r></w:p><w:tbl>RUMORE</w:tbl>';
+    const appendix =
+      '<w:p><w:pPr><w:pStyle w:val="Titolo1"/></w:pPr><w:r><w:t>Appendice</w:t></w:r></w:p><w:tbl>RUMORE</w:tbl>';
     const doc = section({ n: 1, id: 'a', query: 'unica' }) + appendix;
     const sections = splitSections(doc);
     expect(sections).toHaveLength(1);
@@ -225,7 +232,9 @@ describe('parseAltroField', () => {
   });
 
   it('legge il testo scritto accanto a un controllo completamente vuoto (Q27-style)', () => {
-    const sec = altroRow([`${pastedUrlHyperlink('rId9', 'https://esempio.test/fuori27')}${altroSdtEmpty('Q01_ALTRO')}`]);
+    const sec = altroRow([
+      `${pastedUrlHyperlink('rId9', 'https://esempio.test/fuori27')}${altroSdtEmpty('Q01_ALTRO')}`,
+    ]);
     expect(parseAltroField(sec).text).toBe('https://esempio.test/fuori27');
   });
 
@@ -240,17 +249,25 @@ describe('parseAltroField', () => {
   });
 
   it('lancia se le celle ALTRO contengono due risposte diverse (ambiguo)', () => {
-    const sec = altroRow([altroSdtFilled('Q01_ALTRO', 'risposta A'), altroSdtFilled('Q02_ALTRO', 'risposta B')]);
+    const sec = altroRow([
+      altroSdtFilled('Q01_ALTRO', 'risposta A'),
+      altroSdtFilled('Q02_ALTRO', 'risposta B'),
+    ]);
     expect(() => parseAltroField(sec)).toThrow(/più risposte ALTRO diverse/);
   });
 
   it('lancia se la prima cella della riga non è "ALTRO" (struttura tabella inattesa)', () => {
-    const badRow = '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>NON ALTRO</w:t></w:r></w:p></w:tc><w:tc><w:p/></w:tc></w:tr></w:tbl>';
+    const badRow =
+      '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>NON ALTRO</w:t></w:r></w:p></w:tc><w:tc><w:p/></w:tc></w:tr></w:tbl>';
     expect(() => parseAltroField(badRow)).toThrow(/riga inattesa/);
   });
 
   it('ritorna vuoto se la sezione non contiene alcuna tabella', () => {
-    expect(parseAltroField('<w:p>nessuna tabella qui</w:p>')).toEqual({ text: '', tagsFound: [], cellsFound: 0 });
+    expect(parseAltroField('<w:p>nessuna tabella qui</w:p>')).toEqual({
+      text: '',
+      tagsFound: [],
+      cellsFound: 0,
+    });
   });
 });
 
@@ -289,9 +306,9 @@ describe('urlIdentity', () => {
   });
 
   it("lancia quando l'URL non combacia con nessun articolo dell'indice", () => {
-    expect(() => resolveArticleUrl('https://esempio.test/non-esiste', byIdentity, 'contesto-x')).toThrow(
-      /contesto-x.*non-esiste/s,
-    );
+    expect(() =>
+      resolveArticleUrl('https://esempio.test/non-esiste', byIdentity, 'contesto-x'),
+    ).toThrow(/contesto-x.*non-esiste/s);
   });
 });
 
@@ -305,9 +322,14 @@ describe('parseSection', () => {
       n: 1,
       id: 't1',
       query: 'domanda di prova',
-      candidates: withSixCandidates([{ alias: 'Lufthansa LH airline policies', checked: true, rId: 'rId1' }]),
+      candidates: withSixCandidates([
+        { alias: 'Lufthansa LH airline policies', checked: true, rId: 'rId1' },
+      ]),
     });
-    const r = parseSection(sec, 0, q, RELS, byIdentity) as Extract<SectionResult, { kind: 'labelled' }>;
+    const r = parseSection(sec, 0, q, RELS, byIdentity) as Extract<
+      SectionResult,
+      { kind: 'labelled' }
+    >;
     expect(r.kind).toBe('labelled');
     expect(r.sourceKind).toBe('checked');
     expect(r.expectedUrls).toEqual([
@@ -326,7 +348,10 @@ describe('parseSection', () => {
         { alias: 'Second article', checked: true, rId: 'rId2' },
       ]),
     });
-    const r = parseSection(sec, 0, q, RELS, byIdentity) as Extract<SectionResult, { kind: 'labelled' }>;
+    const r = parseSection(sec, 0, q, RELS, byIdentity) as Extract<
+      SectionResult,
+      { kind: 'labelled' }
+    >;
     expect(r.expectedUrls).toHaveLength(2);
   });
 
@@ -337,10 +362,16 @@ describe('parseSection', () => {
       query: 'domanda di prova',
       candidates: withSixCandidates([{ alias: 'Second article', checked: false, rId: 'rId2' }]),
       altroCellsXml: [
-        altroSdtFilled('Q01_ALTRO', 'https://traveler.my.site.com/Runway/s/article/Lufthansa-LH-airline-policies-123?language=en_US'),
+        altroSdtFilled(
+          'Q01_ALTRO',
+          'https://traveler.my.site.com/Runway/s/article/Lufthansa-LH-airline-policies-123?language=en_US',
+        ),
       ],
     });
-    const r = parseSection(sec, 0, q, RELS, byIdentity) as Extract<SectionResult, { kind: 'labelled' }>;
+    const r = parseSection(sec, 0, q, RELS, byIdentity) as Extract<
+      SectionResult,
+      { kind: 'labelled' }
+    >;
     expect(r.sourceKind).toBe('altro-url');
     expect(r.expectedUrls[0]).toContain('Lufthansa-LH-airline-policies-123');
   });
@@ -351,9 +382,17 @@ describe('parseSection', () => {
       id: 't1',
       query: 'domanda di prova',
       candidates: withSixCandidates([{ alias: 'Second article', checked: false, rId: 'rId2' }]),
-      altroCellsXml: [altroSdtFilled('Q01_ALTRO', 'https://traveler.my.site.com/Runway/s/article/Global-schedule-change-E-H?language=en_US#EK')],
+      altroCellsXml: [
+        altroSdtFilled(
+          'Q01_ALTRO',
+          'https://traveler.my.site.com/Runway/s/article/Global-schedule-change-E-H?language=en_US#EK',
+        ),
+      ],
     });
-    const r = parseSection(sec, 0, q, RELS, byIdentity) as Extract<SectionResult, { kind: 'labelled' }>;
+    const r = parseSection(sec, 0, q, RELS, byIdentity) as Extract<
+      SectionResult,
+      { kind: 'labelled' }
+    >;
     expect(r.note).toMatch(/#EK/);
     expect(r.expectedUrls[0]).not.toContain('#');
   });
@@ -381,21 +420,32 @@ describe('parseSection', () => {
     expect(parseSection(sec, 0, q, RELS, byIdentity).kind).toBe('unlabelled');
   });
 
-  it("lancia se il testo della domanda nel .docx non combacia col fixture", () => {
-    const sec = section({ n: 1, id: 't1', query: 'domanda DIVERSA', candidates: [] }) + altroRow([altroSdtPlaceholder('Q01_ALTRO')]);
+  it('lancia se il testo della domanda nel .docx non combacia col fixture', () => {
+    const sec =
+      section({ n: 1, id: 't1', query: 'domanda DIVERSA', candidates: [] }) +
+      altroRow([altroSdtPlaceholder('Q01_ALTRO')]);
     expect(() => parseSection(sec, 0, q, RELS, byIdentity)).toThrow(/non combacia/);
   });
 
   it("lancia se l'ID nel .docx non combacia col fixture", () => {
-    const badMeta = heading(1, 'domanda di prova') + meta('id-sbagliato') + altroRow([altroSdtPlaceholder('Q01_ALTRO')]);
+    const badMeta =
+      heading(1, 'domanda di prova') +
+      meta('id-sbagliato') +
+      altroRow([altroSdtPlaceholder('Q01_ALTRO')]);
     expect(() => parseSection(badMeta, 0, q, RELS, byIdentity)).toThrow(/ID non trovato/);
   });
 
   it('lancia se il numero di checkbox e hyperlink "Apri articolo" non combacia (6 attesi)', () => {
-    const sec = section({ n: 1, id: 't1', query: 'domanda di prova', candidates: [{ alias: 'Second article' }] });
+    const sec = section({
+      n: 1,
+      id: 't1',
+      query: 'domanda di prova',
+      candidates: [{ alias: 'Second article' }],
+    });
     // Va bene con 0 candidati richiesti dal test (survey.query non impone 6): qui
     // verifichiamo solo che un conteggio SPAIATO fra checkbox e hyperlink lanci.
-    const spaiato = section({ n: 1, id: 't1', query: 'domanda di prova', candidates: [] }) +
+    const spaiato =
+      section({ n: 1, id: 't1', query: 'domanda di prova', candidates: [] }) +
       '<w:p><w:sdt><w:sdtPr><w:alias w:val="X"/><w:tag w:val="Q01_C1"/><w:id w:val="9"/><w14:checkbox><w14:checked w14:val="0"/></w14:checkbox></w:sdtPr><w:sdtContent/></w:sdt></w:p>' +
       altroRow([altroSdtPlaceholder('Q01_ALTRO')]);
     expect(() => parseSection(spaiato, 0, q, RELS, byIdentity)).toThrow(/6 checkbox/);
@@ -413,13 +463,16 @@ describe('parseSection', () => {
     expect(r.warnings.some((w) => w.includes('alias della spunta'))).toBe(true);
   });
 
-  it("segnala (senza lanciare) quando la cella ALTRO ha un tag interno diverso da quello della sezione", () => {
+  it('segnala (senza lanciare) quando la cella ALTRO ha un tag interno diverso da quello della sezione', () => {
     const sec = section({
       n: 18,
       id: 't1',
       query: 'domanda di prova',
       candidates: withSixCandidates([{ alias: 'Second article', checked: false, rId: 'rId2' }]),
-      altroCellsXml: [altroSdtFilled('Q16_ALTRO', 'verdetto vero'), altroSdtPlaceholder('Q18_ALTRO')],
+      altroCellsXml: [
+        altroSdtFilled('Q16_ALTRO', 'verdetto vero'),
+        altroSdtPlaceholder('Q18_ALTRO'),
+      ],
     });
     const r = parseSection(sec, 0, survey('t1', 'domanda di prova'), RELS, byIdentity);
     expect(r.kind).toBe('rejected');
@@ -432,8 +485,22 @@ describe('parseSection', () => {
 describe('buildGoldenEntries', () => {
   it('fa il dedup di due sezioni con stessa query e stesso URL atteso (r9-h/r9-i)', () => {
     const results: SectionResult[] = [
-      { id: 'r9-h', query: 'EU package bookings', kind: 'labelled', expectedUrls: ['https://x/a'], sourceKind: 'checked', warnings: [] },
-      { id: 'r9-i', query: 'EU package bookings', kind: 'labelled', expectedUrls: ['https://x/a'], sourceKind: 'checked', warnings: [] },
+      {
+        id: 'r9-h',
+        query: 'EU package bookings',
+        kind: 'labelled',
+        expectedUrls: ['https://x/a'],
+        sourceKind: 'checked',
+        warnings: [],
+      },
+      {
+        id: 'r9-i',
+        query: 'EU package bookings',
+        kind: 'labelled',
+        expectedUrls: ['https://x/a'],
+        sourceKind: 'checked',
+        warnings: [],
+      },
     ];
     const { curated } = buildGoldenEntries(results);
     expect(curated).toHaveLength(1);
@@ -443,8 +510,22 @@ describe('buildGoldenEntries', () => {
 
   it('NON fa il dedup di due sezioni con la stessa query ma risposte diverse', () => {
     const results: SectionResult[] = [
-      { id: 'a', query: 'stessa domanda', kind: 'labelled', expectedUrls: ['https://x/a'], sourceKind: 'checked', warnings: [] },
-      { id: 'b', query: 'stessa domanda', kind: 'labelled', expectedUrls: ['https://x/b'], sourceKind: 'checked', warnings: [] },
+      {
+        id: 'a',
+        query: 'stessa domanda',
+        kind: 'labelled',
+        expectedUrls: ['https://x/a'],
+        sourceKind: 'checked',
+        warnings: [],
+      },
+      {
+        id: 'b',
+        query: 'stessa domanda',
+        kind: 'labelled',
+        expectedUrls: ['https://x/b'],
+        sourceKind: 'checked',
+        warnings: [],
+      },
     ];
     expect(buildGoldenEntries(results).curated).toHaveLength(2);
   });
@@ -460,14 +541,31 @@ describe('buildGoldenEntries', () => {
 
   it('un singolo URL atteso usa expectedUrl (stringa), più di uno usa expectedUrls (array)', () => {
     const one: SectionResult[] = [
-      { id: 'a', query: 'q1', kind: 'labelled', expectedUrls: ['https://x/a'], sourceKind: 'checked', warnings: [] },
+      {
+        id: 'a',
+        query: 'q1',
+        kind: 'labelled',
+        expectedUrls: ['https://x/a'],
+        sourceKind: 'checked',
+        warnings: [],
+      },
     ];
     const many: SectionResult[] = [
-      { id: 'b', query: 'q2', kind: 'labelled', expectedUrls: ['https://x/a', 'https://x/b'], sourceKind: 'checked', warnings: [] },
+      {
+        id: 'b',
+        query: 'q2',
+        kind: 'labelled',
+        expectedUrls: ['https://x/a', 'https://x/b'],
+        sourceKind: 'checked',
+        warnings: [],
+      },
     ];
     expect(buildGoldenEntries(one).curated[0]).toHaveProperty('expectedUrl', 'https://x/a');
     expect(buildGoldenEntries(one).curated[0]).not.toHaveProperty('expectedUrls');
-    expect(buildGoldenEntries(many).curated[0]).toHaveProperty('expectedUrls', ['https://x/a', 'https://x/b']);
+    expect(buildGoldenEntries(many).curated[0]).toHaveProperty('expectedUrls', [
+      'https://x/a',
+      'https://x/b',
+    ]);
     expect(buildGoldenEntries(many).curated[0]).not.toHaveProperty('expectedUrl');
   });
 });
@@ -482,7 +580,15 @@ describe('writeGoldens', () => {
     bootstrap: [{ query: 'boot', expectedUrl: 'https://x/boot', source: 'bootstrap' }],
   };
   const entries = {
-    curated: [{ id: 'r1', query: 'nuova', source: 'curated' as const, batch: BATCH_ID, expectedUrl: 'https://x/nuova' }],
+    curated: [
+      {
+        id: 'r1',
+        query: 'nuova',
+        source: 'curated' as const,
+        batch: BATCH_ID,
+        expectedUrl: 'https://x/nuova',
+      },
+    ],
     rejected: [{ id: 'r2', query: 'respinta', verdict: 'v', source: BATCH_ID }],
   };
 
@@ -498,7 +604,7 @@ describe('writeGoldens', () => {
     expect(doc.rejected).toEqual(entries.rejected);
   });
 
-  it("è idempotente: rialimentare il proprio output con GLI STESSI entries produce lo stesso documento", () => {
+  it('è idempotente: rialimentare il proprio output con GLI STESSI entries produce lo stesso documento', () => {
     const once = writeGoldens(prevDoc, entries);
     const twice = writeGoldens(once, entries);
     expect(twice).toEqual(once);
@@ -507,7 +613,15 @@ describe('writeGoldens', () => {
   it('una seconda ingestione con un batch DIVERSO non tocca il primo', () => {
     const withFirst = writeGoldens(prevDoc, entries);
     const otherEntries = {
-      curated: [{ id: 'z1', query: 'altro batch', source: 'curated' as const, batch: 'survey-2027-01', expectedUrl: 'https://x/z' }],
+      curated: [
+        {
+          id: 'z1',
+          query: 'altro batch',
+          source: 'curated' as const,
+          batch: 'survey-2027-01',
+          expectedUrl: 'https://x/z',
+        },
+      ],
       rejected: [],
     };
     const withBoth = writeGoldens(withFirst, otherEntries, 'survey-2027-01');
@@ -601,7 +715,9 @@ describe('readDocxEntries', () => {
 
   it("lancia se un'entry richiesta non esiste nell'archivio", () => {
     const zip = buildMinimalZip([{ name: 'word/document.xml', content: 'x' }]);
-    expect(() => readDocxEntries(zip, ['word/document.xml', 'word/mancante.xml'])).toThrow(/mancante/);
+    expect(() => readDocxEntries(zip, ['word/document.xml', 'word/mancante.xml'])).toThrow(
+      /mancante/,
+    );
   });
 
   it('lancia su un buffer che non è uno zip valido', () => {

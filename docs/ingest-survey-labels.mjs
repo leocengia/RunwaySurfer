@@ -185,7 +185,8 @@ export function splitSections(documentXml) {
   const afterLast = titolo1s.find((i) => i > lastStart) ?? documentXml.length;
   const bounds = [...starts, afterLast];
   const sections = [];
-  for (let i = 0; i < starts.length; i++) sections.push(documentXml.slice(bounds[i], bounds[i + 1]));
+  for (let i = 0; i < starts.length; i++)
+    sections.push(documentXml.slice(bounds[i], bounds[i + 1]));
   return sections;
 }
 
@@ -200,7 +201,10 @@ function secondParagraphText(fragment) {
   const firstEnd = fragment.indexOf('</w:p>');
   if (firstEnd === -1) return '';
   const secondEnd = fragment.indexOf('</w:p>', firstEnd + 1);
-  const slice = fragment.slice(firstEnd + '</w:p>'.length, secondEnd === -1 ? undefined : secondEnd);
+  const slice = fragment.slice(
+    firstEnd + '</w:p>'.length,
+    secondEnd === -1 ? undefined : secondEnd,
+  );
   return extractText(slice);
 }
 
@@ -262,7 +266,9 @@ export function parseAltroField(sectionXml) {
 
   const labelText = extractText(cells[0]).trim();
   if (labelText !== 'ALTRO') {
-    throw new Error(`riga inattesa nella tabella ALTRO: prima cella = ${JSON.stringify(labelText)}`);
+    throw new Error(
+      `riga inattesa nella tabella ALTRO: prima cella = ${JSON.stringify(labelText)}`,
+    );
   }
 
   const answers = cells
@@ -281,10 +287,7 @@ export function parseAltroField(sectionXml) {
 
 /** NBSP -> spazio normale, spazi ripetuti collassati, trim. */
 function normalizeCellText(raw) {
-  return raw
-    .replace(/ /g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return raw.replace(/ /g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 // --- 4. Risoluzione contro l'indice KB reale --------------------------------
@@ -326,7 +329,10 @@ function readableLabel(label) {
  */
 export function resolveArticleUrl(rawUrl, byIdentity, context) {
   const hit = byIdentity.get(urlIdentity(rawUrl));
-  if (!hit) throw new Error(`${context}: nessun articolo nell'indice combacia con ${JSON.stringify(rawUrl)}`);
+  if (!hit)
+    throw new Error(
+      `${context}: nessun articolo nell'indice combacia con ${JSON.stringify(rawUrl)}`,
+    );
   return hit.u;
 }
 
@@ -473,7 +479,9 @@ export function buildGoldenEntries(results) {
   const curated = [...byDedupKey.values()].map((g) => {
     const notes = [...g.notes];
     if (g.ids.length > 1) {
-      notes.push(`Duplicata nel sondaggio: id ${g.ids.join(', ')} sono la stessa domanda con la stessa risposta.`);
+      notes.push(
+        `Duplicata nel sondaggio: id ${g.ids.join(', ')} sono la stessa domanda con la stessa risposta.`,
+      );
     }
     const entry = {
       id: g.ids[0],
@@ -518,7 +526,7 @@ export function writeGoldens(prevDoc, newEntries, batchId = BATCH_ID) {
       "`expectedUrls` (piu' di una, per le richieste di elenco esaustivo). Se ci sono entrambi, " +
       '`expectedUrl` conta come primo elemento. `id`/`batch` tracciano la provenienza per gli ' +
       'ingest rieseguibili (docs/ingest-survey-labels.mjs), che possiede solo le entry col proprio ' +
-      "`batch`. `rejected` sono le domande che gli esperti hanno dichiarato incomplete o senza senso: " +
+      '`batch`. `rejected` sono le domande che gli esperti hanno dichiarato incomplete o senza senso: ' +
       'non entrano nelle metriche, restano per tarare in futuro un gate "chiedi chiarimento". ' +
       'Le query del sondaggio agenti stanno in survey-queries-2026-08.json.',
     curated: [...nonBatchCurated, ...newEntries.curated],

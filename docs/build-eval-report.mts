@@ -149,13 +149,18 @@ for (const [i, q] of queries.entries()) {
   }
   const known = alreadyLabelledUrls(q);
   if (known?.length) {
-    const label = known.length > 1 ? 'Già etichettata nei goldens (più risposte attese)' : 'Già etichettata nei goldens';
+    const label =
+      known.length > 1
+        ? 'Già etichettata nei goldens (più risposte attese)'
+        : 'Già etichettata nei goldens';
     lines.push(`> ${label}: ${known.map((u) => `\`${u}\``).join(', ')}.`);
     lines.push('');
   }
   const rejectedVerdict = rejectedVerdictById.get(q.id);
   if (rejectedVerdict) {
-    lines.push(`> Gli esperti KB hanno dichiarato questa domanda non valida: «${rejectedVerdict}».`);
+    lines.push(
+      `> Gli esperti KB hanno dichiarato questa domanda non valida: «${rejectedVerdict}».`,
+    );
     lines.push('');
   }
 

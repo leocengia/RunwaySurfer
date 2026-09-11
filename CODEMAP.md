@@ -175,6 +175,15 @@ Punti importanti:
   change» per esteso — cioè sotto l'espansione di ASC stesso. Il ponte IT→EN non
   ne soffre: in una query tutta italiana ogni match è un'espansione, quindi la
   scala è uniforme.
+- `scoreLink()`: calcola prima il punteggio **lessicale** puro (label/slug/
+  contesto/espansioni/concetti/frase), poi ci somma due bonus condizionati —
+  `dedicatedBoost` (lib/kb-carriers.ts, +20, se il candidato è l'articolo
+  dedicato a un vettore nominato nella query) e `rangeBoost`
+  (lib/kb-ranges.ts, +8, **solo se** `lexical > 0` **e** la query non nomina
+  un vettore dedicato — altrimenti i fratelli d'intervallo continuerebbero a
+  competere sulla propria scala e a battere l'articolo dedicato). Senza il
+  gate su `lexical`, un'iniziale spuria riconosciuta da `nameInitials()`
+  bastava a far comparire un candidato senza alcun match reale.
 - `pickRelevantLinks()`: sceglie i link piu rilevanti.
 - `shortlistCandidates()`: la shortlist ampia per il reranker, senza i gate di
   `dynamicSelection` — qui il prefiltro deve garantire il **recall**, non scegliere.
@@ -397,16 +406,29 @@ Un solo posto per ciò che serve a più superfici. Il server non può importarli
   `cleanKbLabel()` ripara le 14 label con mojibake **senza toccare URL e slug**:
   quella `â` è un em-dash che Salesforce ha mal codificato nello slug stesso, e
   l'URL reale contiene `%C3%A2`. Riscriverlo romperebbe il link.
-- `lib/kb-ranges.ts` — la KB archivia i vettori per **intervallo alfabetico**
-  (`Global airline schedule change policies I L`), e il nome cercato non compare
-  nel titolo: 48 articoli in 21 famiglie. `parseKbRange()` scompone la label in
+- `lib/kb-ranges.ts` — RIPIEGO per i vettori senza articolo dedicato
+  (lib/kb-carriers.ts): la KB archivia questi per **intervallo alfabetico**
+  (`Global airline schedule change policies E H` per Emirates), e il nome
+  cercato non compare nel titolo. `parseKbRange()` scompone la label in
   famiglia + estremi (scartando gli intervalli discendenti, che sono i due falsi
   positivi reali dell'indice: «only U S» e «team S O»); `nameInitials()` ricava
   l'iniziale del nome cercato — anche da un codice vettore, `TK` → _turkish_ →
-  `T` — e `rangeInitialBoost()` premia il fratello che la copre. Additivo: nessun
-  candidato può uscire dalla shortlist per colpa sua, quindi il caso peggiore è
-  il comportamento precedente. Conta soprattutto sul percorso **locale**, quando
-  `/rank` scade e non c'è alcuna AI a scegliere il fratello giusto.
+  `T` — scartando anche `NON_NAME_WORDS`, parole italiane comuni che altrimenti
+  passerebbero per nomi propri; `rangeInitialBoost()` premia il fratello che la
+  copre. Additivo: nessun candidato può uscire dalla shortlist per colpa sua.
+  In `lib/crawl.ts` si applica solo se il candidato ha già un match lessicale
+  vero E la query non nomina un vettore con articolo dedicato — altrimenti un
+  fratello d'intervallo continuerebbe a competere con l'articolo giusto.
+  Conta soprattutto sul percorso **locale**, quando `/rank` scade e non c'è
+  alcuna AI a scegliere il fratello giusto.
+- `lib/kb-carriers.ts` — la KB ha 10 pagine dedicate "`<Nome> <IATA> airline
+policies`" (Lufthansa, Delta, United…): quando la query nomina uno di questi
+  vettori, quell'articolo vince — qualunque sia il tema (riprotezione,
+  cancellazione, rimborso…), coerente con le etichette reali degli esperti KB.
+  La tabella si deriva dall'indice via pattern sulla label, non è scritta a
+  mano. `carriersInQuery()` riconosce ogni vettore per nome sempre, e per
+  codice nudo solo quando il codice non collide con parole inglesi/italiane
+  comuni (`am`/`as`/`ac` sono esclusi dal riconoscimento per codice nudo).
 - `lib/off-topic.ts` — `isOffTopic()`: la domanda c'entra con la pagina aperta? Due
   segnali, entrambi necessari: bassa copertura dei termini **e** un candidato che
   batte la pagina secondo lo stesso scorer. Serve a evitare la risposta
@@ -477,11 +499,14 @@ Il canale che dice se il prodotto funziona davvero, che i test non possono dare.
   `lib/crawl.ts`), non contando le parole: la versione a conteggio dava il
   verdetto rovesciato sulle query vere — segnalava `relocation`, che di candidati
   ne ha 323, e taceva su `booking refund`, che ne ha 479. Segnala due casi solo,
-  quelli che l'evidenza sostiene: zero candidati, e nessun titolo che contenga i
-  termini (il caso dei refusi, `SAFTY` arriva a 4 su una soglia di 5). Non prova
-  a segnalare `tier`, che è un disallineamento di significato — l'agente intende
-  i livelli fedeltà, la KB l'escalation interna — e che dall'evidenza appare
-  identico a `ndc`, che invece è preciso.
+  quelli che l'evidenza sostiene, con tre segnali ADIMENSIONALI (non più una
+  soglia sul punteggio, che con l'IDF non avrebbe più una scala fissa):
+  `!hasTerms` (nessun termine di contenuto, `"e poi?"`), `candidates === 0`
+  (il caso dei refusi, es. `SAFTY`), `titleHits === 0` (candidati solo da
+  slug/contesto, mai dal titolo). Non prova a segnalare `tier`, che è un
+  disallineamento di significato — l'agente intende i livelli fedeltà, la KB
+  l'escalation interna — e che dall'evidenza appare identico a `ndc`, che
+  invece è preciso.
 - `AiPlan.requestId` (`shared/contracts.d.ts`) esiste solo per legare un feedback
   alla riga di audit. Va generato **prima** della costruzione del plan in
   `routes/ask.ts`.

@@ -81,9 +81,9 @@ describe('assessQuery · i tre segnali, in isolamento', () => {
   });
 
   it('nessun termine utilizzabile: vaga a prescindere dal resto', () => {
-    expect(assessQuery('qualcosa', ev({ hasTerms: false, candidates: 5, titleHits: 2 })).vague).toBe(
-      true,
-    );
+    expect(
+      assessQuery('qualcosa', ev({ hasTerms: false, candidates: 5, titleHits: 2 })).vague,
+    ).toBe(true);
   });
 
   it('termini validi ma zero candidati: vaga (refuso o sinonimo)', () => {
