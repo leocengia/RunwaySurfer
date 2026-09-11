@@ -33,6 +33,14 @@ SERVICE_USER=runwaysurfer
 KEEP_RELEASES=5
 HEALTH_TIMEOUT=60
 
+# Lo STESSO Node che systemd esegue: la unit cabla /usr/bin/node in ExecStart.
+# Invocare `node` nudo misura quello che capita per primo nel PATH di root — con
+# un nvm o uno snap installati è un binario diverso, e allora il controllo
+# dell'ABI qui sotto certifica una major che il servizio non userà mai, mentre
+# read_user_version carica better-sqlite3 con l'ABI sbagliato, non ci riesce e
+# restituisce «sconosciuta», che disattiva in silenzio la guardia sullo schema.
+NODE_BIN=/usr/bin/node
+
 DRY_RUN=0
 SKIP_CHECKSUM=0
 MODE=update
@@ -69,7 +77,7 @@ die() {
 # Lettura di un campo da un JSON senza dipendere da jq, che su una Debian
 # minimale non c'è. Node è un requisito del servizio, quindi c'è per definizione.
 json_field() {
-  node -e '
+  "$NODE_BIN" -e '
     const fs = require("node:fs");
     const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
     const value = data[process.argv[2]];
@@ -112,7 +120,7 @@ wait_for_health() {
   for ((i = 0; i < HEALTH_TIMEOUT; i++)); do
     body="$(fetch_health)"
     if [[ -n "$body" ]]; then
-      got="$(printf '%s' "$body" | node -e '
+      got="$(printf '%s' "$body" | "$NODE_BIN" -e '
         let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => {
           try { process.stdout.write(String(JSON.parse(s).commit ?? "")); } catch { process.stdout.write(""); }
         });
@@ -156,7 +164,7 @@ read_user_version() {
     printf '0'
     return 0
   }
-  NODE_PATH="$modules" node -e '
+  NODE_PATH="$modules" "$NODE_BIN" -e '
     const Database = require("better-sqlite3");
     const d = new Database(process.argv[1], { readonly: true, fileMustExist: true });
     process.stdout.write(String(d.pragma("user_version", { simple: true })));
@@ -223,11 +231,15 @@ mkdir -p "$RELEASES" "$BACKUPS"
 touch "$LOGFILE"
 LOG_READY=1
 
+# Qui e non fra i controlli preliminari dell'aggiornamento: anche --list e
+# --activate leggono i RELEASE.json e lo schema del database passando da Node.
+[[ -x "$NODE_BIN" ]] || die "$NODE_BIN non trovato. Node va installato da apt/NodeSource: la unit systemd lo cabla in ExecStart, quindi un Node da nvm o snap non basta (vedi RUNBOOK-BACKEND.md, «Prima installazione», passo 2)."
+
 # ------------------------------------------------------------------ list ----
 
 if [[ "$MODE" == list ]]; then
   ACTIVE="$(active_release)"
-  RUNNING="$(fetch_health | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const j=JSON.parse(s);process.stdout.write(`${j.version} (${j.commit})`)}catch{process.stdout.write("non risponde")}})' 2>/dev/null || echo "non risponde")"
+  RUNNING="$(fetch_health | "$NODE_BIN" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const j=JSON.parse(s);process.stdout.write(`${j.version} (${j.commit})`)}catch{process.stdout.write("non risponde")}})' 2>/dev/null || echo "non risponde")"
   echo "Release installate in $RELEASES:"
   for dir in "$RELEASES"/*/; do
     [[ -d "$dir" ]] || continue
@@ -253,8 +265,11 @@ if [[ "$MODE" == activate ]]; then
   [[ -n "$TARGET" ]] || die "--activate richiede l'id di una release (vedi --list)."
   [[ -d "$RELEASES/$TARGET" ]] || die "release non trovata: $RELEASES/$TARGET"
 
-  TARGET_SCHEMA="$(json_field "$RELEASES/$TARGET/RELEASE.json" schemaVersion)"
-  DB_SCHEMA="$(read_user_version "$RELEASES/$TARGET/node_modules")"
+  # Tollerante come in rollback(): 0000.preesistente è un bersaglio legittimo di
+  # --activate e non ha un RELEASE.json. Vuoto qui significa «schema ignoto»,
+  # che la guardia sotto tratta come «non bloccare».
+  TARGET_SCHEMA="$(json_field "$RELEASES/$TARGET/RELEASE.json" schemaVersion 2>/dev/null || true)"
+  DB_SCHEMA="$(read_user_version "$RELEASES/$TARGET/node_modules" || true)"
   if [[ -n "$TARGET_SCHEMA" && "$DB_SCHEMA" =~ ^[0-9]+$ ]] && ((TARGET_SCHEMA < DB_SCHEMA)); then
     die "la release $TARGET conosce lo schema $TARGET_SCHEMA ma il database è già al $DB_SCHEMA: si rifiuterebbe di partire. Serve anche ripristinare un backup del database (vedi $BACKUPS)."
   fi
@@ -263,7 +278,7 @@ if [[ "$MODE" == activate ]]; then
   PREV="$(active_release)"
   swap_link "$TARGET"
   restart_unit
-  if wait_for_health "$(json_field "$RELEASES/$TARGET/RELEASE.json" shortCommit)"; then
+  if wait_for_health "$(json_field "$RELEASES/$TARGET/RELEASE.json" shortCommit 2>/dev/null || true)"; then
     log "release $TARGET attiva."
     exit 0
   fi
@@ -311,7 +326,6 @@ log "pacchetto: release $NEW_ID, versione $(json_field "$STAMP" version), schema
 # 3. Controlli preliminari: tutti quelli che possono far fallire l'avvio, PRIMA
 #    di toccare qualunque cosa.
 systemctl cat "$UNIT" >/dev/null 2>&1 || die "la unit systemd '$UNIT' non è installata. Prima installazione: vedi deploy/runwaysurfer.service."
-[[ -x /usr/bin/node ]] || die "/usr/bin/node non trovato."
 [[ -s "$ENVFILE" ]] || die "file di configurazione assente o vuoto: $ENVFILE"
 # Senza questo controllo, un utente di servizio mancante si manifesta più sotto
 # come «il certificato non è leggibile», incolpando i permessi invece della causa.
@@ -326,10 +340,10 @@ if [[ ! -f "$(db_path)" && -z "$(env_value ADMIN_BOOTSTRAP_PASSWORD)" ]]; then
   die "prima installazione con ADMIN_BOOTSTRAP_PASSWORD vuota in $ENVFILE: il servizio partirebbe e /health risponderebbe, ma la dashboard resterebbe INACCESSIBILE fino a un riavvio con la variabile impostata. Impostala e riprova."
 fi
 
-HOST_ABI="$(node -p process.versions.modules)"
-HOST_ARCH="$(node -p process.arch)"
+HOST_ABI="$("$NODE_BIN" -p process.versions.modules)"
+HOST_ARCH="$("$NODE_BIN" -p process.arch)"
 [[ -z "$NEW_ABI" || "$NEW_ABI" == "$HOST_ABI" ]] ||
-  die "il pacchetto è compilato per l'ABI Node $NEW_ABI, questa macchina ha $HOST_ABI ($(node -p process.version)). Serve un pacchetto costruito per questo Node, oppure riportare Node alla major precedente."
+  die "il pacchetto è compilato per l'ABI Node $NEW_ABI, questa macchina ha $HOST_ABI ($("$NODE_BIN" -p process.version)). Serve un pacchetto costruito per questo Node, oppure riportare Node alla major precedente."
 [[ -z "$NEW_ARCH" || "$NEW_ARCH" == "$HOST_ARCH" ]] ||
   die "il pacchetto è per architettura $NEW_ARCH, questa macchina è $HOST_ARCH."
 
@@ -371,8 +385,8 @@ chown -R root:root "$STAGING" ||
 log "pacchetto estratto in staging"
 
 # Il controllo che vale davvero sull'ABI: il modulo nativo si carica o no.
-/usr/bin/node -e "require('$STAGING/node_modules/better-sqlite3')" 2>/dev/null ||
-  die "il modulo nativo better-sqlite3 del pacchetto non si carica con questo Node ($(node -p process.version)). Il pacchetto non è utilizzabile su questa macchina."
+"$NODE_BIN" -e "require('$STAGING/node_modules/better-sqlite3')" 2>/dev/null ||
+  die "il modulo nativo better-sqlite3 del pacchetto non si carica con questo Node ($("$NODE_BIN" -p process.version)). Il pacchetto non è utilizzabile su questa macchina."
 log "modulo nativo verificato"
 
 # Schema: la build in arrivo deve conoscere almeno quello del database.
@@ -419,16 +433,25 @@ fi
 DB="$(db_path)"
 if [[ -f "$DB" ]]; then
   BACKUP="$BACKUPS/runwaysurfer-pre-$NEW_ID.db"
+  # VACUUM INTO si RIFIUTA di scrivere su un file che esiste già, e un .part
+  # resta lì ogni volta che un tentativo precedente è stato interrotto a metà.
+  # Senza questa riga il backup fallisce, e siccome `A && B` sotto `set -e`
+  # interrompe lo script senza passare da die(), l'aggiornamento si fermerebbe
+  # qui senza un messaggio che dica perché.
+  rm -f "$BACKUP.part"
   if command -v sqlite3 >/dev/null 2>&1; then
-    sqlite3 "$DB" "VACUUM INTO '$BACKUP.part'" && mv -f "$BACKUP.part" "$BACKUP"
+    sqlite3 "$DB" "VACUUM INTO '$BACKUP.part'" ||
+      die "backup del database fallito (sqlite3 VACUUM INTO '$BACKUP.part'). Non proseguo: aggiornare senza una copia del database non è recuperabile."
   else
-    NODE_PATH="$STAGING/node_modules" node -e '
+    NODE_PATH="$STAGING/node_modules" "$NODE_BIN" -e '
       const Database = require("better-sqlite3");
       const d = new Database(process.argv[1], { readonly: true, fileMustExist: true });
       d.exec(`VACUUM INTO ${JSON.stringify(process.argv[2])}`);
       d.close();
-    ' "$DB" "$BACKUP.part" && mv -f "$BACKUP.part" "$BACKUP"
+    ' "$DB" "$BACKUP.part" ||
+      die "backup del database fallito (better-sqlite3 VACUUM INTO '$BACKUP.part'). Non proseguo: aggiornare senza una copia del database non è recuperabile."
   fi
+  mv -f "$BACKUP.part" "$BACKUP" || die "backup creato ma non rinominabile in $BACKUP."
   log "backup del database: $BACKUP ($(($(stat -c %s "$BACKUP") / 1024)) KB)"
 else
   log "nessun database da salvare (prima installazione?)"
@@ -437,7 +460,10 @@ fi
 # 5. Promozione dello staging a release.
 if [[ -d "$RELEASES/$NEW_ID" ]]; then
   log "la release $NEW_ID era già presente: la sostituisco"
-  rm -rf "$RELEASES/$NEW_ID"
+  # `:?` e non `$NEW_ID` nudo: gira come root, e con la variabile vuota questo
+  # sarebbe `rm -rf /opt/runwaysurfer/releases/`. NEW_ID è già validato sopra,
+  # ma su una riga simile la ridondanza costa un carattere.
+  rm -rf "$RELEASES/${NEW_ID:?}"
 fi
 mv -T "$STAGING" "$RELEASES/$NEW_ID"
 
@@ -461,9 +487,15 @@ rollback() {
   fi
 
   local prev_schema now_schema
-  prev_schema="$(json_field "$RELEASES/$PREV/RELEASE.json" schemaVersion)"
+  # `|| true` obbligatorio: PREV può essere 0000.preesistente, che questo stesso
+  # script crea più sotto da un'installazione fatta a mano e che NON ha un
+  # RELEASE.json. Senza, l'assegnazione fallisce, `set -e` uccide la funzione, e
+  # il rollback automatico si interrompe esattamente quando serve. Un valore non
+  # numerico non è un problema: la guardia qui sotto lo tratta come «non
+  # bloccare» e si ricade sul rollback normale, che è il comportamento giusto.
+  prev_schema="$(json_field "$RELEASES/$PREV/RELEASE.json" schemaVersion 2>/dev/null || true)"
   # Ri-letto: la build nuova può aver già migrato il database.
-  now_schema="$(read_user_version "$RELEASES/$NEW_ID/node_modules")"
+  now_schema="$(read_user_version "$RELEASES/$NEW_ID/node_modules" || true)"
 
   if [[ "$prev_schema" =~ ^[0-9]+$ && "$now_schema" =~ ^[0-9]+$ ]] && ((prev_schema < now_schema)); then
     cat <<TXT | tee -a "$LOGFILE" >&2
@@ -497,7 +529,7 @@ TXT
   log "rollback: torno a $PREV"
   swap_link "$PREV"
   restart_unit || true
-  if wait_for_health "$(json_field "$RELEASES/$PREV/RELEASE.json" shortCommit)"; then
+  if wait_for_health "$(json_field "$RELEASES/$PREV/RELEASE.json" shortCommit 2>/dev/null || true)"; then
     log "ROLLBACK RIUSCITO — la release precedente è in linea. Backup del database: ${BACKUP:-nessuno}"
   else
     log "ROLLBACK FALLITO ANCHE LUI. Servizio giù. Backup: ${BACKUP:-nessuno}. Guarda: journalctl -u $UNIT -n 200"
@@ -514,11 +546,16 @@ restart_unit || rollback "systemctl restart ha restituito un errore"
 wait_for_health "$NEW_COMMIT" || rollback "il servizio non risponde con il commit $NEW_COMMIT"
 
 # 7. Potatura: si tengono le ultime N release più quella attiva e la precedente.
+#
+# ATTENZIONE: `sort -r` è LESSICOGRAFICO, non cronologico. Regge perché gli id
+# della CI iniziano con la data (AAAA-MM-GG.NNNN.commit); un id fabbricato a
+# mano senza quel prefisso farebbe potare la release sbagliata.
+# shellcheck disable=SC2011  # gli id sono generati dalla CI: niente spazi né a capo
 mapfile -t OLD < <(ls -1d "$RELEASES"/*/ 2>/dev/null | xargs -r -n1 basename | sort -r | tail -n +$((KEEP_RELEASES + 1)))
 for id in "${OLD[@]:-}"; do
   [[ -n "$id" && "$id" != "$NEW_ID" && "$id" != "$PREV" ]] || continue
   log "rimuovo la release vecchia $id"
-  rm -rf "$RELEASES/$id"
+  rm -rf "$RELEASES/${id:?}"
 done
 
 log "=== AGGIORNAMENTO COMPLETATO: release $NEW_ID, commit $NEW_COMMIT ==="
