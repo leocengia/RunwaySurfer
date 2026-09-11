@@ -11,7 +11,7 @@
 // PRIMO alias di ogni concetto = termine EN canonico (usato per l'espansione
 // cross-lingua della query, vedi expandQueryTerms).
 
-import { normalize, unique } from './text';
+import { aliasMatchesTokens, normalize, unique } from './text';
 
 export const INTENT_ALIASES: Record<string, string[]> = {
   // --- Azioni sul viaggio ---------------------------------------------------
@@ -238,11 +238,17 @@ export const CONCEPT_KB_TERMS: Record<string, string[]> = {
   scenario: ['policies'],
 };
 
-/** Concetti i cui alias (EN o IT) compaiono nella query normalizzata. */
+/**
+ * Concetti i cui alias (EN o IT) compaiono nella query, a livello di TOKEN
+ * (vedi `aliasMatchesTokens`) — non di sottostringa: «devo **cer**car**e** la
+ * policy di emirates» non deve più attivare il concetto `car`.
+ */
 export function conceptsInQuery(query: string): string[] {
-  const hay = normalize(query).replace(/[^a-z0-9]+/g, ' ');
+  const tokens = normalize(query)
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
   return Object.entries(INTENT_ALIASES)
-    .filter(([, aliases]) => aliases.some((a) => hay.includes(normalize(a))))
+    .filter(([, aliases]) => aliases.some((a) => aliasMatchesTokens(a, tokens)))
     .map(([concept]) => concept);
 }
 
@@ -296,7 +302,11 @@ export function expandTerm(term: string): string[] {
     if (t.length > 3 && t !== token) out.add(t);
   };
   for (const [concept, aliases] of Object.entries(INTENT_ALIASES)) {
-    if (!aliases.some((a) => token.includes(normalize(a)))) continue;
+    // `token` è già UN SOLO termine della query: lo stesso confronto per token
+    // di `conceptsInQuery`, con un haystack di un elemento solo. Corregge anche
+    // qui il falso positivo `car` ⊂ `cercare` (prima: `token.includes(alias)`,
+    // sottostringa a caso).
+    if (!aliases.some((a) => aliasMatchesTokens(a, [token]))) continue;
     for (const t of [concept, ...aliases]) add(t);
     for (const t of CONCEPT_KB_TERMS[concept] ?? []) add(t);
   }

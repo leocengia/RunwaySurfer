@@ -112,3 +112,52 @@ export function countKeywords(text: string, keywords: string[]): number {
   const hay = normalize(text);
   return keywords.reduce((score, kw) => score + (hay.includes(kw) ? 1 : 0), 0);
 }
+
+/** Un alias di una sola parola è "abbastanza lungo" da matchare anche come sottostringa. */
+const MIN_SUBSTRING_ALIAS_LENGTH = 5;
+
+/** Tokenizza un alias del vocabolario negli stessi termini di `wordsOf`/`matchedKeywords`. */
+function aliasTokens(alias: string): string[] {
+  return normalize(alias)
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+/**
+ * Un alias del vocabolario (lib/kb-vocab.ts, `INTENT_ALIASES`) combacia con
+ * `haystackTokens` a livello di TOKEN, mai di sottostringa senza controllo.
+ *
+ * Un alias di UNA parola combacia anche come sottostringa DI UN SOLO token più
+ * lungo, ma solo se l'alias ha almeno `MIN_SUBSTRING_ALIAS_LENGTH` caratteri: è la
+ * lunghezza a proteggere dai falsi positivi, non la posizione. `car` (3
+ * lettere) è sottostringa sia di `cercare` («devo **cer**car**e** la policy di
+ * emirates») sia di `Carrier` (*Low Cost **Carr**ier*, che significa
+ * "vettore", non "autonoleggio"): con `car` sotto soglia nessuna delle due
+ * scatta più. Ma la posizione da sola non basta a distinguere: `noleggio` (8
+ * lettere, sopra soglia) è un SUFFISSO di `autonoleggio` («contatti
+ * autonoleggio», dove l'alias italiano di *car* è `noleggio`), non un
+ * prefisso — un controllo "solo prefisso" perderebbe questo caso genuino
+ * insieme a quelli spuri. La lunghezza minima è quindi l'unico filtro: sotto
+ * soglia niente sottostringhe (comunque coperto da alias più espliciti, es.
+ * `bag`/`bags` elencati entrambi), sopra soglia la sottostringa è già
+ * abbastanza specifica da fidarsi. Un alias già lungo (`cancel`, 6 lettere)
+ * copre così anche `cancellazione`/`cancellato` senza doverli elencare uno per
+ * uno.
+ *
+ * Un alias di PIÙ parole (`check-in`) combacia solo come sequenza CONTIGUA di
+ * token, ognuno esatto — la lunghezza non c'entra, è già un confine di parola.
+ */
+export function aliasMatchesTokens(alias: string, haystackTokens: readonly string[]): boolean {
+  const parts = aliasTokens(alias);
+  if (!parts.length) return false;
+  if (parts.length === 1) {
+    const [needle] = parts;
+    return haystackTokens.some(
+      (t) => t === needle || (needle.length >= MIN_SUBSTRING_ALIAS_LENGTH && t.includes(needle)),
+    );
+  }
+  for (let i = 0; i + parts.length <= haystackTokens.length; i++) {
+    if (parts.every((part, j) => haystackTokens[i + j] === part)) return true;
+  }
+  return false;
+}

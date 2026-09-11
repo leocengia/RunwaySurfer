@@ -7,8 +7,14 @@
 import { withTimeout } from './abort';
 import type { KbLink, KbPage } from './outcome';
 import { extractPageText, hasRenderedContent } from './extract';
-import { matchedKeywords, normalize, unique, wordsOf } from './text';
-import { INTENT_ALIASES, KB_ACRONYMS, anchoredTermsInQuery, expandQueryTerms } from './kb-vocab';
+import { aliasMatchesTokens, matchedKeywords, normalize, unique, wordsOf } from './text';
+import {
+  INTENT_ALIASES,
+  KB_ACRONYMS,
+  anchoredTermsInQuery,
+  conceptsInQuery,
+  expandQueryTerms,
+} from './kb-vocab';
 import { nameInitials, rangeInitialBoost } from './kb-ranges';
 import { kbIndexAsLinks } from './kb-index';
 import { linkIdentity } from './site-profile';
@@ -59,13 +65,6 @@ function slugText(url: string): string {
   }
 }
 
-function queryConcepts(query: string): string[] {
-  const haystack = normalize(query).replace(/[^a-z0-9]+/g, ' ');
-  return Object.entries(INTENT_ALIASES)
-    .filter(([, aliases]) => aliases.some((alias) => haystack.includes(normalize(alias))))
-    .map(([concept]) => concept);
-}
-
 /**
  * Tutto ciò che dipende dalla SOLA query, calcolato una volta.
  *
@@ -104,16 +103,30 @@ function planQuery(query: string): QueryPlan | null {
     keywords,
     expansions,
     anchored: acronyms.length ? KB_ACRONYMS : undefined,
-    concepts: queryConcepts(query),
+    // Stessa funzione usata dal lato documento in conceptMatches() sotto (e da
+    // expandQueryTerms sopra): prima c'erano due copie byte-per-byte della
+    // stessa logica, una qui e una in lib/kb-vocab.ts, che giravano entrambe a
+    // ogni domanda.
+    concepts: conceptsInQuery(query),
     initials: nameInitials(query),
     phrase: cleanQuery.length >= 8 ? cleanQuery : '',
   };
 }
 
+/**
+ * Quali concetti già colpiti dalla query (vedi `conceptsInQuery`) compaiono
+ * anche in questo candidato — a livello di TOKEN (`aliasMatchesTokens`), mai
+ * di sottostringa a caso. È il lato PEGGIORE del difetto: a sottostringa,
+ * `car` ⊂ `Carrier` faceva scattare "car+policy intent" su «Flight Low Cost
+ * **Carr**ier LCC policy Global» — un articolo su un VETTORE aereo, non su un
+ * autonoleggio — seppellendo il match vero sotto quattro articoli sbagliati.
+ */
 function conceptMatches(text: string, concepts: string[]): string[] {
-  const haystack = normalize(text).replace(/[^a-z0-9]+/g, ' ');
+  const tokens = normalize(text)
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
   return concepts.filter((concept) =>
-    INTENT_ALIASES[concept].some((alias) => haystack.includes(normalize(alias))),
+    INTENT_ALIASES[concept].some((alias) => aliasMatchesTokens(alias, tokens)),
   );
 }
 

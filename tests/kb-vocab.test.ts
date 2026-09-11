@@ -17,6 +17,17 @@ describe('conceptsInQuery', () => {
   it('non inventa concetti su query fuori dominio', () => {
     expect(conceptsInQuery('meteo di domani')).toEqual([]);
   });
+
+  it('non fa scattare "car" su "cercare" (`car` è una sottostringa, non un token)', () => {
+    // Query reale del sondaggio (r2-g): «devo cercare la policy di emirates»
+    // attivava il concetto "autonoleggio" e seppelliva l'articolo giusto sotto
+    // quattro articoli di car rental.
+    expect(conceptsInQuery('devo cercare la policy di emirates')).not.toContain('car');
+  });
+
+  it('riconosce "autonoleggio" come concetto "car" (composto IT, l’alias è un suffisso)', () => {
+    expect(conceptsInQuery('contatti autonoleggio')).toContain('car');
+  });
 });
 
 describe('expandQueryTerms', () => {
@@ -85,8 +96,12 @@ describe('expandTerm · le espansioni di UN solo termine', () => {
   });
 
   it('riconosce il concetto dentro una forma flessa', () => {
-    // `cancel` è sottostringa di `cancellato`.
+    // `cancel` è sottostringa (≥5 caratteri) di `cancellato`.
     expect(expandTerm('cancellato')).toContain('cancelled');
+  });
+
+  it('non attribuisce "cercare" al concetto "car" (alias corto, coincidenza di sottostringa)', () => {
+    expect(expandTerm('cercare')).not.toContain('rental');
   });
 
   it('non restituisce il termine stesso', () => {

@@ -70,4 +70,32 @@ describe('pickRelevantLinks', () => {
     expect(picked[0].url).toBe(`${BASE}/Flight-refund-policy`);
     expect(picked[0].reason).toContain('intent');
   });
+
+  it('non fa scattare il concetto "car" su un titolo che contiene "Carrier" come sottostringa', () => {
+    // «Flight Low Cost Carrier LCC policy Global» è un articolo sui VETTORI
+    // aerei: `car` ⊂ `Carrier` non deve accreditargli il concetto "autonoleggio".
+    // Prova diretta del difetto: con la vecchia corrispondenza a sottostringa
+    // questo titolo batteva l'articolo giusto su «devo cercare la policy di
+    // emirates» (survey r2-g).
+    const links = [
+      link('Flight Low Cost Carrier LCC policy Global', `${BASE}/LCC-policy`),
+      link('Global airline schedule change policies E H', `${BASE}/Policies-E-H`, 'emirates ek'),
+    ];
+    const picked = pickRelevantLinks(links, 'devo cercare la policy di emirates', 2);
+    expect(picked[0].url).toBe(`${BASE}/Policies-E-H`);
+    const lcc = picked.find((l) => l.url === `${BASE}/LCC-policy`);
+    expect(lcc?.reason ?? '').not.toContain('car');
+  });
+
+  it('riconosce "autonoleggio" (composto IT, l\'alias è un suffisso) come concetto "car"', () => {
+    // Regressione presa dal guard di tests/rank-eval.test.ts: una regola
+    // "solo prefisso" perdeva questo caso genuino insieme a quelli spuri
+    // (vedi il commento di aliasMatchesTokens in lib/text.ts).
+    const links = [
+      link('Car rental companies contact information A D', `${BASE}/Car-contacts`),
+      link('Company history', `${BASE}/History`),
+    ];
+    const picked = pickRelevantLinks(links, 'contatti autonoleggio', 1);
+    expect(picked[0]?.url).toBe(`${BASE}/Car-contacts`);
+  });
 });
