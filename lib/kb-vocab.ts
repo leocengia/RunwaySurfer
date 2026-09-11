@@ -99,7 +99,17 @@ export const INTENT_ALIASES: Record<string, string[]> = {
   ],
 
   // --- Prodotti -------------------------------------------------------------
-  flight: ['flight', 'flights', 'airline', 'airfare', 'volo', 'voli', 'aereo', 'compagnia'],
+  flight: [
+    'flight',
+    'flights',
+    'airline',
+    'airfare',
+    'volo',
+    'voli',
+    'aereo',
+    'compagnia',
+    'compagnie',
+  ],
   schedule: [
     'schedule',
     'scheduling',
@@ -209,6 +219,7 @@ export const CARRIER_NAMES: Record<string, string> = {
   aa: 'american',
   af: 'airfrance',
   az: 'ita',
+  b6: 'jetblue', // 2 lettere+cifra: non collide con nessuna parola comune
   ba: 'britishairways',
   dl: 'delta',
   ek: 'emirates',
@@ -220,6 +231,14 @@ export const CARRIER_NAMES: Record<string, string> = {
   sn: 'brussels',
   tk: 'turkish',
   ua: 'united',
+  ws: 'westjet',
+  // NON aggiunti qui: `am` (Aeromexico) e `as` (Alaska) sono anche parole
+  // inglesi comunissime ("I **am**", "**as** soon as") e `ac` è un'abbreviazione
+  // diffusa (aria condizionata) — come chiave qui diventerebbero token bare che
+  // `acronymsInQuery` riconosce in QUALUNQUE query che li contenga per caso,
+  // alimentando sia `nameInitials` sia (via lib/kb-carriers.ts)
+  // DEDICATED_CARRIER_BOOST. Questi tre vettori restano riconoscibili solo per
+  // NOME (lib/kb-carriers.ts, CARRIER_RECOGNITION_ALIASES), mai per codice nudo.
 };
 
 /**

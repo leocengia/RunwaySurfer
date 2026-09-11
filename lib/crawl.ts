@@ -16,6 +16,7 @@ import {
   expandQueryTerms,
 } from './kb-vocab';
 import { nameInitials, rangeInitialBoost } from './kb-ranges';
+import { DEDICATED_CARRIER_BOOST, carriersInQuery, dedicatedCarrierArticles } from './kb-carriers';
 import { kbIndexAsLinks } from './kb-index';
 import { linkIdentity } from './site-profile';
 import type { RetrievalEvidence } from './query-quality';
@@ -83,6 +84,8 @@ interface QueryPlan {
   concepts: string[];
   /** Iniziali dei nomi cercati, per scegliere fra i fratelli di un intervallo. */
   initials: string[];
+  /** Codici IATA dei vettori DEDICATI (lib/kb-carriers.ts) nominati nella query. */
+  carriers: string[];
   /** Query normalizzata per `exactPhraseBoost`, o '' se troppo corta per contare. */
   phrase: string;
 }
@@ -109,6 +112,7 @@ function planQuery(query: string): QueryPlan | null {
     // ogni domanda.
     concepts: conceptsInQuery(query),
     initials: nameInitials(query),
+    carriers: carriersInQuery(query),
     phrase: cleanQuery.length >= 8 ? cleanQuery : '',
   };
 }
@@ -151,6 +155,16 @@ function scoreLink(
   const { keywords, expansions, anchored, concepts } = plan;
   const slug = slugText(link.url);
   const context = link.context ?? '';
+  // D1 · se la query nomina un vettore che ha un articolo DEDICATO
+  // (lib/kb-carriers.ts), quell'articolo vince — qualunque sia il tema. Non è
+  // un intervento nel calcolo lessicale, ma un bonus a sé: l'articolo
+  // dedicato spesso condivide poco testo con la query (il titolo è solo "X
+  // airline policies", il tema — riprotezione, cancellazione, rimborso — non
+  // ci compare).
+  const isDedicatedArticle =
+    plan.carriers.length > 0 &&
+    plan.carriers.some((code) => dedicatedCarrierArticles().get(code) === identityOf(link.url));
+  const dedicatedBoost = isDedicatedArticle ? DEDICATED_CARRIER_BOOST : 0;
   const combinedText = [link.text, slug, context].join(' ');
   const labelMatches = matchedKeywords(link.text, keywords, anchored);
   const slugMatches = matchedKeywords(slug, keywords, anchored);
@@ -180,14 +194,18 @@ function scoreLink(
     conceptHits.length * 3 +
     phrase;
   // A1 · fra i fratelli di un intervallo alfabetico, premia quello che copre
-  // l'iniziale cercata: `lufthansa` → `L` → `… policies I L`. SOLO come
-  // tie-break fra candidati che hanno già un aggancio lessicale: senza il
-  // gate `lexical > 0`, un'iniziale spuria (nomi propri riconosciuti troppo
-  // permissivamente da `nameInitials`) regalava punti a candidati a caso —
-  // misurato su query reali del sondaggio, vedi il commento a
-  // RANGE_INITIAL_BOOST in lib/kb-ranges.ts.
-  const rangeBoost = lexical > 0 ? rangeInitialBoost(link.text, plan.initials) : 0;
-  const score = lexical + rangeBoost - penalty;
+  // l'iniziale cercata: `lufthansa` → `L` → `… policies I L`. Si applica SOLO
+  // come tie-break fra candidati che hanno già un aggancio lessicale (senza il
+  // gate `lexical > 0`, un'iniziale spuria regalava punti a candidati a caso —
+  // vedi il commento a RANGE_INITIAL_BOOST in lib/kb-ranges.ts), E SOLO se la
+  // query non nomina un vettore con l'articolo dedicato: l'intervallo è il
+  // RIPIEGO per Emirates & co, non un canale concorrente per Lufthansa & co.
+  // Senza questa seconda condizione i fratelli a intervallo (che condividono
+  // "airline schedule change policies" con moltissime query) continuerebbero
+  // a competere sulla propria scala e a battere l'articolo dedicato.
+  const rangeBoost =
+    lexical > 0 && plan.carriers.length === 0 ? rangeInitialBoost(link.text, plan.initials) : 0;
+  const score = lexical + dedicatedBoost + rangeBoost - penalty;
   const matched = unique([
     ...labelMatches,
     ...slugMatches,
@@ -206,6 +224,7 @@ function scoreLink(
     !hits && expHits ? `${expHits} hit su sinonimi` : '',
     conceptHits.length ? `${conceptHits.join('+')} intent` : '',
     phrase ? 'frase query vicina' : '',
+    dedicatedBoost ? 'articolo dedicato al vettore' : '',
     rangeBoost ? 'intervallo alfabetico' : '',
     penalty ? `-${penalty} generico` : '',
   ]

@@ -1,17 +1,17 @@
 {
   "schema": "rs-rank-eval-baseline/1",
   "measuredAt": "2026-09-11",
-  "note": "Numeri del prefiltro locale il giorno in cui sono arrivate le etichette degli esperti (docs/Domande Agenti e match con la KB (compilato).docx), PRIMA di qualunque intervento sullo scorer. Si alza SOLO A MANO, nello stesso commit del miglioramento che la supera: tests/rank-eval.test.ts stampa il blocco pronto da incollare quando il misurato supera questa baseline — non la riscrive da solo.",
+  "note": "Numeri del prefiltro locale sulle 20 query vere del sondaggio, aggiornati a mano dopo ogni intervento sullo scorer che li supera (mai scritti automaticamente: tests/rank-eval.test.ts stampa solo il blocco pronto da incollare). Storia: baseline iniziale (prima di qualunque intervento) P@1 15%/recall@6 35%/MRR 0.24; dopo I2 (alias ancorati al token) invariata; dopo I0 (gate del bonus di intervallo + segnali adimensionali in query-quality) invariata; dopo I1 (articoli dedicati per vettore, lib/kb-carriers.ts, con DEDICATED_CARRIER_BOOST=20) P@1 55%/recall@6 80%/MRR 0.64 — il salto grosso, coerente con l'8/27 di risposte del sondaggio che puntano allo stesso articolo Lufthansa.",
   "tolerance": { "recall40": 0.05, "mrr": 0.03 },
   "groups": {
     "curated·survey-2026-08": {
       "n": 20,
-      "recall40": 0.65,
-      "recall6": 0.35,
-      "p1": 0.15,
-      "p3": 0.25,
-      "mrr": 0.2415,
-      "medianRank": 6
+      "recall40": 0.85,
+      "recall6": 0.8,
+      "p1": 0.55,
+      "p3": 0.7,
+      "mrr": 0.6356,
+      "medianRank": 1
     }
   }
 }
