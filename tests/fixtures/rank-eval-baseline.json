@@ -1,16 +1,16 @@
 {
   "schema": "rs-rank-eval-baseline/1",
   "measuredAt": "2026-09-11",
-  "note": "Numeri del prefiltro locale sulle 20 query vere del sondaggio, aggiornati a mano dopo ogni intervento sullo scorer che li supera (mai scritti automaticamente: tests/rank-eval.test.ts stampa solo il blocco pronto da incollare). Storia: baseline iniziale (prima di qualunque intervento) P@1 15%/recall@6 35%/MRR 0.24; dopo I2 (alias ancorati al token) invariata; dopo I0 (gate del bonus di intervallo + segnali adimensionali in query-quality) invariata; dopo I1 (articoli dedicati per vettore, lib/kb-carriers.ts, con DEDICATED_CARRIER_BOOST=20) P@1 55%/recall@6 80%/MRR 0.64 — il salto grosso, coerente con l'8/27 di risposte del sondaggio che puntano allo stesso articolo Lufthansa.",
+  "note": "Numeri del prefiltro locale sulle 20 query vere del sondaggio, aggiornati a mano dopo ogni intervento sullo scorer che li supera (mai scritti automaticamente: tests/rank-eval.test.ts stampa solo il blocco pronto da incollare). Storia: baseline iniziale (prima di qualunque intervento) P@1 15%/recall@6 35%/MRR 0.24; dopo I2 (alias ancorati al token) e I0 (gate del bonus di intervallo + segnali adimensionali in query-quality) invariata; dopo I1 (articoli dedicati per vettore, lib/kb-carriers.ts, DEDICATED_CARRIER_BOOST=20) P@1 55%/recall@6 80%/MRR 0.64 — il salto grosso, coerente con l'8/27 di risposte del sondaggio che puntano allo stesso articolo Lufthansa; dopo I4 (concetto handoff + ponte relocation→transfer/escalate/reservation/services, D6) P@1 65%/recall@6 90%/recall@40 100% — tutte le 20 query vere hanno la risposta in shortlist, resta solo il ranking fine a migliorare. Unico miss residuo fuori dai primi 6: r9-g 'pacchetti eu' (rank 22, tema pacchetti/EU, non toccato da I0-I4).",
   "tolerance": { "recall40": 0.05, "mrr": 0.03 },
   "groups": {
     "curated·survey-2026-08": {
       "n": 20,
-      "recall40": 0.85,
-      "recall6": 0.8,
-      "p1": 0.55,
-      "p3": 0.7,
-      "mrr": 0.6356,
+      "recall40": 1,
+      "recall6": 0.9,
+      "p1": 0.65,
+      "p3": 0.8,
+      "mrr": 0.7427,
       "medianRank": 1
     }
   }

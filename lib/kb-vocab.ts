@@ -97,6 +97,24 @@ export const INTENT_ALIASES: Record<string, string[]> = {
     'riproteggere',
     'ricollocazione',
   ],
+  // D6 del tuning: «trasferire a relocation», «quali sono tutti motivi di
+  // relocation» — la risposta è sempre l'articolo su A CHI passare il caso
+  // (When to transfer or escalate to Reservation Services), non un articolo
+  // SUL tema relocation. Concetto separato da `relocation` perché la domanda
+  // può nominare l'uno senza l'altro (vedi anche CONCEPT_KB_TERMS sotto, dove
+  // il ponte relocation→handoff è invece unidirezionale).
+  handoff: [
+    'transfer',
+    'transfers',
+    'escalate',
+    'escalation',
+    'trasferire',
+    'trasferimento',
+    'inoltrare',
+    // NON "passare"/"girare": verbi italiani troppo generici (passare il
+    // tempo, girare a destra…) — esattamente il tipo di falso positivo
+    // corretto altrove in questo stesso giro di tuning (D2, alias ancorati).
+  ],
 
   // --- Prodotti -------------------------------------------------------------
   flight: [
@@ -253,7 +271,14 @@ export const CARRIER_NAMES: Record<string, string> = {
  * il resto. Qui l'espansione va solo query → titoli.
  */
 export const CONCEPT_KB_TERMS: Record<string, string[]> = {
-  relocation: ['schedule', 'change', 'rebook'],
+  // "riprotezione"/"relocation" copre DUE famiglie di articoli reali: quelli
+  // sulla policy di schedule change (schedule/change/rebook, come prima) e
+  // quello su A CHI passare il caso — «When to transfer or escalate to
+  // Reservation Services» — da cui transfer/escalate/reservation/services.
+  // Verificato che nessuno dei quattro è generico nella KB (13-42 label su
+  // 2964): non diluisce le query che intendevano la prima famiglia.
+  relocation: ['schedule', 'change', 'rebook', 'transfer', 'escalate', 'reservation', 'services'],
+  handoff: ['transfer', 'escalate', 'reservation', 'services'],
   scenario: ['policies'],
 };
 
