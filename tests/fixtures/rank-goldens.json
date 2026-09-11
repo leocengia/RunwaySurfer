@@ -1,7 +1,7 @@
 {
-  "schema": "rs-rank-goldens/2",
+  "schema": "rs-rank-goldens/3",
   "note": "curated = casi reali (editati a mano); bootstrap = generato da build-rank-goldens.mjs",
-  "schemaNote": "Ogni golden ha `query` e almeno una risposta attesa: `expectedUrl` (una) oppure `expectedUrls` (più di una, per le richieste di elenco esaustivo — una risposta sola non basta a coprirle). Se ci sono entrambi, `expectedUrl` conta come primo elemento. Campo `note` opzionale per registrare perché una query è difficile. Le query del sondaggio agenti stanno in survey-queries-2026-08.json e vanno etichettate con docs/build-eval-report.mts.",
+  "schemaNote": "Ogni golden ha `query` e almeno una risposta attesa: `expectedUrl` (una) oppure `expectedUrls` (piu' di una, per le richieste di elenco esaustivo). Se ci sono entrambi, `expectedUrl` conta come primo elemento. `id`/`batch` tracciano la provenienza per gli ingest rieseguibili (docs/ingest-survey-labels.mjs), che possiede solo le entry col proprio `batch`. `rejected` sono le domande che gli esperti hanno dichiarato incomplete o senza senso: non entrano nelle metriche, restano per tarare in futuro un gate \"chiedi chiarimento\". Le query del sondaggio agenti stanno in survey-queries-2026-08.json.",
   "curated": [
     {
       "query": "quanto costa il bagaglio in aereo",
@@ -17,6 +17,170 @@
       "query": "il rimborso non è arrivato al cliente",
       "expectedUrl": "https://traveler.my.site.com/Runway/s/article/A-refund-or-exchange-did-not-go-through-1694551384872?language=en_US",
       "source": "curated"
+    },
+    {
+      "id": "r2-g",
+      "query": "devo cercare la policy di emirates",
+      "source": "curated",
+      "batch": "survey-2026-08",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Global-airline-schedule-change-policies-E-H?language=en_US",
+      "note": "L'esperto ha indicato il fragment \"#EK\": la risposta e' probabilmente una SEZIONE dentro un articolo che copre piu' vettori/temi (cfr. lib/kb-ranges.ts), non l'intero articolo. Articolo fuori dai 6 mostrati dal prefiltro."
+    },
+    {
+      "id": "r2-h",
+      "query": "posso riproteggere il cliente per un volo LH la prossima settimana?",
+      "source": "curated",
+      "batch": "survey-2026-08",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Lufthansa-LH-airline-policies-1694551662004?language=en_US",
+      "note": "Articolo fuori dai 6 mostrati dal prefiltro (risposta scritta in ALTRO)."
+    },
+    {
+      "id": "r3-g",
+      "query": "trasferire a relocation",
+      "source": "curated",
+      "batch": "survey-2026-08",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/When-to-transfer-or-escalate-to-Reservation-Services-RET-1694551637968?language=en_US",
+      "note": "Articolo fuori dai 6 mostrati dal prefiltro (risposta scritta in ALTRO)."
+    },
+    {
+      "id": "r3-h",
+      "query": "policy schedule change riprotezione lufthansa",
+      "source": "curated",
+      "batch": "survey-2026-08",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Lufthansa-LH-airline-policies-1694551662004?language=en_US",
+      "note": "Articolo fuori dai 6 mostrati dal prefiltro (risposta scritta in ALTRO)."
+    },
+    {
+      "id": "r3-i",
+      "query": "se un cliente hotels.com usa il coupon ha diritto all'accumulo della notte per tier?",
+      "source": "curated",
+      "batch": "survey-2026-08",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Coupon-promotions-for-Hotelscom-EMEA-1694551046011?language=en_US"
+    },
+    {
+      "id": "r4-g",
+      "query": "cercami policy compagnia lufthansa per cancellazione volo involontaria",
+      "source": "curated",
+      "batch": "survey-2026-08",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Lufthansa-LH-airline-policies-1694551662004?language=en_US",
+      "note": "Articolo fuori dai 6 mostrati dal prefiltro (risposta scritta in ALTRO)."
+    },
+    {
+      "id": "r4-h",
+      "query": "dimmi tutte le casistiche di riprotezione per volo cancellato da lufthansa",
+      "source": "curated",
+      "batch": "survey-2026-08",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Lufthansa-LH-airline-policies-1694551662004?language=en_US",
+      "note": "Articolo fuori dai 6 mostrati dal prefiltro (risposta scritta in ALTRO)."
+    },
+    {
+      "id": "r4-i",
+      "query": "elencami tutte le regole dei punti cash hotels.com",
+      "source": "curated",
+      "batch": "survey-2026-08",
+      "expectedUrls": [
+        "https://traveler.my.site.com/Runway/s/article/Hotels-com-Rewards-with-Hotels-comCash-Hub?language=en_US",
+        "https://traveler.my.site.com/Runway/s/article/Hotels-comCash-adjustment-reason-codes?language=en_US",
+        "https://traveler.my.site.com/Runway/s/article/Loyalty-Hotels-com-Rewards-with-Hotels-comCash-Adjust-Hotels-comCash-and-Nights?language=en_US",
+        "https://traveler.my.site.com/Runway/s/article/Loyalty-Hotels-com-Rewards-with-Hotels-comCash-Adjust-Tier-Status?language=en_US",
+        "https://traveler.my.site.com/Runway/s/article/Loyalty-Hotels-com-Rewards-with-Hotels-comCash-Compare-with-the-previous-program?language=en_US"
+      ]
+    },
+    {
+      "id": "r5-g",
+      "query": "quali sono tutti motivi di relocation?",
+      "source": "curated",
+      "batch": "survey-2026-08",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/When-to-transfer-or-escalate-to-Reservation-Services-RET-1694551637968?language=en_US",
+      "note": "Articolo fuori dai 6 mostrati dal prefiltro (risposta scritta in ALTRO)."
+    },
+    {
+      "id": "r5-h",
+      "query": "che volo posso scegliere a seguito di un asc lhg?",
+      "source": "curated",
+      "batch": "survey-2026-08",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Lufthansa-LH-airline-policies-1694551662004?language=en_US",
+      "note": "Articolo fuori dai 6 mostrati dal prefiltro (risposta scritta in ALTRO)."
+    },
+    {
+      "id": "r5-i",
+      "query": "mi spieghi chiaramente la policy asc lh?",
+      "source": "curated",
+      "batch": "survey-2026-08",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Lufthansa-LH-airline-policies-1694551662004?language=en_US"
+    },
+    {
+      "id": "r6-g",
+      "query": "policy compagnie emea",
+      "source": "curated",
+      "batch": "survey-2026-08",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/EMEA-Airline-schedule-change-policies-1694551028974?language=en_US"
+    },
+    {
+      "id": "r6-h",
+      "query": "contatti autonoleggio",
+      "source": "curated",
+      "batch": "survey-2026-08",
+      "expectedUrls": [
+        "https://traveler.my.site.com/Runway/s/article/Car-rental-companies-contact-information-A-D?language=en_US",
+        "https://traveler.my.site.com/Runway/s/article/Car-Contacts-Europcar?language=en_US",
+        "https://traveler.my.site.com/Runway/s/article/Car-Contacts-K-Q?language=en_US"
+      ]
+    },
+    {
+      "id": "r6-i",
+      "query": "compensazioni per reclami",
+      "source": "curated",
+      "batch": "survey-2026-08",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Compensation-Lodging-Complaints-Global-41156?language=en_US"
+    },
+    {
+      "id": "r8-g",
+      "query": "ASC lufthansa policy",
+      "source": "curated",
+      "batch": "survey-2026-08",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Lufthansa-LH-airline-policies-1694551662004?language=en_US",
+      "note": "Articolo fuori dai 6 mostrati dal prefiltro (risposta scritta in ALTRO)."
+    },
+    {
+      "id": "r9-g",
+      "query": "pacchetti eu",
+      "source": "curated",
+      "batch": "survey-2026-08",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Handle-non-EU-package-bookings?language=en_US",
+      "note": "Articolo fuori dai 6 mostrati dal prefiltro (risposta scritta in ALTRO)."
+    },
+    {
+      "id": "r9-h",
+      "query": "EU package bookings",
+      "source": "curated",
+      "batch": "survey-2026-08",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Handle-EU-package-bookings-1694551264742?language=en_US",
+      "note": "Duplicata nel sondaggio: id r9-h, r9-i sono la stessa domanda con la stessa risposta."
+    },
+    {
+      "id": "r10-g",
+      "query": "se la piscina dell'hotel è chiusa posso trasferire a relocation?",
+      "source": "curated",
+      "batch": "survey-2026-08",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/When-to-transfer-or-escalate-to-Reservation-Services-RET-1694551637968?language=en_US",
+      "note": "Articolo fuori dai 6 mostrati dal prefiltro (risposta scritta in ALTRO)."
+    },
+    {
+      "id": "r10-h",
+      "query": "posso rimborsare i posti a sedere con lufthansa per volo cancellato?",
+      "source": "curated",
+      "batch": "survey-2026-08",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Lufthansa-LH-airline-policies-1694551662004?language=en_US",
+      "note": "Articolo fuori dai 6 mostrati dal prefiltro (risposta scritta in ALTRO)."
+    },
+    {
+      "id": "r10-i",
+      "query": "se lufthansa modifica il numero di volo è considerato major schedule change?",
+      "source": "curated",
+      "batch": "survey-2026-08",
+      "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Lufthansa-LH-airline-policies-1694551662004?language=en_US",
+      "note": "Articolo fuori dai 6 mostrati dal prefiltro (risposta scritta in ALTRO)."
     }
   ],
   "bootstrap": [
@@ -169,6 +333,44 @@
       "query": "vrbo legal entity change faqs",
       "expectedUrl": "https://traveler.my.site.com/Runway/s/article/Vrbo-Legal-entity-change-FAQs?language=en_US",
       "source": "bootstrap"
+    }
+  ],
+  "rejected": [
+    {
+      "id": "r2-i",
+      "query": "posso procedere con il rimborso totale con i segmenti in TK?",
+      "verdict": "Domanda inappropriata",
+      "source": "survey-2026-08"
+    },
+    {
+      "id": "r7-g",
+      "query": "ndc",
+      "verdict": "La domanda non ha senso e vorrei conoscere il nome del mentecatto",
+      "source": "survey-2026-08"
+    },
+    {
+      "id": "r7-h",
+      "query": "ndc emea",
+      "verdict": "La domanda non ha senso e vorrei conoscere il nome del mentecatto",
+      "source": "survey-2026-08"
+    },
+    {
+      "id": "r7-i",
+      "query": "ndc refund",
+      "verdict": "La domanda non ha senso e vorrei conoscere il nome del mentecatto",
+      "source": "survey-2026-08"
+    },
+    {
+      "id": "r8-h",
+      "query": "WAIVER CODE FRO REFUND DUE TO ASC",
+      "verdict": "Domanda incompleta. Quale compagnia?",
+      "source": "survey-2026-08"
+    },
+    {
+      "id": "r8-i",
+      "query": "HEALTH AND SAFTY COMPLAIN HOW TO SOLVE",
+      "verdict": "Domanda no sense",
+      "source": "survey-2026-08"
     }
   ]
 }

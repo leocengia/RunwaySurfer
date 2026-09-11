@@ -69,24 +69,34 @@ function main() {
     bootstrap.push({ query, expectedUrl: a.u, source: 'bootstrap' });
   }
 
-  // Preserva la sezione curated esistente (editata a mano coi casi reali).
-  let curated = [];
+  // Preserva TUTTO il documento precedente: questo script POSSIEDE `bootstrap` e
+  // nient'altro.
+  //
+  // Prima si ricostruiva il documento da zero tenendo la sola `curated`, con lo
+  // `schema` cablato a /1. Una riesecuzione avrebbe quindi retrocesso lo schema,
+  // cancellato `schemaNote` e — da quando esiste — cancellato in SILENZIO la
+  // sezione `rejected` con le query che gli esperti hanno dichiarato non valide.
+  // Nessun test se ne sarebbe accorto, perché l'harness legge solo `curated` e
+  // `bootstrap`: il dato sarebbe sparito senza un rosso.
+  let prev = {};
   try {
-    const prev = JSON.parse(readFileSync(outPath, 'utf8'));
-    if (Array.isArray(prev.curated)) curated = prev.curated;
+    prev = JSON.parse(readFileSync(outPath, 'utf8'));
   } catch {
     /* primo run: nessun file precedente */
   }
 
   const doc = {
-    schema: 'rs-rank-goldens/1',
-    note: 'curated = casi reali (editati a mano); bootstrap = generato da build-rank-goldens.mjs',
-    curated,
+    // Valori usati SOLO al primo run: se il file esiste, vincono i suoi.
+    schema: 'rs-rank-goldens/2',
+    note: 'curated = casi reali (etichettati dagli esperti KB); bootstrap = generato da build-rank-goldens.mjs',
+    ...prev,
     bootstrap,
   };
   writeFileSync(outPath, JSON.stringify(doc, null, 2) + '\n');
+  const kept = Object.keys(doc).filter((k) => k !== 'bootstrap' && Array.isArray(doc[k]));
   console.log(
-    `scritte ${bootstrap.length} entry bootstrap (+${curated.length} curated) → ${outPath}`,
+    `scritte ${bootstrap.length} entry bootstrap → ${outPath}` +
+      (kept.length ? ` (preservate: ${kept.map((k) => `${k}=${doc[k].length}`).join(', ')})` : ''),
   );
 }
 

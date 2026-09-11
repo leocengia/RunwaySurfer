@@ -1,0 +1,17 @@
+{
+  "schema": "rs-rank-eval-baseline/1",
+  "measuredAt": "2026-09-11",
+  "note": "Numeri del prefiltro locale il giorno in cui sono arrivate le etichette degli esperti (docs/Domande Agenti e match con la KB (compilato).docx), PRIMA di qualunque intervento sullo scorer. Si alza SOLO A MANO, nello stesso commit del miglioramento che la supera: tests/rank-eval.test.ts stampa il blocco pronto da incollare quando il misurato supera questa baseline — non la riscrive da solo.",
+  "tolerance": { "recall40": 0.05, "mrr": 0.03 },
+  "groups": {
+    "curated·survey-2026-08": {
+      "n": 20,
+      "recall40": 0.65,
+      "recall6": 0.35,
+      "p1": 0.15,
+      "p3": 0.25,
+      "mrr": 0.2415,
+      "medianRank": 6
+    }
+  }
+}
