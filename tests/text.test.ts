@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { countKeywords, matchedKeywords, normalize, unique, wordsOf } from '../lib/text';
+import {
+  aliasMatchesTokens,
+  countKeywords,
+  matchedKeywords,
+  normalize,
+  unique,
+  wordsOf,
+} from '../lib/text';
 
 describe('normalize', () => {
   it('rimuove diacritici e porta in minuscolo', () => {
@@ -67,5 +74,37 @@ describe('countKeywords', () => {
 describe('unique', () => {
   it('rimuove i duplicati mantenendo l’ordine', () => {
     expect(unique([1, 2, 2, 3, 1])).toEqual([1, 2, 3]);
+  });
+});
+
+describe('aliasMatchesTokens', () => {
+  it('combacia su un token identico', () => {
+    expect(aliasMatchesTokens('car', ['book', 'car', 'rental'])).toBe(true);
+  });
+
+  it('un alias corto (<5) NON combacia come sottostringa di un token più lungo', () => {
+    // Il difetto dimostrato sui dati reali: `car` ⊂ `cercare` e `car` ⊂
+    // `carrier` sono coincidenze, non lo stesso concetto.
+    expect(aliasMatchesTokens('car', ['cercare'])).toBe(false);
+    expect(aliasMatchesTokens('car', ['carrier'])).toBe(false);
+  });
+
+  it('un alias lungo (>=5) combacia come sottostringa, in QUALSIASI posizione nel token', () => {
+    // Prefisso: `cancel` ⊂ `cancellazione`.
+    expect(aliasMatchesTokens('cancel', ['cancellazione'])).toBe(true);
+    // Suffisso: `noleggio` ⊂ `autonoleggio` — un composto italiano dove
+    // l'alias non è all'inizio del token. Regressione presa dal guard di
+    // tests/rank-eval.test.ts: una regola "solo prefisso" perdeva questo caso.
+    expect(aliasMatchesTokens('noleggio', ['autonoleggio'])).toBe(true);
+  });
+
+  it('un alias di più parole combacia solo come sequenza CONTIGUA di token esatti', () => {
+    expect(aliasMatchesTokens('check-in', ['il', 'check', 'in', 'linea'])).toBe(true);
+    expect(aliasMatchesTokens('check-in', ['check', 'qualcosa', 'in'])).toBe(false);
+  });
+
+  it('stringa vuota o whitespace non combacia mai', () => {
+    expect(aliasMatchesTokens('', ['car'])).toBe(false);
+    expect(aliasMatchesTokens('   ', ['car'])).toBe(false);
   });
 });

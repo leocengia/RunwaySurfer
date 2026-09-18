@@ -49,8 +49,44 @@ function readable(label: string): string {
   return label.replace(/\s+\d{10,}$/, '');
 }
 
-const alreadyLabelled = new Map(
-  [...goldens.curated, ...goldens.bootstrap].map((g) => [g.query.toLowerCase(), g.expectedUrl]),
+interface GoldenLike {
+  id?: string;
+  query: string;
+  expectedUrl?: string;
+  expectedUrls?: string[];
+}
+
+function expectedUrlsOf(g: GoldenLike): string[] {
+  return [...(g.expectedUrl ? [g.expectedUrl] : []), ...(g.expectedUrls ?? [])];
+}
+
+// Chiave per `id` quando c'è (le 20 query del sondaggio, da
+// docs/ingest-survey-labels.mjs), altrimenti per testo minuscolo (i 3 casi a
+// mano + i bootstrap, che non hanno `id`). Il testo NON basta da solo: Q23 e
+// Q24 del sondaggio sono entrambe «EU package bookings», stesso testo, id
+// diversi — chiavare solo sul testo le farebbe collidere in questa mappa, e la
+// seconda sovrascriverebbe silenziosamente la prima.
+const byId = new Map<string, string[]>();
+const byText = new Map<string, string[]>();
+for (const g of [...goldens.curated, ...goldens.bootstrap] as GoldenLike[]) {
+  const urls = expectedUrlsOf(g);
+  if (!urls.length) continue;
+  if (g.id) byId.set(g.id, urls);
+  byText.set(g.query.toLowerCase(), urls);
+}
+function alreadyLabelledUrls(q: SurveyQuery): string[] | undefined {
+  return byId.get(q.id) ?? byText.get(q.query.toLowerCase());
+}
+
+// Le query che gli esperti KB hanno dichiarato incomplete o senza senso
+// (docs/ingest-survey-labels.mjs, sezione `rejected`): non hanno una risposta
+// da mostrare, ma vale la pena dirlo — altrimenti chi rilegge il report si
+// chiede perché non sono mai state etichettate.
+const rejectedVerdictById = new Map<string, string>(
+  ((goldens as { rejected?: Array<{ id: string; verdict: string }> }).rejected ?? []).map((r) => [
+    r.id,
+    r.verdict,
+  ]),
 );
 
 const queries = survey.queries as SurveyQuery[];
@@ -111,9 +147,20 @@ for (const [i, q] of queries.entries()) {
     lines.push(`> ${q.note}`);
     lines.push('');
   }
-  const known = alreadyLabelled.get(q.query.toLowerCase());
-  if (known) {
-    lines.push(`> Già etichettata nei goldens: \`${known}\`.`);
+  const known = alreadyLabelledUrls(q);
+  if (known?.length) {
+    const label =
+      known.length > 1
+        ? 'Già etichettata nei goldens (più risposte attese)'
+        : 'Già etichettata nei goldens';
+    lines.push(`> ${label}: ${known.map((u) => `\`${u}\``).join(', ')}.`);
+    lines.push('');
+  }
+  const rejectedVerdict = rejectedVerdictById.get(q.id);
+  if (rejectedVerdict) {
+    lines.push(
+      `> Gli esperti KB hanno dichiarato questa domanda non valida: «${rejectedVerdict}».`,
+    );
     lines.push('');
   }
 

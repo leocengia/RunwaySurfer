@@ -12,14 +12,14 @@ import type {
   AskTurn,
   ScheduleChangeRequest,
 } from '../types.js';
-import { chooseModel, estimateTokens, estimateCostUsd } from '../router.js';
+import { chooseTier, estimateTokens, estimateCostUsd } from '../router.js';
 import {
   getProvider,
+  egressFor,
   buildSystemPrompt,
   buildUserContent,
   maxOutputTokens,
   systemPromptOptionsFor,
-  ANTHROPIC_EGRESS,
   ASSUMED_OUTPUT_TOKENS,
 } from '../provider/index.js';
 import { SCHEDULE_CHANGE_FIELDS } from '../shared-assets.js';
@@ -39,7 +39,7 @@ import {
   noteRequestForRateLimit,
 } from '../metrics.js';
 import { truncate, newRequestId } from '../util.js';
-import { ASK_PING_MS, MAX_QUERY_CHARS } from '../config.js';
+import { ASK_PING_MS, MAX_QUERY_CHARS, MODEL_REGISTRY } from '../config.js';
 
 /** Caratteri massimi per la risposta di un turno precedente rimandato al modello. */
 export const MAX_HISTORY_ANSWER_CHARS = 1_200;
@@ -205,7 +205,8 @@ const handleAsk = async (req: Request, res: Response): Promise<void> => {
   noteRequestForRateLimit(agentId);
 
   const provider = getProvider();
-  const { spec, reason } = chooseModel(request);
+  const { tier, reason } = chooseTier(request);
+  const spec = MODEL_REGISTRY[tier];
 
   // Il prompt viene renderizzato qui SOLO per la stima: essendo composto dalle
   // stesse funzioni che usa il provider, storico e form ci finiscono dentro da
@@ -232,7 +233,7 @@ const handleAsk = async (req: Request, res: Response): Promise<void> => {
     estimatedInputTokens,
     estimatedOutputTokens,
     estimatedCostUsd,
-    egress: ANTHROPIC_EGRESS,
+    egress: egressFor(provider.name),
     provider: provider.name,
     // Post-taglio: è il numero di turni davvero in contesto, non quello inviato.
     historyTurnsUsed: request.history?.length ?? 0,

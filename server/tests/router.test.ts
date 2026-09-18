@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MODELS, chooseModel, estimateTokens, estimateCostUsd } from '../src/router.js';
+import { ANTHROPIC_MODELS, chooseTier, estimateTokens, estimateCostUsd } from '../src/router.js';
 import type { AskRequest } from '../src/types.js';
 
 function req(pages: Array<{ chars: number }>, query = 'come cambio indirizzo?'): AskRequest {
@@ -24,43 +24,54 @@ describe('estimateTokens', () => {
   });
 });
 
-describe('chooseModel', () => {
-  it('sceglie il modello economico per 1 pagina piccola e query corta', () => {
-    const { spec, reason } = chooseModel(req([{ chars: 2000 }]));
-    expect(spec.id).toBe(MODELS.haiku.id);
+describe('chooseTier', () => {
+  it('sceglie la fascia economica per 1 pagina piccola e query corta', () => {
+    const { tier, reason } = chooseTier(req([{ chars: 2000 }]));
+    expect(tier).toBe('cheap');
+    expect(ANTHROPIC_MODELS[tier].id).toBe(ANTHROPIC_MODELS.cheap.id);
     expect(reason).toContain('semplice');
   });
 
-  it('sceglie il modello bilanciato per 2 pagine di contesto medio', () => {
-    const { spec } = chooseModel(req([{ chars: 6000 }, { chars: 6000 }]));
-    expect(spec.id).toBe(MODELS.sonnet.id);
+  it('sceglie la fascia bilanciata per 2 pagine di contesto medio', () => {
+    const { tier } = chooseTier(req([{ chars: 6000 }, { chars: 6000 }]));
+    expect(tier).toBe('balanced');
   });
 
-  it('sceglie il modello più capace per contesti grandi/multi-pagina', () => {
-    const { spec } = chooseModel(req([{ chars: 9000 }, { chars: 9000 }, { chars: 2000 }]));
-    expect(spec.id).toBe(MODELS.opus.id);
+  it('sceglie la fascia più capace per contesti grandi/multi-pagina', () => {
+    const { tier } = chooseTier(req([{ chars: 9000 }, { chars: 9000 }, { chars: 2000 }]));
+    expect(tier).toBe('capable');
   });
 
-  it('un follow di più pagine ma con contesto piccolo NON va su opus (profilo KB post-E2)', () => {
+  it('un follow di più pagine ma con contesto piccolo NON va sulla fascia capace (profilo KB post-E2)', () => {
     // Baseline reale Passa 7: dopo E2 anche un follow di 3-4 pagine porta solo
-    // ~8-12k char (~2-3k token). Non è "sintesi grande" → resta sonnet, non opus.
-    const { spec } = chooseModel(
+    // ~8-12k char (~2-3k token). Non è "sintesi grande" → resta balanced, non capable.
+    const { tier } = chooseTier(
       req([{ chars: 3000 }, { chars: 3000 }, { chars: 3000 }, { chars: 3000 }]),
     );
-    expect(spec.id).toBe(MODELS.sonnet.id);
+    expect(tier).toBe('balanced');
   });
 
-  it('una pagina singola piena (fino al cap ~6k char) resta sul modello economico', () => {
-    // MAX_PAGE_CHARS = 6.000: una pagina piena non deve scattare su sonnet solo
-    // perché sfiora il vecchio limite di 6.000.
-    const { spec } = chooseModel(req([{ chars: 6000 }]));
-    expect(spec.id).toBe(MODELS.haiku.id);
+  it('una pagina singola piena (fino al cap ~6k char) resta sulla fascia economica', () => {
+    // MAX_PAGE_CHARS = 6.000: una pagina piena non deve scattare su balanced
+    // solo perché sfiora il vecchio limite di 6.000.
+    const { tier } = chooseTier(req([{ chars: 6000 }]));
+    expect(tier).toBe('cheap');
   });
 
-  it('una query lunga esclude il modello economico anche su pagina singola', () => {
+  it('una query lunga esclude la fascia economica anche su pagina singola', () => {
     const longQuery = 'parola '.repeat(40); // > 40 token stimati
-    const { spec } = chooseModel(req([{ chars: 1000 }], longQuery));
-    expect(spec.id).toBe(MODELS.sonnet.id);
+    const { tier } = chooseTier(req([{ chars: 1000 }], longQuery));
+    expect(tier).toBe('balanced');
+  });
+
+  it("l'euristica di difficoltà non dipende dal registro modelli attivo", () => {
+    // chooseTier() non guarda MAI ANTHROPIC_MODELS/MODEL_REGISTRY: decide solo la
+    // fascia dalla forma della richiesta. Questa è l'invarianza che rende sicuro
+    // sostituire il modello concreto (env MODEL_*) senza toccare il router.
+    const a = chooseTier(req([{ chars: 2000 }]));
+    const b = chooseTier(req([{ chars: 2000 }]));
+    expect(a.tier).toBe(b.tier);
+    expect(a.tier).toBe('cheap');
   });
 });
 

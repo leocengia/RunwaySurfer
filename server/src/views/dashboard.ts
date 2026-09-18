@@ -2,7 +2,6 @@
 // arrivano da status.ts / db.ts, la logica delle route resta in routes/pages.ts.
 import { escapeHtml, percent } from './html.js';
 import { LOGO_MARK, THEME_CSS } from '../shared-assets.js';
-import { MODELS } from '../router.js';
 import {
   analyticsSummary,
   estimatedCostMonthToDate,
@@ -15,10 +14,28 @@ import {
   listUsers,
   sanitizeUser,
 } from '../db.js';
-import { USD_PER_EUR } from '../config.js';
+import { USD_PER_EUR, MODEL_REGISTRY } from '../config.js';
 import { estimatedCostEurThisMonth, metrics } from '../metrics.js';
 import { dashboardData } from '../status.js';
 import type { AuthContext } from '../auth.js';
+
+/** Configurazione REALMENTE attiva (non solo impostabile): id + prezzo per ciascuno dei 4 slot. */
+function modelRegistryRows(): string {
+  const rows: Array<[string, string]> = [
+    ['cheap', MODEL_REGISTRY.cheap.id],
+    ['balanced', MODEL_REGISTRY.balanced.id],
+    ['capable', MODEL_REGISTRY.capable.id],
+    ['rerank', MODEL_REGISTRY.rerank.id],
+  ];
+  return rows
+    .map(([slot, id]) => {
+      const spec = MODEL_REGISTRY[slot as keyof typeof MODEL_REGISTRY];
+      return `<div class="kv"><div class="k">${escapeHtml(slot)}</div><div class="v">${escapeHtml(
+        id,
+      )}<br />$${spec.inputPerMTok}/$${spec.outputPerMTok} per M tok (in/out)</div></div>`;
+    })
+    .join('');
+}
 
 function modelBars(): string {
   const summary = analyticsSummary();
@@ -26,7 +43,7 @@ function modelBars(): string {
   const total = byModel.reduce((sum, row) => sum + row.requests, 0);
   const rows = byModel.length
     ? byModel
-    : Object.values(MODELS).map((model) => ({ model: model.id, requests: 0 }));
+    : Object.values(MODEL_REGISTRY).map((model) => ({ model: model.id, requests: 0 }));
   return rows
     .map((row) => {
       const width = total ? Math.round((row.requests / total) * 100) : 0;
@@ -686,6 +703,11 @@ ${THEME_CSS}
       e <code>/extension-config</code>.</p>
       <p><a href="/metrics">Metrics</a> - <a href="/extension-config">Extension config</a></p>
       <p><a href="/dashboard-data">Apri JSON dashboard-data</a> · <a href="/health">Health</a> · <a href="/requirements">Requirements</a></p>
+    </section>
+    <section class="card" style="margin-top:12px">
+      <div class="label">Modelli per fascia (attivi)</div>
+      <p style="color:var(--rs-muted);font-size:12.5px;margin:8px 0 0">Provider attivo: <strong>${escapeHtml(data.provider)}</strong>. Configurabile via env <code>MODEL_CHEAP</code>/<code>MODEL_BALANCED</code>/<code>MODEL_CAPABLE</code>/<code>RANK_MODEL</code> (vedi docs/GUIDA-OPENROUTER.md).</p>
+      <div class="kv-grid" style="margin-top:10px">${modelRegistryRows()}</div>
     </section>
     <section class="card" style="margin-top:12px">
       <div class="label">Model distribution</div>

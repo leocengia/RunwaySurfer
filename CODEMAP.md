@@ -43,10 +43,12 @@ Pagina web KB
 | Pagine HTML (login/dashboard)            | `server/src/routes/pages.ts`, `server/src/views/`        | template dashboard e pagine auth                           |
 | Composizione app Express                 | `server/src/app.ts`                                      | middleware CORS/sicurezza, montaggio route                 |
 | Retention automatica dello storico       | `server/src/maintenance.ts`                              | job giornaliero `startMaintenanceScheduler()`              |
-| Scelta modello e costi                   | `server/src/router.ts`                                   | `MODELS`, `chooseModel()`, soglie token/pagine             |
+| Scelta fascia di difficoltà              | `server/src/router.ts`                                   | `chooseTier()`, soglie token/pagine                        |
+| Modello concreto per fascia/provider     | `server/src/model-registry.ts`                           | `resolveModelRegistry()`, env `MODEL_*`/`RANK_MODEL`       |
 | Prompt AI                                | `server/src/provider/shared.ts`                          | `buildSystemPrompt()`, `buildUserContent()`                |
 | Risposta demo/mock                       | `server/src/provider/mock.ts`                            | `buildOutcome()`                                           |
-| Provider AI reale                        | `server/src/provider/anthropic.ts`                       | `max_tokens`, parametri SDK, streaming                     |
+| Provider AI reale (Anthropic diretto)    | `server/src/provider/anthropic.ts`                       | `max_tokens`, parametri SDK, streaming                     |
+| Provider AI reale (OpenRouter)           | `server/src/provider/openrouter.ts`                      | idem, API Chat Completions compatibile OpenAI              |
 | Deploy container                         | `server/Dockerfile`                                      | immagine, porta, env default                               |
 | Deploy Linux systemd                     | `server/deploy/runwaysurfer.service`                     | path, utente, env file                                     |
 
@@ -175,6 +177,15 @@ Punti importanti:
   change» per esteso — cioè sotto l'espansione di ASC stesso. Il ponte IT→EN non
   ne soffre: in una query tutta italiana ogni match è un'espansione, quindi la
   scala è uniforme.
+- `scoreLink()`: calcola prima il punteggio **lessicale** puro (label/slug/
+  contesto/espansioni/concetti/frase), poi ci somma due bonus condizionati —
+  `dedicatedBoost` (lib/kb-carriers.ts, +20, se il candidato è l'articolo
+  dedicato a un vettore nominato nella query) e `rangeBoost`
+  (lib/kb-ranges.ts, +8, **solo se** `lexical > 0` **e** la query non nomina
+  un vettore dedicato — altrimenti i fratelli d'intervallo continuerebbero a
+  competere sulla propria scala e a battere l'articolo dedicato). Senza il
+  gate su `lexical`, un'iniziale spuria riconosciuta da `nameInitials()`
+  bastava a far comparire un candidato senza alcun match reale.
 - `pickRelevantLinks()`: sceglie i link piu rilevanti.
 - `shortlistCandidates()`: la shortlist ampia per il reranker, senza i gate di
   `dynamicSelection` — qui il prefiltro deve garantire il **recall**, non scegliere.
@@ -244,7 +255,11 @@ Il vecchio `index.ts` monolitico è stato spezzato:
   `bootstrapAdmin()`, scheduler di retention, `listen`.
 - `app.ts`: factory `createApp()` — CORS, header di sicurezza, montaggio route.
   Esportata senza `listen`, così i test la usano con supertest.
-- `config.ts`: variabili d'ambiente e costanti globali.
+- `config.ts`: variabili d'ambiente e costanti globali (include la risoluzione
+  di `AI_PROVIDER` e `MODEL_REGISTRY`, vedi `model-registry.ts` sotto).
+- `model-registry.ts`: risolve QUALE modello concreto risponde a ciascuna fascia
+  (`cheap`/`balanced`/`capable`) e allo slot del reranker, secondo il provider
+  attivo — `chooseTier()` in `router.ts` decide solo la fascia, mai il modello.
 - `metrics.ts`: metriche live in memoria + guardrail concorrenza/costo.
 - `status.ts`: `extensionConfig()` e `dashboardData()`.
 - `maintenance.ts`: job giornaliero di retention (storico + sessioni scadute).
@@ -257,9 +272,9 @@ Dentro `POST /ask` (`routes/ask.ts`) succede:
 ```text
 1. valida e sanifica il body (sanitizeRequest, esportata per i test)
 2. applica i guardrail (concorrenza, budget)
-3. sceglie modello e stima token/costo
+3. sceglie la fascia di difficoltà e risolve il modello concreto (MODEL_REGISTRY)
 4. manda evento plan
-5. streamma risposta (provider mock o anthropic)
+5. streamma risposta (provider mock, anthropic o openrouter)
 6. registra metrica live + storico SQLite
 ```
 
@@ -271,25 +286,32 @@ Variabili ambiente:
   la sidebar è un content script e in MV3 il suo fetch porta l'Origin della pagina).
   Parsing in `resolveAllowedOrigins` (`server/src/config.ts`), test in
   `server/tests/cors.test.ts`.
-- `AI_PROVIDER`: `mock` o `anthropic`.
-- `ANTHROPIC_API_KEY`: chiave provider reale, solo lato server.
+- `AI_PROVIDER`: `mock`, `anthropic` o `openrouter` (vedi `docs/GUIDA-OPENROUTER.md`).
+- `ANTHROPIC_API_KEY`: chiave provider Anthropic, solo lato server.
+- `OPENROUTER_API_KEY`: chiave provider OpenRouter, solo lato server.
+- `MODEL_CHEAP`/`MODEL_BALANCED`/`MODEL_CAPABLE` (+ `_INPUT_PER_MTOK`/`_OUTPUT_PER_MTOK`
+  per ciascuno) e `RANK_MODEL`: modello concreto per fascia/reranker. Facoltativi con
+  `anthropic`/`mock` (default: i tre Claude), OBBLIGATORI a terzetto con `openrouter`.
+  Risolti in `model-registry.ts`.
 
 ### `server/src/router.ts`
 
-Decide quale modello usare.
+Decide solo la **fascia di difficoltà**, mai il modello concreto (quello è
+`model-registry.ts`, sopra).
 
 Punti importanti:
 
-- `MODELS`: id modello e prezzi.
+- `ANTHROPIC_MODELS`: id modello e prezzi di default (usati da `anthropic`/`mock`,
+  e come fallback per lo slot `rerank`).
 - `estimateTokens()`: stima grezza caratteri/token.
-- `chooseModel()`: regole di routing.
-- `estimateCostUsd()`: stima costo.
+- `chooseTier()`: regole di routing → `ModelTier` (`'cheap'|'balanced'|'capable'`).
+- `estimateCostUsd()`: stima costo (generica, funziona con qualunque `ModelSpec`).
 
 Regole attuali:
 
-- richiesta semplice -> Haiku;
-- contesto medio -> Sonnet;
-- sintesi multipagina/grande -> Opus.
+- richiesta semplice -> fascia `cheap`;
+- contesto medio -> fascia `balanced`;
+- sintesi multipagina/grande -> fascia `capable`.
 
 ### `server/src/provider/shared.ts`
 
@@ -370,6 +392,36 @@ Qui si modificano:
   far leggere una pagina non richiesta. Su errore la rotta `/rank` risponde
   `{selectedUrls: []}` e il client ricade sullo scoring locale.
 
+### `server/src/provider/openrouter.ts`
+
+Provider alternativo: stessa interfaccia `AiProvider` di `anthropic.ts`, ma sopra l'API Chat
+Completions (compatibile OpenAI) che OpenRouter espone per qualunque modello del suo catalogo
+(Anthropic, OpenAI, Google, Meta...). Vedi `docs/GUIDA-OPENROUTER.md`.
+
+Usato solo con:
+
+```bash
+AI_PROVIDER=openrouter
+OPENROUTER_API_KEY=...
+MODEL_CHEAP=... (+ prezzi)
+MODEL_BALANCED=... (+ prezzi)
+MODEL_CAPABLE=... (+ prezzi)
+```
+
+Differenze rispetto ad `anthropic.ts`:
+
+- nessun equivalente di `cache_control` (prompt caching) o `effort` (sforzo del ragionamento):
+  meccanismi specifici Anthropic, non parte dell'API Chat Completions;
+- `tool_choice` forzato sul reranker (`select_articles`) può essere ignorato da un modello
+  arbitrario del catalogo — non è un rischio di sicurezza (`parseRankSelection` scarta comunque
+  ogni id non tra i candidati), ma `assertToolCallPresent()` lo rende un **errore visibile**
+  invece di una degradazione silenziosa a `[]`, osservabile via `GET
+/requests?kind=rank&status=error`.
+
+Funzioni pure esportate (testabili senza mock dell'SDK, `tests/provider-openrouter.test.ts`):
+`usageFromCompletion`, `truncatedFromCompletion`, `firstToolCallArguments`,
+`assertToolCallPresent`.
+
 ## Asset condivisi (`shared/`)
 
 Un solo posto per ciò che serve a più superfici. Il server non può importarli
@@ -397,16 +449,29 @@ Un solo posto per ciò che serve a più superfici. Il server non può importarli
   `cleanKbLabel()` ripara le 14 label con mojibake **senza toccare URL e slug**:
   quella `â` è un em-dash che Salesforce ha mal codificato nello slug stesso, e
   l'URL reale contiene `%C3%A2`. Riscriverlo romperebbe il link.
-- `lib/kb-ranges.ts` — la KB archivia i vettori per **intervallo alfabetico**
-  (`Global airline schedule change policies I L`), e il nome cercato non compare
-  nel titolo: 48 articoli in 21 famiglie. `parseKbRange()` scompone la label in
+- `lib/kb-ranges.ts` — RIPIEGO per i vettori senza articolo dedicato
+  (lib/kb-carriers.ts): la KB archivia questi per **intervallo alfabetico**
+  (`Global airline schedule change policies E H` per Emirates), e il nome
+  cercato non compare nel titolo. `parseKbRange()` scompone la label in
   famiglia + estremi (scartando gli intervalli discendenti, che sono i due falsi
   positivi reali dell'indice: «only U S» e «team S O»); `nameInitials()` ricava
   l'iniziale del nome cercato — anche da un codice vettore, `TK` → _turkish_ →
-  `T` — e `rangeInitialBoost()` premia il fratello che la copre. Additivo: nessun
-  candidato può uscire dalla shortlist per colpa sua, quindi il caso peggiore è
-  il comportamento precedente. Conta soprattutto sul percorso **locale**, quando
-  `/rank` scade e non c'è alcuna AI a scegliere il fratello giusto.
+  `T` — scartando anche `NON_NAME_WORDS`, parole italiane comuni che altrimenti
+  passerebbero per nomi propri; `rangeInitialBoost()` premia il fratello che la
+  copre. Additivo: nessun candidato può uscire dalla shortlist per colpa sua.
+  In `lib/crawl.ts` si applica solo se il candidato ha già un match lessicale
+  vero E la query non nomina un vettore con articolo dedicato — altrimenti un
+  fratello d'intervallo continuerebbe a competere con l'articolo giusto.
+  Conta soprattutto sul percorso **locale**, quando `/rank` scade e non c'è
+  alcuna AI a scegliere il fratello giusto.
+- `lib/kb-carriers.ts` — la KB ha 10 pagine dedicate "`<Nome> <IATA> airline
+policies`" (Lufthansa, Delta, United…): quando la query nomina uno di questi
+  vettori, quell'articolo vince — qualunque sia il tema (riprotezione,
+  cancellazione, rimborso…), coerente con le etichette reali degli esperti KB.
+  La tabella si deriva dall'indice via pattern sulla label, non è scritta a
+  mano. `carriersInQuery()` riconosce ogni vettore per nome sempre, e per
+  codice nudo solo quando il codice non collide con parole inglesi/italiane
+  comuni (`am`/`as`/`ac` sono esclusi dal riconoscimento per codice nudo).
 - `lib/off-topic.ts` — `isOffTopic()`: la domanda c'entra con la pagina aperta? Due
   segnali, entrambi necessari: bassa copertura dei termini **e** un candidato che
   batte la pagina secondo lo stesso scorer. Serve a evitare la risposta
@@ -477,11 +542,14 @@ Il canale che dice se il prodotto funziona davvero, che i test non possono dare.
   `lib/crawl.ts`), non contando le parole: la versione a conteggio dava il
   verdetto rovesciato sulle query vere — segnalava `relocation`, che di candidati
   ne ha 323, e taceva su `booking refund`, che ne ha 479. Segnala due casi solo,
-  quelli che l'evidenza sostiene: zero candidati, e nessun titolo che contenga i
-  termini (il caso dei refusi, `SAFTY` arriva a 4 su una soglia di 5). Non prova
-  a segnalare `tier`, che è un disallineamento di significato — l'agente intende
-  i livelli fedeltà, la KB l'escalation interna — e che dall'evidenza appare
-  identico a `ndc`, che invece è preciso.
+  quelli che l'evidenza sostiene, con tre segnali ADIMENSIONALI (non più una
+  soglia sul punteggio, che con l'IDF non avrebbe più una scala fissa):
+  `!hasTerms` (nessun termine di contenuto, `"e poi?"`), `candidates === 0`
+  (il caso dei refusi, es. `SAFTY`), `titleHits === 0` (candidati solo da
+  slug/contesto, mai dal titolo). Non prova a segnalare `tier`, che è un
+  disallineamento di significato — l'agente intende i livelli fedeltà, la KB
+  l'escalation interna — e che dall'evidenza appare identico a `ndc`, che
+  invece è preciso.
 - `AiPlan.requestId` (`shared/contracts.d.ts`) esiste solo per legare un feedback
   alla riga di audit. Va generato **prima** della costruzione del plan in
   `routes/ask.ts`.
@@ -528,10 +596,13 @@ Il canale che dice se il prodotto funziona davvero, che i test non possono dare.
 
 ### Cambiare strategia costi/modelli
 
-1. Apri `server/src/router.ts`.
-2. Aggiorna `MODELS`.
-3. Cambia soglie in `chooseModel()`.
-4. Verifica che `server/src/provider/anthropic.ts` supporti gli id modello scelti.
+1. Per cambiare QUALE modello risponde a una fascia (senza toccare l'euristica): imposta
+   `MODEL_CHEAP`/`MODEL_BALANCED`/`MODEL_CAPABLE`/`RANK_MODEL` (+ prezzi) in `.env` — vedi
+   `server/src/model-registry.ts` e `docs/GUIDA-OPENROUTER.md`. Nessun codice da toccare.
+2. Per cambiare QUANDO si passa da una fascia all'altra: apri `server/src/router.ts` e cambia le
+   soglie in `chooseTier()`.
+3. Per cambiare i default usati senza nessuna env impostata: aggiorna `ANTHROPIC_MODELS` in
+   `server/src/router.ts`.
 
 ### Migliorare lettura pagine
 
@@ -605,7 +676,8 @@ Quando devi capire dove intervenire:
 - problema connessione backend -> `lib/client.ts` e `lib/messaging.ts`;
 - problema risposta AI -> `server/src/provider/shared.ts`;
 - problema demo mock -> `server/src/provider/mock.ts`;
-- problema modello/costo -> `server/src/router.ts`;
+- problema fascia di difficoltà -> `server/src/router.ts`;
+- problema quale modello/prezzo è attivo -> `server/src/model-registry.ts` e `.env` (`MODEL_*`);
 - problema deploy -> `server/Dockerfile` o `server/deploy/runwaysurfer.service`.
 
 ## Aggiornamento Backend SQL / Dashboard

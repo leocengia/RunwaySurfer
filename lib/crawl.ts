@@ -7,9 +7,16 @@
 import { withTimeout } from './abort';
 import type { KbLink, KbPage } from './outcome';
 import { extractPageText, hasRenderedContent } from './extract';
-import { matchedKeywords, normalize, unique, wordsOf } from './text';
-import { INTENT_ALIASES, KB_ACRONYMS, anchoredTermsInQuery, expandQueryTerms } from './kb-vocab';
+import { aliasMatchesTokens, matchedKeywords, normalize, unique, wordsOf } from './text';
+import {
+  INTENT_ALIASES,
+  KB_ACRONYMS,
+  anchoredTermsInQuery,
+  conceptsInQuery,
+  expandQueryTerms,
+} from './kb-vocab';
 import { nameInitials, rangeInitialBoost } from './kb-ranges';
+import { DEDICATED_CARRIER_BOOST, carriersInQuery, dedicatedCarrierArticles } from './kb-carriers';
 import { kbIndexAsLinks } from './kb-index';
 import { linkIdentity } from './site-profile';
 import type { RetrievalEvidence } from './query-quality';
@@ -59,13 +66,6 @@ function slugText(url: string): string {
   }
 }
 
-function queryConcepts(query: string): string[] {
-  const haystack = normalize(query).replace(/[^a-z0-9]+/g, ' ');
-  return Object.entries(INTENT_ALIASES)
-    .filter(([, aliases]) => aliases.some((alias) => haystack.includes(normalize(alias))))
-    .map(([concept]) => concept);
-}
-
 /**
  * Tutto ciò che dipende dalla SOLA query, calcolato una volta.
  *
@@ -84,6 +84,8 @@ interface QueryPlan {
   concepts: string[];
   /** Iniziali dei nomi cercati, per scegliere fra i fratelli di un intervallo. */
   initials: string[];
+  /** Codici IATA dei vettori DEDICATI (lib/kb-carriers.ts) nominati nella query. */
+  carriers: string[];
   /** Query normalizzata per `exactPhraseBoost`, o '' se troppo corta per contare. */
   phrase: string;
 }
@@ -104,16 +106,31 @@ function planQuery(query: string): QueryPlan | null {
     keywords,
     expansions,
     anchored: acronyms.length ? KB_ACRONYMS : undefined,
-    concepts: queryConcepts(query),
+    // Stessa funzione usata dal lato documento in conceptMatches() sotto (e da
+    // expandQueryTerms sopra): prima c'erano due copie byte-per-byte della
+    // stessa logica, una qui e una in lib/kb-vocab.ts, che giravano entrambe a
+    // ogni domanda.
+    concepts: conceptsInQuery(query),
     initials: nameInitials(query),
+    carriers: carriersInQuery(query),
     phrase: cleanQuery.length >= 8 ? cleanQuery : '',
   };
 }
 
+/**
+ * Quali concetti già colpiti dalla query (vedi `conceptsInQuery`) compaiono
+ * anche in questo candidato — a livello di TOKEN (`aliasMatchesTokens`), mai
+ * di sottostringa a caso. È il lato PEGGIORE del difetto: a sottostringa,
+ * `car` ⊂ `Carrier` faceva scattare "car+policy intent" su «Flight Low Cost
+ * **Carr**ier LCC policy Global» — un articolo su un VETTORE aereo, non su un
+ * autonoleggio — seppellendo il match vero sotto quattro articoli sbagliati.
+ */
 function conceptMatches(text: string, concepts: string[]): string[] {
-  const haystack = normalize(text).replace(/[^a-z0-9]+/g, ' ');
+  const tokens = normalize(text)
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
   return concepts.filter((concept) =>
-    INTENT_ALIASES[concept].some((alias) => haystack.includes(normalize(alias))),
+    INTENT_ALIASES[concept].some((alias) => aliasMatchesTokens(alias, tokens)),
   );
 }
 
@@ -134,10 +151,20 @@ function genericPenalty(link: KbLink): number {
 function scoreLink(
   link: KbLink,
   plan: QueryPlan,
-): { score: number; reason: string; matched: string[] } {
+): { score: number; reason: string; matched: string[]; titleHit: boolean } {
   const { keywords, expansions, anchored, concepts } = plan;
   const slug = slugText(link.url);
   const context = link.context ?? '';
+  // D1 · se la query nomina un vettore che ha un articolo DEDICATO
+  // (lib/kb-carriers.ts), quell'articolo vince — qualunque sia il tema. Non è
+  // un intervento nel calcolo lessicale, ma un bonus a sé: l'articolo
+  // dedicato spesso condivide poco testo con la query (il titolo è solo "X
+  // airline policies", il tema — riprotezione, cancellazione, rimborso — non
+  // ci compare).
+  const isDedicatedArticle =
+    plan.carriers.length > 0 &&
+    plan.carriers.some((code) => dedicatedCarrierArticles().get(code) === identityOf(link.url));
+  const dedicatedBoost = isDedicatedArticle ? DEDICATED_CARRIER_BOOST : 0;
   const combinedText = [link.text, slug, context].join(' ');
   const labelMatches = matchedKeywords(link.text, keywords, anchored);
   const slugMatches = matchedKeywords(slug, keywords, anchored);
@@ -147,11 +174,11 @@ function scoreLink(
   const contextExp = matchedKeywords(context, expansions, anchored);
   const conceptHits = conceptMatches(combinedText, concepts);
   const phrase = exactPhraseBoost(link, plan.phrase);
-  // A1 · fra i fratelli di un intervallo alfabetico, premia quello che copre
-  // l'iniziale cercata: `lufthansa` → `L` → `… policies I L`.
-  const rangeBoost = rangeInitialBoost(link.text, plan.initials);
   const penalty = genericPenalty(link);
-  const score =
+  // Punteggio lessicale puro: tutto ciò che viene da un match vero (parola,
+  // espansione, concetto, frase). Calcolato PRIMA del bonus di intervallo, che
+  // ne dipende — vedi sotto.
+  const lexical =
     labelMatches.length * 5 +
     slugMatches.length * 3 +
     contextMatches.length * 1.5 +
@@ -165,9 +192,20 @@ function scoreLink(
     slugExp.length * 1.8 +
     contextExp.length * 0.9 +
     conceptHits.length * 3 +
-    phrase +
-    rangeBoost -
-    penalty;
+    phrase;
+  // A1 · fra i fratelli di un intervallo alfabetico, premia quello che copre
+  // l'iniziale cercata: `lufthansa` → `L` → `… policies I L`. Si applica SOLO
+  // come tie-break fra candidati che hanno già un aggancio lessicale (senza il
+  // gate `lexical > 0`, un'iniziale spuria regalava punti a candidati a caso —
+  // vedi il commento a RANGE_INITIAL_BOOST in lib/kb-ranges.ts), E SOLO se la
+  // query non nomina un vettore con l'articolo dedicato: l'intervallo è il
+  // RIPIEGO per Emirates & co, non un canale concorrente per Lufthansa & co.
+  // Senza questa seconda condizione i fratelli a intervallo (che condividono
+  // "airline schedule change policies" con moltissime query) continuerebbero
+  // a competere sulla propria scala e a battere l'articolo dedicato.
+  const rangeBoost =
+    lexical > 0 && plan.carriers.length === 0 ? rangeInitialBoost(link.text, plan.initials) : 0;
+  const score = lexical + dedicatedBoost + rangeBoost - penalty;
   const matched = unique([
     ...labelMatches,
     ...slugMatches,
@@ -186,12 +224,21 @@ function scoreLink(
     !hits && expHits ? `${expHits} hit su sinonimi` : '',
     conceptHits.length ? `${conceptHits.join('+')} intent` : '',
     phrase ? 'frase query vicina' : '',
+    dedicatedBoost ? 'articolo dedicato al vettore' : '',
     rangeBoost ? 'intervallo alfabetico' : '',
     penalty ? `-${penalty} generico` : '',
   ]
     .filter(Boolean)
     .join(', ');
-  return { score, reason: reason || 'nessuna corrispondenza', matched };
+  return {
+    score,
+    reason: reason || 'nessuna corrispondenza',
+    matched,
+    // Per assessQuery (A4): ha questo candidato un hit nel TITOLO (diretto o
+    // per espansione)? Distinto da "matched" perché lì slug/contesto/concetti
+    // sarebbero indistinguibili da un hit sul titolo — vedi lib/query-quality.ts.
+    titleHit: labelMatches.length > 0 || labelExp.length > 0,
+  };
 }
 
 function dynamicSelection(
@@ -223,7 +270,7 @@ function dynamicSelection(
 function scoreAll(
   links: KbLink[],
   query: string,
-): Array<{ link: KbLink; score: number; order: number }> {
+): Array<{ link: KbLink; score: number; order: number; titleHit: boolean }> {
   const plan = planQuery(query);
   if (!plan) return [];
   return links.map((link, fallbackOrder) => {
@@ -237,6 +284,7 @@ function scoreAll(
       },
       score: result.score,
       order: link.order ?? fallbackOrder,
+      titleHit: result.titleHit,
     };
   });
 }
@@ -319,8 +367,13 @@ export function retrievalEvidence(pageLinks: KbLink[], query: string): Retrieval
   const indexOnly = index.filter((l) => !pageIds.has(identityOf(l.url)));
   const scored = scoreAll([...pageLinks, ...indexOnly], query).filter((x) => x.score > 0);
   return {
+    // planQuery(query) === null quando la query non produce nemmeno un
+    // termine/acronimo utilizzabile ("e poi?", "???"): un fatto della QUERY,
+    // indipendente da cosa il corpus contiene.
+    hasTerms: planQuery(query) !== null,
     candidates: scored.length,
     topScore: scored.reduce((max, x) => Math.max(max, x.score), 0),
+    titleHits: scored.filter((x) => x.titleHit).length,
   };
 }
 

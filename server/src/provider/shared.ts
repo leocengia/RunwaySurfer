@@ -9,6 +9,9 @@ import type { AnswerLanguage, AskTurn, KbPage, KbLink, ScheduleChangeRequest } f
 /** The network endpoint the backend contacts for a real call, shown to the CED. */
 export const ANTHROPIC_EGRESS = 'api.anthropic.com:443';
 
+/** Idem, per il provider OpenRouter (endpoint unico per qualunque modello del catalogo). */
+export const OPENROUTER_EGRESS = 'openrouter.ai:443';
+
 /**
  * Conservative assumed output size for cost estimation. Il provider reale
  * limita max_tokens a ~400-900 (vedi anthropic.ts): 500 è una stima centrale.
@@ -71,7 +74,7 @@ export interface RankResult {
 }
 
 export interface AiProvider {
-  readonly name: 'mock' | 'anthropic';
+  readonly name: 'mock' | 'anthropic' | 'openrouter';
   /**
    * Stream the operational outcome as markdown, chunk by chunk. Ritorna gli
    * eventuali token reali del provider (assenti sul mock).

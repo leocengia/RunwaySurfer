@@ -11,7 +11,7 @@
 // PRIMO alias di ogni concetto = termine EN canonico (usato per l'espansione
 // cross-lingua della query, vedi expandQueryTerms).
 
-import { normalize, unique } from './text';
+import { aliasMatchesTokens, normalize, unique } from './text';
 
 export const INTENT_ALIASES: Record<string, string[]> = {
   // --- Azioni sul viaggio ---------------------------------------------------
@@ -97,9 +97,37 @@ export const INTENT_ALIASES: Record<string, string[]> = {
     'riproteggere',
     'ricollocazione',
   ],
+  // D6 del tuning: «trasferire a relocation», «quali sono tutti motivi di
+  // relocation» — la risposta è sempre l'articolo su A CHI passare il caso
+  // (When to transfer or escalate to Reservation Services), non un articolo
+  // SUL tema relocation. Concetto separato da `relocation` perché la domanda
+  // può nominare l'uno senza l'altro (vedi anche CONCEPT_KB_TERMS sotto, dove
+  // il ponte relocation→handoff è invece unidirezionale).
+  handoff: [
+    'transfer',
+    'transfers',
+    'escalate',
+    'escalation',
+    'trasferire',
+    'trasferimento',
+    'inoltrare',
+    // NON "passare"/"girare": verbi italiani troppo generici (passare il
+    // tempo, girare a destra…) — esattamente il tipo di falso positivo
+    // corretto altrove in questo stesso giro di tuning (D2, alias ancorati).
+  ],
 
   // --- Prodotti -------------------------------------------------------------
-  flight: ['flight', 'flights', 'airline', 'airfare', 'volo', 'voli', 'aereo', 'compagnia'],
+  flight: [
+    'flight',
+    'flights',
+    'airline',
+    'airfare',
+    'volo',
+    'voli',
+    'aereo',
+    'compagnia',
+    'compagnie',
+  ],
   schedule: [
     'schedule',
     'scheduling',
@@ -209,6 +237,7 @@ export const CARRIER_NAMES: Record<string, string> = {
   aa: 'american',
   af: 'airfrance',
   az: 'ita',
+  b6: 'jetblue', // 2 lettere+cifra: non collide con nessuna parola comune
   ba: 'britishairways',
   dl: 'delta',
   ek: 'emirates',
@@ -220,6 +249,14 @@ export const CARRIER_NAMES: Record<string, string> = {
   sn: 'brussels',
   tk: 'turkish',
   ua: 'united',
+  ws: 'westjet',
+  // NON aggiunti qui: `am` (Aeromexico) e `as` (Alaska) sono anche parole
+  // inglesi comunissime ("I **am**", "**as** soon as") e `ac` è un'abbreviazione
+  // diffusa (aria condizionata) — come chiave qui diventerebbero token bare che
+  // `acronymsInQuery` riconosce in QUALUNQUE query che li contenga per caso,
+  // alimentando sia `nameInitials` sia (via lib/kb-carriers.ts)
+  // DEDICATED_CARRIER_BOOST. Questi tre vettori restano riconoscibili solo per
+  // NOME (lib/kb-carriers.ts, CARRIER_RECOGNITION_ALIASES), mai per codice nudo.
 };
 
 /**
@@ -234,15 +271,28 @@ export const CARRIER_NAMES: Record<string, string> = {
  * il resto. Qui l'espansione va solo query → titoli.
  */
 export const CONCEPT_KB_TERMS: Record<string, string[]> = {
-  relocation: ['schedule', 'change', 'rebook'],
+  // "riprotezione"/"relocation" copre DUE famiglie di articoli reali: quelli
+  // sulla policy di schedule change (schedule/change/rebook, come prima) e
+  // quello su A CHI passare il caso — «When to transfer or escalate to
+  // Reservation Services» — da cui transfer/escalate/reservation/services.
+  // Verificato che nessuno dei quattro è generico nella KB (13-42 label su
+  // 2964): non diluisce le query che intendevano la prima famiglia.
+  relocation: ['schedule', 'change', 'rebook', 'transfer', 'escalate', 'reservation', 'services'],
+  handoff: ['transfer', 'escalate', 'reservation', 'services'],
   scenario: ['policies'],
 };
 
-/** Concetti i cui alias (EN o IT) compaiono nella query normalizzata. */
+/**
+ * Concetti i cui alias (EN o IT) compaiono nella query, a livello di TOKEN
+ * (vedi `aliasMatchesTokens`) — non di sottostringa: «devo **cer**car**e** la
+ * policy di emirates» non deve più attivare il concetto `car`.
+ */
 export function conceptsInQuery(query: string): string[] {
-  const hay = normalize(query).replace(/[^a-z0-9]+/g, ' ');
+  const tokens = normalize(query)
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
   return Object.entries(INTENT_ALIASES)
-    .filter(([, aliases]) => aliases.some((a) => hay.includes(normalize(a))))
+    .filter(([, aliases]) => aliases.some((a) => aliasMatchesTokens(a, tokens)))
     .map(([concept]) => concept);
 }
 
@@ -296,7 +346,11 @@ export function expandTerm(term: string): string[] {
     if (t.length > 3 && t !== token) out.add(t);
   };
   for (const [concept, aliases] of Object.entries(INTENT_ALIASES)) {
-    if (!aliases.some((a) => token.includes(normalize(a)))) continue;
+    // `token` è già UN SOLO termine della query: lo stesso confronto per token
+    // di `conceptsInQuery`, con un haystack di un elemento solo. Corregge anche
+    // qui il falso positivo `car` ⊂ `cercare` (prima: `token.includes(alias)`,
+    // sottostringa a caso).
+    if (!aliases.some((a) => aliasMatchesTokens(a, [token]))) continue;
     for (const t of [concept, ...aliases]) add(t);
     for (const t of CONCEPT_KB_TERMS[concept] ?? []) add(t);
   }

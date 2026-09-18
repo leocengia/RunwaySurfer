@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pickRelevantLinks } from '../lib/crawl';
+import { pickRelevantLinks, retrievalEvidence, shortlistCandidates } from '../lib/crawl';
 import type { KbLink } from '../lib/outcome';
 
 function link(text: string, url: string, context?: string, order?: number): KbLink {
@@ -69,5 +69,81 @@ describe('pickRelevantLinks', () => {
     const picked = pickRelevantLinks(links, 'come chiedo il rimborso del volo cancellato?');
     expect(picked[0].url).toBe(`${BASE}/Flight-refund-policy`);
     expect(picked[0].reason).toContain('intent');
+  });
+
+  it('non fa scattare il concetto "car" su un titolo che contiene "Carrier" come sottostringa', () => {
+    // «Flight Low Cost Carrier LCC policy Global» è un articolo sui VETTORI
+    // aerei: `car` ⊂ `Carrier` non deve accreditargli il concetto "autonoleggio".
+    // Prova diretta del difetto: con la vecchia corrispondenza a sottostringa
+    // questo titolo batteva l'articolo giusto su «devo cercare la policy di
+    // emirates» (survey r2-g).
+    const links = [
+      link('Flight Low Cost Carrier LCC policy Global', `${BASE}/LCC-policy`),
+      link('Global airline schedule change policies E H', `${BASE}/Policies-E-H`, 'emirates ek'),
+    ];
+    const picked = pickRelevantLinks(links, 'devo cercare la policy di emirates', 2);
+    expect(picked[0].url).toBe(`${BASE}/Policies-E-H`);
+    const lcc = picked.find((l) => l.url === `${BASE}/LCC-policy`);
+    expect(lcc?.reason ?? '').not.toContain('car');
+  });
+
+  it("un'iniziale di intervallo spuria, SENZA alcun match lessicale, non basta più a entrare in shortlist", () => {
+    // Il gate di I0: prima, un `rangeInitialBoost` non condizionato bastava a
+    // superare `score > 0` e finire nella shortlist inviata al reranker AI,
+    // anche se il candidato non condivideva UNA parola con la query — la causa
+    // dei candidati-rumore su query come "SAFTY" (104 → 64 dopo il gate,
+    // vedi il commento a RANGE_INITIAL_BOOST in lib/kb-ranges.ts).
+    const spuriousRangeOnly = link(
+      'Global airline schedule change policies S Z',
+      `${BASE}/Spurious-S-Z`,
+    );
+    // "Zorbex" non è un vettore reale né vocabolario: nameInitials lo prende
+    // comunque come probabile nome proprio (>=4 caratteri, nessuna esclusione),
+    // e la sua iniziale Z cade nell'intervallo S-Z del candidato — che però non
+    // condivide altrimenti nessuna parola con la query.
+    const shortlist = shortlistCandidates([spuriousRangeOnly], 'contatti con Zorbex', 40);
+    expect(shortlist.some((l) => l.url === `${BASE}/Spurious-S-Z`)).toBe(false);
+  });
+
+  it('riconosce "autonoleggio" (composto IT, l\'alias è un suffisso) come concetto "car"', () => {
+    // Regressione presa dal guard di tests/rank-eval.test.ts: una regola
+    // "solo prefisso" perdeva questo caso genuino insieme a quelli spuri
+    // (vedi il commento di aliasMatchesTokens in lib/text.ts).
+    const links = [
+      link('Car rental companies contact information A D', `${BASE}/Car-contacts`),
+      link('Company history', `${BASE}/History`),
+    ];
+    const picked = pickRelevantLinks(links, 'contatti autonoleggio', 1);
+    expect(picked[0]?.url).toBe(`${BASE}/Car-contacts`);
+  });
+});
+
+describe('retrievalEvidence · i segnali per assessQuery (A4)', () => {
+  it('hasTerms è falso su una domanda di sole parole vuote', () => {
+    expect(retrievalEvidence([], 'e poi?').hasTerms).toBe(false);
+  });
+
+  it('hasTerms è vero appena c’è un termine, anche a zero candidati', () => {
+    const ev = retrievalEvidence([link('Storia della azienda', `${BASE}/Storia`)], 'zorbex');
+    expect(ev.hasTerms).toBe(true);
+    expect(ev.candidates).toBe(0);
+  });
+
+  it('titleHits conta solo i candidati con un hit nel TITOLO, non nello slug/contesto da solo', () => {
+    // `retrievalEvidence` fonde `pageLinks` con l'intero indice reale: un
+    // termine inventato ("zorbex99") tiene i conteggi esatti, senza collisioni
+    // con nessuno dei 2964 articoli veri.
+    const titleHit = retrievalEvidence(
+      [link('Rimborso Zorbex99', `${BASE}/Rimborso-volo`)],
+      'zorbex99',
+    );
+    const contextOnlyHit = retrievalEvidence(
+      [link('Pagina generica', `${BASE}/Pagina`, 'si parla anche di zorbex99 qui')],
+      'zorbex99',
+    );
+    expect(titleHit.candidates).toBe(1);
+    expect(titleHit.titleHits).toBe(1);
+    expect(contextOnlyHit.candidates).toBe(1);
+    expect(contextOnlyHit.titleHits).toBe(0);
   });
 });

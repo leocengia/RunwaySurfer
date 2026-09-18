@@ -14,17 +14,26 @@ export interface ModelSpec {
   outputPerMTok: number;
 }
 
+/** Le tre fasce di difficoltà che `chooseTier()` distingue. */
+export type ModelTier = 'cheap' | 'balanced' | 'capable';
+
 // Prezzi USD per milione di token dal listino Claude
 // (https://platform.claude.com/docs/en/pricing) — verificati il 2026-07-09.
 // Vanno ricontrollati quando Anthropic pubblica nuovi modelli o tariffe.
-export const MODELS = {
-  haiku: { id: 'claude-haiku-4-5', inputPerMTok: 1, outputPerMTok: 5 },
-  sonnet: { id: 'claude-sonnet-4-6', inputPerMTok: 3, outputPerMTok: 15 },
-  opus: { id: 'claude-opus-4-8', inputPerMTok: 5, outputPerMTok: 25 },
-} satisfies Record<string, ModelSpec>;
+//
+// Questo è il registro di DEFAULT per la fascia (usato con AI_PROVIDER=mock o
+// anthropic, o come base per lo slot 'rerank' quando non altrimenti configurato
+// — vedi model-registry.ts), non più "il" registro: con AI_PROVIDER=openrouter
+// ogni fascia può puntare a un modello di qualunque fornitore, dichiarato via
+// env (MODEL_CHEAP/MODEL_BALANCED/MODEL_CAPABLE + i rispettivi prezzi).
+export const ANTHROPIC_MODELS = {
+  cheap: { id: 'claude-haiku-4-5', inputPerMTok: 1, outputPerMTok: 5 },
+  balanced: { id: 'claude-sonnet-4-6', inputPerMTok: 3, outputPerMTok: 15 },
+  capable: { id: 'claude-opus-4-8', inputPerMTok: 5, outputPerMTok: 25 },
+} satisfies Record<ModelTier, ModelSpec>;
 
 export interface RoutingDecision {
-  spec: ModelSpec;
+  tier: ModelTier;
   reason: string;
 }
 
@@ -65,12 +74,16 @@ function contextChars(req: AskRequest): number {
 }
 
 /**
- * Heuristic difficulty → model.
- *  - simple: single current page + short query  → Haiku
- *  - moderate: some context / a couple of pages  → Sonnet
- *  - hard: multi-page synthesis / large context  → Opus
+ * Heuristic difficulty → FASCIA (non più direttamente un modello: vedi
+ * model-registry.ts per come una fascia diventa un ModelSpec concreto,
+ * secondo il provider attivo). Logica invariata rispetto a prima del
+ * supporto OpenRouter — solo il valore restituito è cambiato da uno
+ * `spec` cablato a un `tier` simbolico:
+ *  - simple: single current page + short query  → cheap
+ *  - moderate: some context / a couple of pages  → balanced
+ *  - hard: multi-page synthesis / large context  → capable
  */
-export function chooseModel(req: AskRequest): RoutingDecision {
+export function chooseTier(req: AskRequest): RoutingDecision {
   const pages = req.pages.length;
   const chars = contextChars(req);
   const queryTokens = estimateTokens(req.query);
@@ -84,18 +97,18 @@ export function chooseModel(req: AskRequest): RoutingDecision {
 
   if (simple) {
     return {
-      spec: MODELS.haiku,
+      tier: 'cheap',
       reason: `task semplice (1 pagina, ~${Math.round(chars / 4)} token contesto) → modello economico/veloce`,
     };
   }
   if (pages <= MODERATE_MAX_PAGES && chars < MODERATE_MAX_CONTEXT_CHARS) {
     return {
-      spec: MODELS.sonnet,
+      tier: 'balanced',
       reason: `task medio (${pages} pagine, ~${Math.round(chars / 4)} token contesto) → modello bilanciato`,
     };
   }
   return {
-    spec: MODELS.opus,
+    tier: 'capable',
     reason: `task difficile (${pages} pagine, ~${Math.round(chars / 4)} token contesto, sintesi multi-pagina) → modello più capace`,
   };
 }

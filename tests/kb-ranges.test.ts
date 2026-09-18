@@ -1,8 +1,11 @@
 // Intervalli alfabetici della KB (Giro 4, causa n.1 del sondaggio agenti).
 //
-// La KB archivia i vettori per iniziale — l'articolo che risponde a «ASC
-// lufthansa policy» è `Global airline schedule change policies I L`, perché
-// Lufthansa comincia per L — e quel titolo non contiene né «lufthansa» né «ASC».
+// La KB archivia i vettori SENZA articolo dedicato per iniziale — l'articolo
+// che risponde a «devo cercare la policy di emirates» è `Global airline
+// schedule change policies E H`, perché Emirates comincia per E, e quel
+// titolo non contiene «emirates». Per i vettori che UN articolo dedicato ce
+// l'hanno (Lufthansa compresa: lib/kb-carriers.ts), quell'articolo vince
+// sempre e l'intervallo è il ripiego — vedi «sull'indice KB reale» sotto.
 //
 // Le label usate qui sono TUTTE prese dall'indice reale, refusi di Salesforce
 // compresi (`POSa`), perché il valore del parser sta nel reggere quelle vere.
@@ -109,6 +112,19 @@ describe('nameInitials', () => {
     expect(nameInitials('riprotezione policy')).toEqual([]);
   });
 
+  it.each([
+    ['posso riproteggere il cliente per un volo LH la prossima settimana?', ['C', 'P', 'S']],
+    ['mi spieghi chiaramente la policy asc lh?', ['S', 'C']],
+    ['che volo posso scegliere a seguito di un asc lhg?', ['S']],
+    ['se lufthansa modifica il numero di volo è considerato major schedule change?', ['N', 'C']],
+  ])('scarta le parole italiane comuni in NON_NAME_WORDS: «%s»', (query, spurious) => {
+    // Query reali del sondaggio dove queste parole offrivano un'iniziale
+    // spuria prima che esistesse NON_NAME_WORDS (cliente/prossima/settimana,
+    // spieghi/chiaramente, scegliere/seguito, numero/considerato).
+    const initials = nameInitials(query);
+    for (const letter of spurious) expect(initials).not.toContain(letter);
+  });
+
   it('un codice vettore dà l’iniziale del NOME, non del codice', () => {
     // TK → turkish → T. «turkish» non compare in nessun titolo della KB:
     // senza questo passaggio non c'è modo di raggiungere l'intervallo S-Z.
@@ -146,25 +162,35 @@ describe('sull’indice KB reale', () => {
     return i === -1 ? -1 : i + 1;
   }
 
-  it('«ASC lufthansa policy» trova l’articolo dell’intervallo I-L', () => {
-    // Prima del Giro 4 questa query non lo raggiungeva affatto: l'acronimo ASC
-    // veniva scartato dal tokenizzatore e `policy` non matcha `policies`.
-    const rank = rankOf('ASC lufthansa policy', 'Global airline schedule change policies I L');
+  it('«ASC lufthansa policy» trova l’articolo DEDICATO a Lufthansa, non l’intervallo', () => {
+    // Il bersaglio è cambiato col modulo di etichettatura degli esperti KB
+    // (docs/Domande Agenti e match con la KB (compilato).docx): 8 risposte su
+    // 27 indicano `Lufthansa-LH-airline-policies`, mai l'intervallo I-L — vedi
+    // lib/kb-carriers.ts. L'intervallo resta comunque raggiungibile in
+    // shortlist, come ripiego.
+    const rank = rankOf('ASC lufthansa policy', 'Lufthansa LH airline policies');
     expect(rank).toBeGreaterThan(0);
-    expect(rank).toBeLessThanOrEqual(5);
+    expect(rank).toBeLessThanOrEqual(3);
+    const fallbackRank = rankOf(
+      'ASC lufthansa policy',
+      'Global airline schedule change policies I L',
+    );
+    expect(fallbackRank).toBeGreaterThan(0);
   });
 
-  it('il fratello giusto batte gli altri della sua famiglia', () => {
+  it('un vettore SENZA articolo dedicato: il fratello giusto della sua famiglia arriva in shortlist', () => {
     // Il punto del bonus: senza di esso i fratelli pareggiano e vince il primo
-    // in ordine di URL, cioè `… policies A`. Conta sul percorso locale, quando
-    // `/rank` scade e non c'è alcuna AI a rimediare.
-    const shortlist = shortlistCandidates([], 'ASC lufthansa policy', SHORTLIST_SIZE);
+    // in ordine di URL, cioè `… policies A`. Emirates non ha un articolo
+    // dedicato (lib/kb-carriers.ts), quindi passa ancora dall'intervallo — è il
+    // caso che questo meccanismo deve davvero coprire. (Con lo scorer di oggi
+    // gli altri fratelli della famiglia non arrivano nemmeno in shortlist: è
+    // il bonus a tenerli fuori, non solo a farli perdere il testa a testa.)
+    const shortlist = shortlistCandidates([], 'devo cercare la policy di emirates', SHORTLIST_SIZE);
     const family = shortlist.filter((l) =>
       l.text.startsWith('Global airline schedule change policies'),
     );
-    expect(family.length).toBeGreaterThan(1);
-    const best = family[0];
-    expect(best.text).toContain('I L');
+    expect(family.length).toBeGreaterThanOrEqual(1);
+    expect(family[0].text).toContain('E H');
   });
 
   it('un codice vettore raggiunge l’intervallo giusto: TK → S-Z', () => {

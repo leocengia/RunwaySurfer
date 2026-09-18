@@ -68,21 +68,33 @@ describe('assessQuery · NON segnala (sull’indice KB reale)', () => {
   });
 });
 
-describe('assessQuery · la soglia, in isolamento', () => {
-  const ev = (candidates: number, topScore: number): RetrievalEvidence => ({
-    candidates,
-    topScore,
+describe('assessQuery · i tre segnali, in isolamento', () => {
+  // Adimensionali di proposito (niente soglia sul punteggio, che con l'IDF
+  // della Fase 3 non ha più una scala fissa — vedi il commento su assessQuery
+  // in lib/query-quality.ts). `over` sovrascrive solo il segnale sotto esame.
+  const ev = (over: Partial<RetrievalEvidence>): RetrievalEvidence => ({
+    hasTerms: true,
+    candidates: 3,
+    topScore: 10,
+    titleHits: 1,
+    ...over,
   });
 
-  it('zero candidati vince su qualunque punteggio', () => {
-    expect(assessQuery('qualcosa', ev(0, 0)).vague).toBe(true);
+  it('nessun termine utilizzabile: vaga a prescindere dal resto', () => {
+    expect(
+      assessQuery('qualcosa', ev({ hasTerms: false, candidates: 5, titleHits: 2 })).vague,
+    ).toBe(true);
   });
 
-  it('un singolo hit sul titolo (5) basta a non essere segnalata', () => {
-    expect(assessQuery('qualcosa', ev(3, 5)).vague).toBe(false);
+  it('termini validi ma zero candidati: vaga (refuso o sinonimo)', () => {
+    expect(assessQuery('qualcosa', ev({ candidates: 0, titleHits: 0 })).vague).toBe(true);
   });
 
-  it('sotto 5 si segnala: i candidati vengono solo da frammenti di URL', () => {
-    expect(assessQuery('qualcosa', ev(17, 4)).vague).toBe(true);
+  it('candidati ma nessun hit sul titolo: vaga (solo frammenti di URL/contesto)', () => {
+    expect(assessQuery('qualcosa', ev({ candidates: 17, titleHits: 0 })).vague).toBe(true);
+  });
+
+  it('termini + candidati + almeno un hit sul titolo: non è vaga', () => {
+    expect(assessQuery('qualcosa', ev({})).vague).toBe(false);
   });
 });

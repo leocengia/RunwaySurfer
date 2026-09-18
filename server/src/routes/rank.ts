@@ -11,7 +11,7 @@ import { asyncRoute } from '../http.js';
 import type { RankRequest, RankResponse } from '../types.js';
 import { getProvider } from '../provider/index.js';
 import { buildRankPrompt } from '../provider/shared.js';
-import { estimateTokens, estimateCostUsd, MODELS, type ModelSpec } from '../router.js';
+import { estimateTokens, estimateCostUsd } from '../router.js';
 import { insertRequestHistory, type RequestHistoryInput } from '../db.js';
 import { getSettings } from '../db.js';
 import { requireAuth, type AuthContext } from '../auth.js';
@@ -23,7 +23,7 @@ import {
   noteRequestForRateLimit,
 } from '../metrics.js';
 import { truncate, newRequestId } from '../util.js';
-import { MAX_QUERY_CHARS, MAX_RANK_CANDIDATES, RANK_MODEL } from '../config.js';
+import { MAX_QUERY_CHARS, MAX_RANK_CANDIDATES, MODEL_REGISTRY, RANK_MODEL } from '../config.js';
 
 /** Il rerank è una classificazione breve: pochi id in uscita, timeout stretto. */
 const RANK_TIMEOUT_MS = 3_000;
@@ -44,11 +44,6 @@ export function sanitizeRankRequest(body: Partial<RankRequest>): RankRequest {
     query: truncate(body.query, MAX_QUERY_CHARS),
     candidates: candidates.filter((c) => c.url && c.text),
   };
-}
-
-/** Spec del modello di rerank (di norma haiku), risolta dall'id RANK_MODEL. */
-function rankSpec(): ModelSpec {
-  return Object.values(MODELS).find((m) => m.id === RANK_MODEL) ?? MODELS.haiku;
 }
 
 function persistRank(input: RequestHistoryInput): void {
@@ -88,7 +83,7 @@ const handleRank = async (req: Request, res: Response): Promise<void> => {
   noteRequestForRateLimit(agentId);
 
   const provider = getProvider();
-  const spec = rankSpec();
+  const spec = MODEL_REGISTRY.rerank;
   const { system, user: userContent } = buildRankPrompt({
     query: request.query,
     candidates: request.candidates,

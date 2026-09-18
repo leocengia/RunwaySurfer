@@ -17,6 +17,17 @@ describe('conceptsInQuery', () => {
   it('non inventa concetti su query fuori dominio', () => {
     expect(conceptsInQuery('meteo di domani')).toEqual([]);
   });
+
+  it('non fa scattare "car" su "cercare" (`car` è una sottostringa, non un token)', () => {
+    // Query reale del sondaggio (r2-g): «devo cercare la policy di emirates»
+    // attivava il concetto "autonoleggio" e seppelliva l'articolo giusto sotto
+    // quattro articoli di car rental.
+    expect(conceptsInQuery('devo cercare la policy di emirates')).not.toContain('car');
+  });
+
+  it('riconosce "autonoleggio" come concetto "car" (composto IT, l’alias è un suffisso)', () => {
+    expect(conceptsInQuery('contatti autonoleggio')).toContain('car');
+  });
 });
 
 describe('expandQueryTerms', () => {
@@ -56,6 +67,32 @@ describe('flessioni italiane e singolare/plurale', () => {
   });
 });
 
+describe('handoff · a chi passare il caso (D6)', () => {
+  it.each(['trasferire', 'trasferimento', 'inoltrare', 'transfer', 'escalate'])(
+    '«%s» riconosce il concetto handoff',
+    (word) => {
+      expect(conceptsInQuery(word)).toContain('handoff');
+    },
+  );
+
+  it('non riconosce "passare"/"girare" (verbi italiani troppo generici)', () => {
+    // Lo stesso difetto corretto altrove in questo giro (D2, alias ancorati):
+    // "passare"/"girare" ricorrono in troppi contesti non pertinenti.
+    expect(conceptsInQuery('posso passare di qui?')).not.toContain('handoff');
+    expect(conceptsInQuery('gira a destra')).not.toContain('handoff');
+  });
+
+  it('«relocation» da sola espande anche verso transfer/escalate (il ponte verso l’articolo RET)', () => {
+    // Senza questo ponte «quali sono tutti motivi di relocation» — che non
+    // contiene alcun verbo di trasferimento — resterebbe a punteggio zero
+    // sull'articolo giusto (When to transfer or escalate to Reservation
+    // Services).
+    const extra = expandQueryTerms('relocation', ['relocation']);
+    expect(extra).toContain('transfer');
+    expect(extra).toContain('escalate');
+  });
+});
+
 describe('acronimi', () => {
   it('ASC si espande nelle parole che la KB usa per esteso', () => {
     const extra = expandQueryTerms('ASC lufthansa policy', ['lufthansa']);
@@ -85,8 +122,12 @@ describe('expandTerm · le espansioni di UN solo termine', () => {
   });
 
   it('riconosce il concetto dentro una forma flessa', () => {
-    // `cancel` è sottostringa di `cancellato`.
+    // `cancel` è sottostringa (≥5 caratteri) di `cancellato`.
     expect(expandTerm('cancellato')).toContain('cancelled');
+  });
+
+  it('non attribuisce "cercare" al concetto "car" (alias corto, coincidenza di sottostringa)', () => {
+    expect(expandTerm('cercare')).not.toContain('rental');
   });
 
   it('non restituisce il termine stesso', () => {

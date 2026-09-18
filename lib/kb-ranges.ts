@@ -29,11 +29,62 @@
 import { CARRIER_NAMES, VOCAB_TERMS, acronymsInQuery } from './kb-vocab';
 import { STOP_WORDS, normalize, unique } from './text';
 
-/** Bonus per il fratello il cui intervallo copre l'iniziale cercata. */
-export const RANGE_INITIAL_BOOST = 4;
+/**
+ * Bonus per il fratello il cui intervallo copre l'iniziale cercata.
+ *
+ * Vale come TIE-BREAK fra fratelli che hanno già un aggancio lessicale vero
+ * (lib/crawl.ts applica il bonus solo se `lexical > 0`): un valore alto qui è
+ * sicuro perché non può più promuovere da solo un candidato a punteggio zero.
+ * Prima del gate valeva 4 ed era un punteggio AUTONOMO: bastava un'iniziale
+ * spuria (vedi `NON_NAME_WORDS` sotto) per regalare 4 punti a un candidato
+ * senza alcun match sul resto — misurato su `retrievalEvidence('SAFTY')`
+ * (query con refuso, "HEALTH AND SAFTY COMPLAIN..."), che senza il gate
+ * portava a 104 candidati; con il gate scendono a 64, tutti con un hit vero
+ * sul titolo (verificato confrontando i due rami sullo stesso commit).
+ */
+export const RANGE_INITIAL_BOOST = 8;
 
 /** Lunghezza minima di un token per essere considerato un possibile nome proprio. */
 const MIN_NAME_LENGTH = 4;
+
+/**
+ * Parole italiane comuni che `nameInitials` scarterebbe altrimenti come
+ * "probabile nome proprio": non sono nel vocabolario di dominio (`VOCAB_TERMS`)
+ * né fra le stop-word generiche (`STOP_WORDS`), ma non sono nomi di vettori o
+ * autonoleggi. Locale a questo modulo e non aggiunto a `STOP_WORDS`: quella
+ * lista alimenta anche la tokenizzazione per l'estrazione e `pageCoverage`
+ * (lib/off-topic.ts), dove queste parole restano informative.
+ *
+ * Presa da query reali del sondaggio dove producevano un'iniziale spuria:
+ * «posso riproteggere il **cliente** per un volo LH la **prossima
+ * settimana**?» offriva C/P/S come iniziali di vettore; «mi **spieghi
+ * chiaramente** la policy asc lh?» offriva S/C; «che volo posso **scegliere**
+ * a **seguito** di un asc lhg?» offriva S; «se lufthansa modifica il
+ * **numero** di volo è **considerato** major schedule change?» offriva N/C.
+ */
+const NON_NAME_WORDS = new Set([
+  'cerca',
+  'cercare',
+  'cercami',
+  'trova',
+  'trovare',
+  'spiega',
+  'spieghi',
+  'chiaramente',
+  'cliente',
+  'clienti',
+  'prossima',
+  'prossimo',
+  'settimana',
+  'scegliere',
+  'procedere',
+  'considerato',
+  'seguito',
+  'numero',
+  'totale',
+  'chiusa',
+  'chiuso',
+]);
 
 export interface KbRange {
   /** La label senza l'intervallo: raggruppa i fratelli della stessa famiglia. */
@@ -107,9 +158,10 @@ export function rangeCovers(range: KbRange, initial: string): boolean {
 /**
  * Le iniziali dei probabili nomi propri nella query: è ciò che seleziona il
  * fratello giusto. Un nome è un token abbastanza lungo che non è una stop-word
- * né un termine del vocabolario di dominio — `lufthansa` e `avis` lo sono,
- * `riprotezione` e `policy` no perché sono vocabolario, `dimmi` e `tutte` no
- * perché sono stop-word.
+ * né un termine del vocabolario di dominio né una parola italiana comune non
+ * altrimenti classificata — `lufthansa` e `avis` lo sono, `riprotezione` e
+ * `policy` no perché sono vocabolario, `dimmi` e `tutte` no perché sono
+ * stop-word, `cercare` e `settimana` no perché sono in `NON_NAME_WORDS`.
  *
  * I codici vettore IATA contribuiscono l'iniziale del NOME, non del codice:
  * `TK` → *turkish* → `T`. È l'unico modo di raggiungere `S Z` per una domanda
@@ -125,7 +177,7 @@ export function nameInitials(query: string): string[] {
   const initials: string[] = [];
   for (const token of normalize(query).split(/[^a-z0-9]+/)) {
     if (token.length < MIN_NAME_LENGTH) continue;
-    if (STOP_WORDS.has(token) || VOCAB_TERMS.has(token)) continue;
+    if (STOP_WORDS.has(token) || VOCAB_TERMS.has(token) || NON_NAME_WORDS.has(token)) continue;
     initials.push(token[0].toUpperCase());
   }
   for (const acronym of acronymsInQuery(query)) {
