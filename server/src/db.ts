@@ -816,6 +816,8 @@ export function listRequests(filters: {
   status?: string;
   model?: string;
   teamId?: number;
+  /** 'ask' | 'rank' — distingue la sintesi dal rerank (colonna `kind`, sempre presente). */
+  kind?: string;
   limit?: number;
 }): RequestHistoryRecord[] {
   const clauses: string[] = [];
@@ -835,6 +837,10 @@ export function listRequests(filters: {
   if (typeof filters.teamId === 'number') {
     clauses.push('team_id = ?');
     params.push(filters.teamId);
+  }
+  if (filters.kind) {
+    clauses.push('kind = ?');
+    params.push(filters.kind);
   }
   const limit = Math.min(Math.max(filters.limit ?? 50, 1), 500);
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';

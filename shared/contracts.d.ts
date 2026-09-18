@@ -104,7 +104,7 @@ export interface RankResponse {
   selectedUrls: string[];
   reason?: string;
   model?: string;
-  provider?: 'mock' | 'anthropic';
+  provider?: 'mock' | 'anthropic' | 'openrouter';
 }
 
 /**
@@ -130,7 +130,7 @@ export interface AiPlan {
   /** The network endpoint the backend would contact for the real call. */
   egress: string;
   /** Whether this response came from the mock or a real provider. */
-  provider: 'mock' | 'anthropic';
+  provider: 'mock' | 'anthropic' | 'openrouter';
   /**
    * Turni di storico effettivamente rimandati al modello, DOPO il taglio a
    * `max_history_turns`. È il numero vero, non quello che il client ha inviato:

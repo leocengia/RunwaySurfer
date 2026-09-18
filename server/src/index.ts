@@ -15,10 +15,12 @@ import './load-env.js';
 import * as http from 'node:http';
 import * as https from 'node:https';
 import {
+  AI_PROVIDER_KIND,
   ALLOWED_ORIGIN,
   ALLOWED_ORIGINS,
   CONFIG_ERRORS,
   KB_PAGE_ORIGIN,
+  PROVIDER_KIND_WARNING,
   PUBLIC_SCHEME,
   SERVER,
 } from './config.js';
@@ -47,12 +49,17 @@ if (CONFIG_ERRORS.length > 0) {
   process.exit(1);
 }
 
-// Guardia di configurazione: col provider reale (chiamate a pagamento e dati
-// aziendali) il CORS aperto '*' non è accettabile — fail-fast all'avvio.
-const provider = (process.env.AI_PROVIDER ?? 'mock').toLowerCase();
-if (provider === 'anthropic' && ALLOWED_ORIGINS === '*') {
+if (PROVIDER_KIND_WARNING) {
+  console.warn(`[config] ${PROVIDER_KIND_WARNING}`);
+}
+
+// Guardia di configurazione: con un provider reale (chiamate a pagamento e dati
+// aziendali) il CORS aperto '*' non è accettabile — fail-fast all'avvio. Vale per
+// QUALUNQUE provider reale, non solo Anthropic: l'argomento (dati aziendali +
+// chiamate a pagamento) resta identico con OpenRouter.
+if (AI_PROVIDER_KIND !== 'mock' && ALLOWED_ORIGINS === '*') {
   console.error(
-    '[config] ALLOWED_ORIGIN è obbligatoria quando AI_PROVIDER=anthropic: ' +
+    `[config] ALLOWED_ORIGIN è obbligatoria quando AI_PROVIDER=${AI_PROVIDER_KIND}: ` +
       `imposta le origin ammesse in .env e riavvia, per esempio\n` +
       `  ALLOWED_ORIGIN=${KB_PAGE_ORIGIN},chrome-extension://<id-estensione>`,
   );
@@ -66,7 +73,7 @@ if (provider === 'anthropic' && ALLOWED_ORIGINS === '*') {
 // sidebar vengono bloccate dal browser, e l'agente legge «Backend non
 // raggiungibile» — un messaggio che manda a cercare la VPN. Qui diventa una
 // riga all'avvio invece di dieci postazioni ferme.
-if (provider === 'anthropic' && !ALLOWED_ORIGINS.includes(KB_PAGE_ORIGIN)) {
+if (AI_PROVIDER_KIND !== 'mock' && !ALLOWED_ORIGINS.includes(KB_PAGE_ORIGIN)) {
   console.error(
     `[config] ALLOWED_ORIGIN non contiene ${KB_PAGE_ORIGIN}, che è l'origin da cui la ` +
       'sidebar chiama davvero il backend (in Manifest V3 il fetch di un content script ' +
@@ -78,9 +85,16 @@ if (provider === 'anthropic' && !ALLOWED_ORIGINS.includes(KB_PAGE_ORIGIN)) {
 }
 // Guardia simmetrica: senza chiave il provider reale esplode alla PRIMA richiesta
 // vera, cioè quando un agente sta già aspettando una risposta. Meglio non partire.
-if (provider === 'anthropic' && !process.env.ANTHROPIC_API_KEY) {
+if (AI_PROVIDER_KIND === 'anthropic' && !process.env.ANTHROPIC_API_KEY) {
   console.error(
     '[config] ANTHROPIC_API_KEY è obbligatoria quando AI_PROVIDER=anthropic: ' +
+      'impostala in .env e riavvia (senza, ogni richiesta fallirebbe a runtime).',
+  );
+  process.exit(1);
+}
+if (AI_PROVIDER_KIND === 'openrouter' && !process.env.OPENROUTER_API_KEY) {
+  console.error(
+    '[config] OPENROUTER_API_KEY è obbligatoria quando AI_PROVIDER=openrouter: ' +
       'impostala in .env e riavvia (senza, ogni richiesta fallirebbe a runtime).',
   );
   process.exit(1);

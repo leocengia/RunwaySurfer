@@ -16,7 +16,7 @@ import {
   outcomeSections,
   systemPromptOptionsFor,
 } from '../src/provider/shared.js';
-import { chooseModel } from '../src/router.js';
+import { chooseTier } from '../src/router.js';
 import { SOURCES_SECTION, STANDARD_SECTIONS } from '../src/shared-assets.js';
 import type { AskRequest, ScheduleChangeRequest } from '../src/types.js';
 
@@ -346,20 +346,20 @@ describe('budget di output', () => {
 describe('routing · storico e form', () => {
   it('lo storico conta come contesto e non è invisibile al router', () => {
     const long = 'x'.repeat(9_000);
-    const decision = chooseModel({
+    const decision = chooseTier({
       query: 'breve',
       pages: [page],
       links: [],
       history: [{ query: 'q', answer: long }],
     });
-    // Con le sole pagine sarebbe "semplice" → haiku. Lo storico lo promuove.
-    expect(decision.spec.id).not.toBe('claude-haiku-4-5');
+    // Con le sole pagine sarebbe "semplice" → cheap. Lo storico lo promuove.
+    expect(decision.tier).not.toBe('cheap');
   });
 
   it('una richiesta strutturata non è mai "semplice"', () => {
-    const simple = chooseModel({ query: 'breve', pages: [page], links: [] });
-    expect(simple.spec.id).toBe('claude-haiku-4-5');
-    const structured = chooseModel({ query: '', pages: [page], links: [], form });
-    expect(structured.spec.id).not.toBe('claude-haiku-4-5');
+    const simple = chooseTier({ query: 'breve', pages: [page], links: [] });
+    expect(simple.tier).toBe('cheap');
+    const structured = chooseTier({ query: '', pages: [page], links: [], form });
+    expect(structured.tier).not.toBe('cheap');
   });
 });

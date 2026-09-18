@@ -4,7 +4,7 @@ import { Router, type Request, type Response } from 'express';
 import { asyncRoute } from '../http.js';
 import { newRequestId, truncate } from '../util.js';
 import { PORT, ALLOWED_ORIGIN, PUBLIC_SCHEME, TLS_ENABLED } from '../config.js';
-import { getProvider, ANTHROPIC_EGRESS } from '../provider/index.js';
+import { getProvider, egressFor } from '../provider/index.js';
 import { metrics } from '../metrics.js';
 import { dashboardData, extensionConfig } from '../status.js';
 import {
@@ -80,7 +80,7 @@ adminRoutes.get('/requirements', requireAuth('team_lead'), (_req, res) => {
         (TLS_ENABLED
           ? ' — TLS terminato direttamente da Node, nessun reverse proxy'
           : ' — in chiaro: modalità sviluppo/demo, non pubblicabile dentro la KB'),
-      outbound_egress: `HTTPS verso ${ANTHROPIC_EGRESS} (solo con provider reale)`,
+      outbound_egress: `HTTPS verso ${egressFor(getProvider().name)} (solo con provider reale)`,
       outbound_acme:
         "HTTPS verso gli endpoint Let's Encrypt e l'API DNS di validazione; " +
         'DNS 53 udp/tcp anche verso i nameserver autoritativi; NTP 123/udp',
@@ -91,7 +91,12 @@ adminRoutes.get('/requirements', requireAuth('team_lead'), (_req, res) => {
     },
     tls: tlsRequirements(),
     secrets: {
-      anthropic_api_key: "ANTHROPIC_API_KEY via env/secret manager sul server; MAI nell'estensione",
+      anthropic_api_key:
+        "ANTHROPIC_API_KEY via env/secret manager sul server; MAI nell'estensione " +
+        '(necessaria solo con AI_PROVIDER=anthropic)',
+      openrouter_api_key:
+        "OPENROUTER_API_KEY via env/secret manager sul server; MAI nell'estensione " +
+        '(necessaria solo con AI_PROVIDER=openrouter)',
       rotation: "ruotabile senza redeploy dell'estensione",
     },
     provider: getProvider().name,
@@ -229,6 +234,7 @@ adminRoutes.get('/requests', requireAuth('team_lead'), (req, res) => {
       status: typeof req.query.status === 'string' ? req.query.status : undefined,
       model: typeof req.query.model === 'string' ? req.query.model : undefined,
       teamId: typeof req.query.teamId === 'string' ? Number(req.query.teamId) : undefined,
+      kind: req.query.kind === 'ask' || req.query.kind === 'rank' ? req.query.kind : undefined,
       limit: typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined,
     }),
   });

@@ -1,7 +1,6 @@
 // Snapshot di stato del proxy: la config pubblicata all'estensione e il
 // payload completo della dashboard (usato da /dashboard-data e dalla pagina HTML).
-import { MODELS } from './router.js';
-import { getProvider, ANTHROPIC_EGRESS, ASSUMED_OUTPUT_TOKENS } from './provider/index.js';
+import { getProvider, egressFor, ASSUMED_OUTPUT_TOKENS } from './provider/index.js';
 import {
   analyticsSummary,
   estimatedCostMonthToDate,
@@ -11,7 +10,15 @@ import {
 } from './db.js';
 import { RELEASE } from './release.js';
 import { estimatedCostEurThisMonth, metrics } from './metrics.js';
-import { PORT, ALLOWED_ORIGIN, USD_PER_EUR, PUBLIC_SCHEME, SERVER, TLS_ENABLED } from './config.js';
+import {
+  PORT,
+  ALLOWED_ORIGIN,
+  MODEL_REGISTRY,
+  USD_PER_EUR,
+  PUBLIC_SCHEME,
+  SERVER,
+  TLS_ENABLED,
+} from './config.js';
 import { assessCertificate, getActiveTlsMaterial } from './tls.js';
 
 /**
@@ -65,6 +72,7 @@ export function extensionConfig() {
 export function dashboardData() {
   const provider = getProvider();
   const anthropicKeyConfigured = Boolean(process.env.ANTHROPIC_API_KEY);
+  const openrouterKeyConfigured = Boolean(process.env.OPENROUTER_API_KEY);
   const settings = getSettings();
   const history = analyticsSummary();
   return {
@@ -85,14 +93,18 @@ export function dashboardData() {
       uptimeSeconds: Math.round(process.uptime()),
     },
     provider: provider.name,
-    aiReady: provider.name === 'mock' || anthropicKeyConfigured,
+    aiReady:
+      provider.name === 'mock' ||
+      (provider.name === 'anthropic' && anthropicKeyConfigured) ||
+      (provider.name === 'openrouter' && openrouterKeyConfigured),
     aiProviderConfigured: provider.name,
     anthropicKeyConfigured,
+    openrouterKeyConfigured,
     port: PORT,
     scheme: PUBLIC_SCHEME,
     tls: tlsStatus(),
     corsOrigin: ALLOWED_ORIGIN,
-    egress: provider.name === 'anthropic' ? ANTHROPIC_EGRESS : 'none in mock mode',
+    egress: egressFor(provider.name),
     extension: {
       ...extensionConfig(),
       supportedModes: ['visual', 'follow', 'single'],
@@ -125,7 +137,7 @@ export function dashboardData() {
     settings,
     metrics,
     history,
-    models: MODELS,
+    modelRegistry: MODEL_REGISTRY,
     nextControlPlaneSteps: [
       'Persist per-request usage metrics in SQLite/Postgres for dashboard charts.',
       'Let the extension poll /extension-config at startup.',

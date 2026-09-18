@@ -1,6 +1,6 @@
 // Configurazione da variabili d'ambiente e costanti globali del backend.
 // Centralizzata qui così i moduli route non leggono process.env in ordine sparso.
-import { MODELS } from './router.js';
+import { resolveModelRegistry } from './model-registry.js';
 
 /**
  * Percorsi e soglie del materiale TLS. Solo stringhe e numeri: la lettura dei
@@ -251,13 +251,6 @@ export const ALLOWED_ORIGINS = allowed.origins;
 /** Forma leggibile, usata nei log e nei payload di stato. */
 export const ALLOWED_ORIGIN = allowed.display;
 
-/**
- * Tutti i problemi di configurazione raccolti all'import, stampati da index.ts
- * col prefisso [config] prima di uscire. Dichiarata QUI e non accanto a SERVER
- * perché deve includere anche gli errori di ALLOWED_ORIGIN, risolta più sotto.
- */
-export const CONFIG_ERRORS = [...resolved.errors, ...allowed.errors];
-
 /** Limite difensivo sulla lunghezza della query accettata da /ask. */
 export const MAX_QUERY_CHARS = 1_000;
 
@@ -283,8 +276,63 @@ export const RECENT_REQUEST_LIMIT = 25;
 export const MAX_RANK_CANDIDATES = 40;
 
 /**
- * Modello del reranker: SEMPRE il più economico (haiku). La selezione è una
- * classificazione di metadati, non una sintesi → non passa da chooseModel.
- * Override via env RANK_MODEL solo per esperimenti.
+ * Provider AI attivo — risolto UNA volta qui, non più letto indipendentemente
+ * in index.ts/provider/index.ts (che avevano la stessa espressione duplicata,
+ * col difetto che un valore sconosciuto ricadeva su mock IN SILENZIO). Un
+ * valore non riconosciuto ricade ancora su 'mock' — è il comportamento più
+ * sicuro quando qualcuno digita male — ma ora produce un avviso che index.ts
+ * stampa, invece di sparire senza traccia.
  */
-export const RANK_MODEL = process.env.RANK_MODEL ?? MODELS.haiku.id;
+const KNOWN_PROVIDER_KINDS = ['mock', 'anthropic', 'openrouter'] as const;
+export type ProviderKind = (typeof KNOWN_PROVIDER_KINDS)[number];
+
+function resolveProviderKind(env: NodeJS.ProcessEnv): { kind: ProviderKind; warning?: string } {
+  const raw = (str(env, 'AI_PROVIDER') ?? 'mock').toLowerCase();
+  if ((KNOWN_PROVIDER_KINDS as readonly string[]).includes(raw)) {
+    return { kind: raw as ProviderKind };
+  }
+  return {
+    kind: 'mock',
+    warning:
+      `AI_PROVIDER="${raw}" non riconosciuto: ricado su 'mock'. ` +
+      `Valori validi: ${KNOWN_PROVIDER_KINDS.join(', ')}.`,
+  };
+}
+
+const providerResolved = resolveProviderKind(process.env);
+
+/** Provider risolto una sola volta: usato da provider/index.ts, index.ts, e per il registro modelli sotto. */
+export const AI_PROVIDER_KIND = providerResolved.kind;
+/** Stringa da stampare con `console.warn`, o `undefined` se il valore era già valido. */
+export const PROVIDER_KIND_WARNING = providerResolved.warning;
+
+const modelRegistryResolved = resolveModelRegistry(process.env, AI_PROVIDER_KIND);
+
+/**
+ * Quale modello concreto risponde a ciascuna fascia (router.ts decide solo la
+ * fascia) e allo slot del reranker. Con AI_PROVIDER=anthropic/mock e nessuna
+ * env MODEL_* impostata: i tre modelli Claude di sempre, prezzi inclusi — vedi
+ * model-registry.ts per la logica di risoluzione completa.
+ */
+export const MODEL_REGISTRY = modelRegistryResolved.registry;
+
+/**
+ * Modello del reranker. Con AI_PROVIDER=anthropic/mock e RANK_MODEL non
+ * impostata: sempre il più economico (haiku) — la selezione è una
+ * classificazione di metadati, non una sintesi, non passa da chooseTier.
+ * Override via env RANK_MODEL per esperimenti (id da solo tollerato, vedi
+ * model-registry.ts — resolveSlot in modalità "lenient").
+ */
+export const RANK_MODEL = MODEL_REGISTRY.rerank.id;
+
+/**
+ * Tutti i problemi di configurazione raccolti all'import, stampati da index.ts
+ * col prefisso [config] prima di uscire. Dichiarata QUI (in fondo) perché deve
+ * includere anche gli errori di ALLOWED_ORIGIN e del registro modelli,
+ * risolti più sopra.
+ */
+export const CONFIG_ERRORS = [
+  ...resolved.errors,
+  ...allowed.errors,
+  ...modelRegistryResolved.errors,
+];

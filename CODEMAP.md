@@ -43,10 +43,12 @@ Pagina web KB
 | Pagine HTML (login/dashboard)            | `server/src/routes/pages.ts`, `server/src/views/`        | template dashboard e pagine auth                           |
 | Composizione app Express                 | `server/src/app.ts`                                      | middleware CORS/sicurezza, montaggio route                 |
 | Retention automatica dello storico       | `server/src/maintenance.ts`                              | job giornaliero `startMaintenanceScheduler()`              |
-| Scelta modello e costi                   | `server/src/router.ts`                                   | `MODELS`, `chooseModel()`, soglie token/pagine             |
+| Scelta fascia di difficoltà              | `server/src/router.ts`                                   | `chooseTier()`, soglie token/pagine                        |
+| Modello concreto per fascia/provider     | `server/src/model-registry.ts`                           | `resolveModelRegistry()`, env `MODEL_*`/`RANK_MODEL`       |
 | Prompt AI                                | `server/src/provider/shared.ts`                          | `buildSystemPrompt()`, `buildUserContent()`                |
 | Risposta demo/mock                       | `server/src/provider/mock.ts`                            | `buildOutcome()`                                           |
-| Provider AI reale                        | `server/src/provider/anthropic.ts`                       | `max_tokens`, parametri SDK, streaming                     |
+| Provider AI reale (Anthropic diretto)    | `server/src/provider/anthropic.ts`                       | `max_tokens`, parametri SDK, streaming                     |
+| Provider AI reale (OpenRouter)           | `server/src/provider/openrouter.ts`                      | idem, API Chat Completions compatibile OpenAI              |
 | Deploy container                         | `server/Dockerfile`                                      | immagine, porta, env default                               |
 | Deploy Linux systemd                     | `server/deploy/runwaysurfer.service`                     | path, utente, env file                                     |
 
@@ -253,7 +255,11 @@ Il vecchio `index.ts` monolitico è stato spezzato:
   `bootstrapAdmin()`, scheduler di retention, `listen`.
 - `app.ts`: factory `createApp()` — CORS, header di sicurezza, montaggio route.
   Esportata senza `listen`, così i test la usano con supertest.
-- `config.ts`: variabili d'ambiente e costanti globali.
+- `config.ts`: variabili d'ambiente e costanti globali (include la risoluzione
+  di `AI_PROVIDER` e `MODEL_REGISTRY`, vedi `model-registry.ts` sotto).
+- `model-registry.ts`: risolve QUALE modello concreto risponde a ciascuna fascia
+  (`cheap`/`balanced`/`capable`) e allo slot del reranker, secondo il provider
+  attivo — `chooseTier()` in `router.ts` decide solo la fascia, mai il modello.
 - `metrics.ts`: metriche live in memoria + guardrail concorrenza/costo.
 - `status.ts`: `extensionConfig()` e `dashboardData()`.
 - `maintenance.ts`: job giornaliero di retention (storico + sessioni scadute).
@@ -266,9 +272,9 @@ Dentro `POST /ask` (`routes/ask.ts`) succede:
 ```text
 1. valida e sanifica il body (sanitizeRequest, esportata per i test)
 2. applica i guardrail (concorrenza, budget)
-3. sceglie modello e stima token/costo
+3. sceglie la fascia di difficoltà e risolve il modello concreto (MODEL_REGISTRY)
 4. manda evento plan
-5. streamma risposta (provider mock o anthropic)
+5. streamma risposta (provider mock, anthropic o openrouter)
 6. registra metrica live + storico SQLite
 ```
 
@@ -280,25 +286,32 @@ Variabili ambiente:
   la sidebar è un content script e in MV3 il suo fetch porta l'Origin della pagina).
   Parsing in `resolveAllowedOrigins` (`server/src/config.ts`), test in
   `server/tests/cors.test.ts`.
-- `AI_PROVIDER`: `mock` o `anthropic`.
-- `ANTHROPIC_API_KEY`: chiave provider reale, solo lato server.
+- `AI_PROVIDER`: `mock`, `anthropic` o `openrouter` (vedi `docs/GUIDA-OPENROUTER.md`).
+- `ANTHROPIC_API_KEY`: chiave provider Anthropic, solo lato server.
+- `OPENROUTER_API_KEY`: chiave provider OpenRouter, solo lato server.
+- `MODEL_CHEAP`/`MODEL_BALANCED`/`MODEL_CAPABLE` (+ `_INPUT_PER_MTOK`/`_OUTPUT_PER_MTOK`
+  per ciascuno) e `RANK_MODEL`: modello concreto per fascia/reranker. Facoltativi con
+  `anthropic`/`mock` (default: i tre Claude), OBBLIGATORI a terzetto con `openrouter`.
+  Risolti in `model-registry.ts`.
 
 ### `server/src/router.ts`
 
-Decide quale modello usare.
+Decide solo la **fascia di difficoltà**, mai il modello concreto (quello è
+`model-registry.ts`, sopra).
 
 Punti importanti:
 
-- `MODELS`: id modello e prezzi.
+- `ANTHROPIC_MODELS`: id modello e prezzi di default (usati da `anthropic`/`mock`,
+  e come fallback per lo slot `rerank`).
 - `estimateTokens()`: stima grezza caratteri/token.
-- `chooseModel()`: regole di routing.
-- `estimateCostUsd()`: stima costo.
+- `chooseTier()`: regole di routing → `ModelTier` (`'cheap'|'balanced'|'capable'`).
+- `estimateCostUsd()`: stima costo (generica, funziona con qualunque `ModelSpec`).
 
 Regole attuali:
 
-- richiesta semplice -> Haiku;
-- contesto medio -> Sonnet;
-- sintesi multipagina/grande -> Opus.
+- richiesta semplice -> fascia `cheap`;
+- contesto medio -> fascia `balanced`;
+- sintesi multipagina/grande -> fascia `capable`.
 
 ### `server/src/provider/shared.ts`
 
@@ -378,6 +391,36 @@ Qui si modificano:
   qualunque id non presente fra i candidati, quindi un modello che inventa non può
   far leggere una pagina non richiesta. Su errore la rotta `/rank` risponde
   `{selectedUrls: []}` e il client ricade sullo scoring locale.
+
+### `server/src/provider/openrouter.ts`
+
+Provider alternativo: stessa interfaccia `AiProvider` di `anthropic.ts`, ma sopra l'API Chat
+Completions (compatibile OpenAI) che OpenRouter espone per qualunque modello del suo catalogo
+(Anthropic, OpenAI, Google, Meta...). Vedi `docs/GUIDA-OPENROUTER.md`.
+
+Usato solo con:
+
+```bash
+AI_PROVIDER=openrouter
+OPENROUTER_API_KEY=...
+MODEL_CHEAP=... (+ prezzi)
+MODEL_BALANCED=... (+ prezzi)
+MODEL_CAPABLE=... (+ prezzi)
+```
+
+Differenze rispetto ad `anthropic.ts`:
+
+- nessun equivalente di `cache_control` (prompt caching) o `effort` (sforzo del ragionamento):
+  meccanismi specifici Anthropic, non parte dell'API Chat Completions;
+- `tool_choice` forzato sul reranker (`select_articles`) può essere ignorato da un modello
+  arbitrario del catalogo — non è un rischio di sicurezza (`parseRankSelection` scarta comunque
+  ogni id non tra i candidati), ma `assertToolCallPresent()` lo rende un **errore visibile**
+  invece di una degradazione silenziosa a `[]`, osservabile via `GET
+/requests?kind=rank&status=error`.
+
+Funzioni pure esportate (testabili senza mock dell'SDK, `tests/provider-openrouter.test.ts`):
+`usageFromCompletion`, `truncatedFromCompletion`, `firstToolCallArguments`,
+`assertToolCallPresent`.
 
 ## Asset condivisi (`shared/`)
 
@@ -553,10 +596,13 @@ Il canale che dice se il prodotto funziona davvero, che i test non possono dare.
 
 ### Cambiare strategia costi/modelli
 
-1. Apri `server/src/router.ts`.
-2. Aggiorna `MODELS`.
-3. Cambia soglie in `chooseModel()`.
-4. Verifica che `server/src/provider/anthropic.ts` supporti gli id modello scelti.
+1. Per cambiare QUALE modello risponde a una fascia (senza toccare l'euristica): imposta
+   `MODEL_CHEAP`/`MODEL_BALANCED`/`MODEL_CAPABLE`/`RANK_MODEL` (+ prezzi) in `.env` — vedi
+   `server/src/model-registry.ts` e `docs/GUIDA-OPENROUTER.md`. Nessun codice da toccare.
+2. Per cambiare QUANDO si passa da una fascia all'altra: apri `server/src/router.ts` e cambia le
+   soglie in `chooseTier()`.
+3. Per cambiare i default usati senza nessuna env impostata: aggiorna `ANTHROPIC_MODELS` in
+   `server/src/router.ts`.
 
 ### Migliorare lettura pagine
 
@@ -630,7 +676,8 @@ Quando devi capire dove intervenire:
 - problema connessione backend -> `lib/client.ts` e `lib/messaging.ts`;
 - problema risposta AI -> `server/src/provider/shared.ts`;
 - problema demo mock -> `server/src/provider/mock.ts`;
-- problema modello/costo -> `server/src/router.ts`;
+- problema fascia di difficoltà -> `server/src/router.ts`;
+- problema quale modello/prezzo è attivo -> `server/src/model-registry.ts` e `.env` (`MODEL_*`);
 - problema deploy -> `server/Dockerfile` o `server/deploy/runwaysurfer.service`.
 
 ## Aggiornamento Backend SQL / Dashboard
