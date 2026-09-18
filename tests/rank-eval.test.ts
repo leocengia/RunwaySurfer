@@ -272,6 +272,11 @@ describe('le query del sondaggio agenti (fixture versionato)', () => {
     expect(survey.queries.every((q) => q.query.trim().length > 0)).toBe(true);
   });
 
+  // Timeout esteso: gira lo scorer reale su ~2964 articoli per 27 query, ~3s in
+  // isolamento, di più sotto la contesa della suite intera in parallelo. Il
+  // default di Vitest (5000ms) basta appena in isolamento e non regge nella
+  // suite completa — l'alternativa (indebolire il test) nasconderebbe una
+  // regressione vera dietro un timeout invece di segnalarla.
   it('nessuna produce una shortlist vuota', () => {
     // Prima del Giro 4 erano 4 a non produrre nulla: `ndc`, `ndc emea`,
     // `compensazioni per reclami` e la domanda con il refuso SAFTY. Una
@@ -281,12 +286,7 @@ describe('le query del sondaggio agenti (fixture versionato)', () => {
       (q) => shortlistCandidates([], q.query, SHORTLIST_SIZE).length === 0,
     );
     expect(empty.map((q) => q.id)).toEqual([]);
-  }, // Gira lo scorer reale su ~2964 articoli per 27 query: ~3s in isolamento,
-  // di più sotto la contesa della suite intera in parallelo. Il default di
-  // Vitest (5000ms) basta appena in isolamento e non regge nella suite
-  // completa — l'alternativa (indebolire il test) nasconderebbe una
-  // regressione vera dietro un timeout invece di segnalarla.
-  20_000);
+  }, 20_000);
 
   it('26 sono etichettate (curate o respinte); non registra un gate — solo il numero', () => {
     // Le 27 risposte del sondaggio sono 26 query distinte (r9-h/r9-i duplicate).
@@ -297,6 +297,8 @@ describe('le query del sondaggio agenti (fixture versionato)', () => {
     expect(curatedIds.size + rejectedIds.size).toBeGreaterThanOrEqual(distinctQueries.size - 1);
   });
 
+  // Stesso costo (e stesso motivo) del test sopra: retrievalEvidence scora
+  // l'indice reale per ognuna delle 27 query.
   it('registra (non impone) la concordanza fra assessQuery e il giudizio degli esperti', () => {
     // Non è un gate — la soglia "chiedi chiarimento" resta fuori da questo
     // lavoro per decisione esplicita. È il dato per tararla in futuro: quante
@@ -316,7 +318,5 @@ describe('le query del sondaggio agenti (fixture versionato)', () => {
         `assessQuery ne segnala ${flaggedByAssess}/27 (di cui ${flaggedAndRejected} in comune).`,
     );
     expect(flaggedByAssess).toBeGreaterThanOrEqual(0); // registra soltanto, non impone soglie
-  }, // Stesso costo (e stesso motivo) del test sopra: retrievalEvidence scora
-  // l'indice reale per ognuna delle 27 query.
-  20_000);
+  }, 20_000);
 });
